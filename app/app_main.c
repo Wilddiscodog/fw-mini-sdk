@@ -1,0 +1,270 @@
+/* fw-mini-sdk 演示应用：GPIO / UART / SPI / USB / 时钟 + FreeRTOS 任务
+ *
+ * 现象（烧录后）：
+ *  - PA6 LED 每 500ms 翻转          —— GPIO 输出
+ *  - 调试口(PB2)每 2s 打印时钟树    —— 时钟控制 clk_get()
+ *  - UART1(PB3=TX,PB4=RX)回显数据   —— UART 设备框架 dev_open/dev_read
+ *  - 上电 5s 后读一次 W25Qxx ID(PA1~PA4) —— SPI 主机 dev_ioctl
+ *  - USB1(高速)枚举为 CDC 串口      —— CherryUSB 设备栈(回显 + 定时上行)
+ */
+#include "app_config.h"
+#include "system/includes.h"
+#include "os/os_api.h"
+#include "asm/gpio.h"
+#include "asm/clock.h"
+#include "device/device.h"
+#include "device/uart.h"
+#include "asm/spi.h"
+#include "device/iic.h"
+#include "asm/pwm.h"
+#include "asm/adc_api.h"
+#include "fw_version.h"
+
+/* CherryUSB CDC (高速口 USB1) */
+extern void cdc_acm_init(uint8_t busid, uintptr_t reg_base);
+extern void cdc_acm_data_send_with_dtr_test(uint8_t busid);
+
+#define CHERRYUSB_BUSID     0
+#define JL82_HUSB_SIE_BASE  0x16000UL
+
+/*============================ 中断列表 ============================ */
+const struct irq_info irq_info_table[] = {
+#ifdef CONFIG_IPMASK_ENABLE
+    { IRQ_SOFT5_IDX,      6,   0    },
+    { IRQ_SOFT4_IDX,      6,   1    },
+#endif
+#if CPU_CORE_NUM == 1
+    { IRQ_SOFT5_IDX,      7,   0    },
+    { IRQ_SOFT4_IDX,      7,   1    },
+    { -2,     			-2,   -2   },
+#endif
+    { -1,     -1,   -1    },
+};
+
+/*============================ 任务列表 ============================
+ * 表项供 task_create()（OS 原生接口）查表用；
+ * os_task_create() 显式传优先级/栈大小，不依赖此表。 */
+const struct task_info task_info_table[] = {
+    {"app_core",            15,     2048,	  1024 },
+    {"sys_event",           29,     512,	   0 },
+    {"systimer",            14,     256, 	   0 },
+    {"sys_timer",            9,     512,	  128 },
+    {"usb_server",          20,     1024,	  64  },
+    {"usb_msd0",             1,     512,	  128 },
+    {"usb_msd1",             1,     512,	  128 },
+    {0, 0, 0, 0, 0},
+};
+
+/*============================ GPIO：LED 闪烁 ============================ */
+static void led_task(void *p)
+{
+    gpio_direction_output(IO_PORTA_06, 1);
+    while (1) {
+        gpio_direction_output(IO_PORTA_06, 0);
+        os_time_dly(50);
+        gpio_direction_output(IO_PORTA_06, 1);
+        os_time_dly(50);
+    }
+}
+
+/*============================ 时钟控制：周期打印时钟树 ============================ */
+static void clock_task(void *p)
+{
+    while (1) {
+        printf("[clk] sys=%dMHz sdram=%dMHz hsb=%dMHz lsb(timer)=%dMHz\n",
+               clk_get("sys") / 1000000, clk_get("sdram") / 1000000,
+               clk_get("hsb") / 1000000, clk_get("timer") / 1000000);
+        os_time_dly(200);
+    }
+}
+
+/*============================ UART1：回显 ============================ */
+static u8 uart1_rx_buf[256] __attribute__((aligned(32))); /* 循环接收buf */
+static void uart1_echo_task(void *p)
+{
+    u8 tmp[64];
+    void *hdl = dev_open("uart1", NULL);
+    if (!hdl) {
+        printf("[uart1] open fail\n");
+        while (1) { os_time_dly(1000); }
+    }
+    dev_ioctl(hdl, UART_SET_CIRCULAR_BUFF_ADDR, (int)uart1_rx_buf);
+    dev_ioctl(hdl, UART_SET_CIRCULAR_BUFF_LENTH, sizeof(uart1_rx_buf));
+    dev_ioctl(hdl, UART_SET_RECV_BLOCK, 1);
+    dev_ioctl(hdl, UART_SET_RECV_TIMEOUT, 1000);
+    dev_ioctl(hdl, UART_START, 0);
+    printf("[uart1] echo ready @PB3(TX)/PB4(RX) 115200\n");
+
+    while (1) {
+        int len = dev_read(hdl, tmp, sizeof(tmp));
+        if (len > 0) {
+            dev_write(hdl, tmp, len);   /* 回显 */
+        } else if (len == UART_CIRCULAR_BUFFER_WRITE_OVERLAY) {
+            dev_ioctl(hdl, UART_FLUSH, 0);
+        }
+    }
+}
+
+/*============================ SPI2：读 W25Qxx JEDEC ID ============================ */
+#define W25X_JEDEC_ID   0x9F
+static void spi_cs(u8 sta)
+{
+    gpio_direction_output(IO_PORTA_01, sta);
+}
+static void spi_task(void *p)
+{
+    u8 id[3] = {0, 0, 0};
+
+    spi_cs(1);
+    gpio_set_hd(IO_PORTA_03, 1);  /* CLK 开强驱（杜邦线测试需要） */
+    os_time_dly(100);
+
+    void *hdl = dev_open("spi2", NULL);
+    if (!hdl) {
+        printf("[spi2] open fail\n");
+        while (1) { os_time_dly(1000); }
+    }
+
+    spi_cs(0);
+    dev_ioctl(hdl, IOCTL_SPI_SEND_BYTE, W25X_JEDEC_ID);
+    for (u8 i = 0; i < 3; i++) {
+        dev_ioctl(hdl, IOCTL_SPI_READ_BYTE, (u32)&id[i]);
+    }
+    spi_cs(1);
+
+    printf("[spi2] W25Qxx JEDEC ID = %02X %02X %02X%s\n",
+           id[0], id[1], id[2],
+           (id[0] == 0xFF || id[0] == 0x00) ? " (未检测到Flash, 检查接线)" : "");
+    dev_close(hdl);
+
+    while (1) { os_time_dly(10000); }  /* 只读一次；FreeRTOS 任务不允许返回 */
+}
+
+/*============================ IIC0：总线扫描 (PH0=SCL, PH1=SDA) ============== */
+static void iic_scan_task(void *p)
+{
+    void *hdl = dev_open("iic0", NULL);
+    if (!hdl) {
+        printf("[iic0] open fail\n");
+        while (1) { os_time_dly(10000); }
+    }
+    printf("[iic0] scan ready @PH0(SCL)/PH1(SDA)\n");
+    while (1) {
+        int found = 0;
+        printf("[iic0] dev:");
+        for (u8 addr = 0x08; addr < 0x78; addr++) {
+            dev_ioctl(hdl, IIC_IOCTL_START, 0);
+            if (dev_ioctl(hdl, IIC_IOCTL_TX_WITH_START_BIT, addr << 1) == 0) {
+                printf(" 0x%02x", addr);
+                found++;
+            }
+            dev_ioctl(hdl, IIC_IOCTL_STOP, 0);
+        }
+        printf("%s\n", found ? "" : " (none)");
+        os_time_dly(1000);   /* 10s 扫一轮 */
+    }
+}
+
+/*============================ PWM1：PA5 呼吸灯 (1kHz) ======================== */
+static void pwm_breath_task(void *p)
+{
+    struct pwm_platform_data pwm = {0};
+    void *hdl = dev_open("pwm1", &pwm);
+    int duty = 0, dir = 1;
+
+    if (!hdl) {
+        printf("[pwm1] open fail\n");
+        while (1) { os_time_dly(10000); }
+    }
+    printf("[pwm1] breath ready @PA5 %dHz\n", pwm.freq);
+    while (1) {
+        duty += dir * 4;
+        if (duty >= 100) { duty = 100; dir = -1; }
+        if (duty <= 0)   { duty = 0;   dir = 1; }
+        pwm.pwm_ch = PWM_TIMER2_OPCH2;
+        pwm.duty = duty;
+        dev_write(hdl, &pwm, 0);
+        os_time_dly(10);     /* 100ms 一步, ~5s 一个呼吸周期 */
+    }
+}
+
+/*============================ ADC：PB01 电压采样 ============================= */
+static void adc_task(void *p)
+{
+    adc_init();
+    gpio_set_die(IO_PORTB_01, 0);       /* 模拟功能 */
+    gpio_set_direction(IO_PORTB_01, 1);
+    gpio_set_pull_up(IO_PORTB_01, 0);
+    gpio_set_pull_down(IO_PORTB_01, 0);
+    adc_add_sample_ch(AD_CH_PB01);
+
+    while (1) {
+        printf("[adc] PB01 raw=%d %dmv\n",
+               (int)adc_get_value(AD_CH_PB01), (int)adc_get_voltage(AD_CH_PB01));
+        os_time_dly(200);   /* 2s */
+    }
+}
+
+/*============================ 硬件定时器：TIMER5 1Hz 中断 =====================
+ * PWM_TIMER2_OPCH2 占用 TIMER2, 故选 TIMER5; CON[7:4] 分频字段为错位编码 */
+static JL_TIMER_TypeDef *const TMR5 = JL_TIMER5;
+static volatile u32 t5_ticks = 0;
+___interrupt
+static void timer5_isr(void)
+{
+    if (TMR5->CON & BIT(15)) {
+        TMR5->CON |= BIT(14);           /* 清 pnd */
+        t5_ticks++;
+        printf("[t5] 1s tick %u\n", t5_ticks);
+    }
+}
+static void hw_timer_task(void *p)
+{
+    static const u32 psc_tab[16] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024,
+                                    2048, 4096, 8192, 16384, 32768};
+    static const u8 psc_reg[16] = {0, 4, 1, 5, 2, 6, 3, 7, 8, 12, 9, 13, 10, 14, 11, 15};
+    u32 clk = clk_get("timer");         /* lsb 40MHz */
+    u8 i = 0;
+
+    while (clk / psc_tab[i] > 65535) {
+        i++;
+    }
+    request_irq(IRQ_TIMER5_IDX, 3, timer5_isr, 0);
+    TMR5->CON = 0;
+    TMR5->CNT = 0;
+    TMR5->PRD = clk / psc_tab[i];       /* 40MHz/1024/39062 ≈ 1Hz */
+    TMR5->CON |= (psc_reg[i] << 4);
+    TMR5->CON |= BIT(0);                /* 启动 */
+
+    while (1) { os_time_dly(10000); }   /* FreeRTOS 任务不允许返回 */
+}
+
+/*============================ USB：CherryUSB CDC (高速口 USB1/HUSB) ========== */
+static void usb_cdc_task(void *p)
+{
+    os_time_dly(100);    /* 等 boot 日志打完 */
+    printf("[usb] CherryUSB CDC init on HUSB(USB1, high-speed)\n");
+    cdc_acm_init(CHERRYUSB_BUSID, JL82_HUSB_SIE_BASE);
+
+    while (1) {
+        cdc_acm_data_send_with_dtr_test(CHERRYUSB_BUSID);
+    }
+}
+
+/*============================ 应用入口 ============================ */
+void app_main()
+{
+    printf("\r\n\r\n ===== fw-mini-sdk %s build %s =====\r\n", FW_VERSION, __TIME__);
+    printf("[clk] sys=%dMHz sdram=%dMHz hsb=%dMHz\r\n",
+           clk_get("sys") / 1000000, clk_get("sdram") / 1000000, clk_get("hsb") / 1000000);
+
+    // os_task_create(led_task,         NULL, 10, 512,  0, "led_task");
+    // os_task_create(clock_task,       NULL,  9, 512,  0, "clock_task");
+    os_task_create(uart1_echo_task,  NULL,  8, 1024, 0, "uart1_echo");
+    // os_task_create(spi_task,         NULL,  8, 1024, 0, "spi_test");
+    // os_task_create(iic_scan_task,    NULL,  8, 1024, 0, "iic_scan");
+    // os_task_create(pwm_breath_task,  NULL,  8, 512,  0, "pwm_breath");
+    // os_task_create(adc_task,         NULL,  8, 512,  0, "adc_task");
+    os_task_create(hw_timer_task,    NULL,  8, 512,  0, "hw_timer");
+    os_task_create(usb_cdc_task,     NULL,  8, 1024, 0, "usb_cdc");
+}
