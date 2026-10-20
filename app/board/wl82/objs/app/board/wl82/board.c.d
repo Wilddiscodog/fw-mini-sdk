@@ -84,6 +84,10 @@ objs/app/board/wl82/board.c.o: ../../../app/board/wl82/board.c \
   ../../../include_lib/driver/device/key/tent600_key.h \
   ../../../include_lib/driver\device/iic.h \
   ../../../include_lib/driver/cpu/wl82\asm/iic.h \
+  ../../../driver/lcd/include\ui_api.h \
+  ../../../driver/lcd/include/lcd_drive.h \
+  ../../../include_lib/driver/cpu/wl82\asm/spi.h \
+  ../../../include_lib/driver/cpu/wl82\asm/port_waked_up.h \
   ../../../include_lib/driver/cpu/wl82\asm/includes.h \
   ../../../include_lib/driver/cpu/wl82\asm/audio.h \
   ../../../include_lib/driver/cpu/wl82\asm/ladc.h \
@@ -116,11 +120,9 @@ objs/app/board/wl82/board.c.o: ../../../app/board/wl82/board.c \
   ../../../include_lib/driver/cpu/wl82\asm/rtc.h \
   ../../../include_lib/driver/cpu/wl82\asm/clock.h \
   ../../../include_lib/driver/cpu/wl82\asm/crc16.h \
-  ../../../include_lib/driver/cpu/wl82\asm/spi.h \
   ../../../include_lib/driver/cpu/wl82\asm/imd.h \
   ../../../include_lib/driver/device\video/fb.h \
   ../../../include_lib/driver/cpu/wl82\asm/imr.h \
-  ../../../include_lib/driver/cpu/wl82\asm/port_waked_up.h \
   ../../../include_lib/driver/cpu/wl82\asm/image_enc.h \
   ../../../include_lib/driver/device\video/video.h \
   ../../../include_lib/driver/device\video/video_ioctl.h \

@@ -19,6 +19,13 @@
 #include "asm/pwm.h"
 #include "asm/adc_api.h"
 #include "fw_version.h"
+#if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
+#include "lcd_drive.h"
+#if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
+#include "lvgl.h"
+void lv_port_disp_init(void);
+#endif
+#endif
 
 /* CherryUSB CDC (高速口 USB1) */
 extern void cdc_acm_init(uint8_t busid, uintptr_t reg_base);
@@ -239,8 +246,61 @@ static void hw_timer_task(void *p)
     while (1) { os_time_dly(10000); }   /* FreeRTOS 任务不允许返回 */
 }
 
-/*============================ USB：CherryUSB CDC (高速口 USB1/HUSB) ========== */
-static void usb_cdc_task(void *p)
+/*============================ LCD：EMI 8080 并口点屏自检 (+LVGL) ============== */
+#if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
+static void lcd_test_task(void *p)
+{
+    os_time_dly(150);
+    user_lcd_init();   /* dev_open("emi") + 屏初始化 + 背光 */
+
+    struct lcd_interface *lcd = lcd_get_hdl();
+    if (lcd == NULL) {
+        printf("[lcd] no panel driver matched\n");
+        while (1) { os_time_dly(10000); }
+    }
+
+#if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
+    printf("[lcd] start LVGL
+");
+    lv_init();
+    lv_port_disp_init();
+    while (1) {
+        lv_tick_inc(5);
+        lv_timer_handler();
+        os_time_dly(1);
+    }
+#else
+    /* 无 LVGL: 彩条自检(RGB565) */
+    u16 w = 240, h = 320;
+    static u16 fb[240 * 40];   /* 40 行条带 */
+    u16 colors[8] = {0xF800, 0x07E0, 0x001F, 0xFFE0, 0xF81F, 0x07FF, 0xFFFF, 0x0000};
+    while (1) {
+        for (u8 band = 0; band < 8; band++) {
+            for (u32 i = 0; i < w * 40; i++) {
+                fb[i] = colors[band];
+            }
+            for (u16 y = 0; y < h; y += 40) {
+                lcd->set_draw_area(0, w - 1, y, y + 39);
+                lcd->draw((u8 *)fb, w * 40 * 2, 0);
+            }
+            os_time_dly(100);
+        }
+    }
+#endif
+}
+#endif
+
+/*============================ USB：按 MINI_USB_MODE 选择角色 ================= */
+#if (MINI_USB_MODE == MINI_USB_MODE_HOST)
+extern void usbh_msc_demo_start(void);
+static void usb_mode_task(void *p)
+{
+    os_time_dly(100);
+    usbh_msc_demo_start();      /* usbh 线程由栈内部创建, 本任务只负责启动 */
+    while (1) { os_time_dly(10000); }
+}
+#else
+static void usb_mode_task(void *p)
 {
     os_time_dly(100);    /* 等 boot 日志打完 */
     printf("[usb] CherryUSB CDC init on HUSB(USB1, high-speed)\n");
@@ -250,11 +310,20 @@ static void usb_cdc_task(void *p)
         cdc_acm_data_send_with_dtr_test(CHERRYUSB_BUSID);
     }
 }
+#endif
 
 /*============================ 应用入口 ============================ */
 void app_main()
 {
+#ifdef CONFIG_CXX_SUPPORT
+    extern void cpp_run_init(void);   /* C++ 全局对象构造(必须最先调用) */
+    extern int cxx_smoke_test(void);
+    cpp_run_init();
+#endif
     printf("\r\n\r\n ===== fw-mini-sdk %s build %s =====\r\n", FW_VERSION, __TIME__);
+#ifdef CONFIG_CXX_SUPPORT
+    cxx_smoke_test();
+#endif
     printf("[clk] sys=%dMHz sdram=%dMHz hsb=%dMHz\r\n",
            clk_get("sys") / 1000000, clk_get("sdram") / 1000000, clk_get("hsb") / 1000000);
 
@@ -266,5 +335,8 @@ void app_main()
     // os_task_create(pwm_breath_task,  NULL,  8, 512,  0, "pwm_breath");
     // os_task_create(adc_task,         NULL,  8, 512,  0, "adc_task");
     os_task_create(hw_timer_task,    NULL,  8, 512,  0, "hw_timer");
-    os_task_create(usb_cdc_task,     NULL,  8, 1024, 0, "usb_cdc");
+#if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
+    os_task_create(lcd_test_task,    NULL,  8, 2048, 0, "lcd_test");
+#endif
+    os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
 }

@@ -3,8 +3,10 @@
 #include "system/includes.h"
 #include "device/includes.h"
 #include "device/iic.h"
+#include "ui_api.h"
 #include "asm/includes.h"
 #include "asm/pwm.h"
+#include "asm/emi.h"
 
 // *INDENT-OFF*
 
@@ -60,6 +62,38 @@ PWM_PLATFORM_DATA_BEGIN(pwm_data1)
 	.point_bit = 0,
 PWM_PLATFORM_DATA_END();
 
+/*============================ LCD：EMI 8080-8bit 并口 (ili9341 参考驱动) ========
+ * 数据线 D0~D7 为 EMI 专用引脚映射（见芯片手册 EMI 章节/参考原理图），
+ * RS/BL/TE 为普通 GPIO，可按硬件调整。 */
+#if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
+static const struct emi_platform_data emi_data = {
+	.bits_mode      = EMI_8BITS_MODE,       /* 8 位 8080 并口 */
+	.baudrate       = EMI_BAUD_DIV8,        /* clock = HSB/(baud+1) */
+	.colection      = EMI_FALLING_COLT,     /* 下降沿采样 */
+	.time_out       = 1 * 1000,             /* 写超时 ms */
+	.th             = EMI_TWIDTH_NO_HALF,
+	.ts             = 0,
+	.tw             = EMI_BAUD_DIV4,   /* (baud+1)/2 档, EMI_BAUD 是枚举类型名不可作值 */
+	.data_bit_en    = 0,
+};
+
+static const struct ui_lcd_platform_data lcd_pdata = {
+	.rst_pin        = -1,            /* 复位脚: -1=由硬件上电复位 */
+	.cs_pin         = -1,            /* 8080 常驻选通 */
+	.rs_pin         = IO_PORTC_09,   /* 命令/数据切换 */
+	.bl_pin         = IO_PORTB_08,   /* 背光使能 */
+	.te_pin         = IO_PORTC_00,   /* 撕裂同步(未用可 -1) */
+	.touch_int_pin  = -1,
+	.touch_reset_pin= -1,
+	.lcd_if         = LCD_EMI,       /* 接口类型: EMI(8080) / PAP / SPI */
+};
+
+const struct ui_devices_cfg ui_cfg_data = {
+	.type = TFT_LCD,
+	.private_data = (void *)&lcd_pdata,
+};
+#endif
+
 /*============================ 电源 ============================ */
 static const struct low_power_param power_param = {
     .config         = TCFG_LOWPOWER_LOWPOWER_SEL,
@@ -78,6 +112,9 @@ REGISTER_DEVICES(device_table) = {
 	{"uart1", &uart_dev_ops, (void *)&uart1_data },
 	{"spi2",  &spi_dev_ops,  (void *)&spi2_data },
 	{"iic0",  &iic_dev_ops,  (void *)&sw_iic0_data },
+#if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
+	{"emi",   &emi_dev_ops,  (void *)&emi_data },
+#endif
 	{"pwm1",  &pwm_dev_ops,  (void *)&pwm_data1 },
 	{"rtc",   &rtc_dev_ops,  NULL},
 };

@@ -20,6 +20,28 @@
 #define CONFIG_USBDEV_ADVANCE_DESC      1   /* 使用描述符回调接口 */
 /* 无 MSC/MTP/EP0_THREAD: 不引用任何 osal 符号, 免移植 OSAL */
 
+/* ================ USB Host Stack (usbh) ================ */
+#define CONFIG_USBHOST_MAX_BUS              1
+#define CONFIG_USBHOST_DEV_NAMELEN          16
+#define CONFIG_USBHOST_CONTROL_TRANSFER_TIMEOUT 2000  /* ms */
+#define CONFIG_USBHOST_REQUEST_BUFFER_LEN   512
+#define CONFIG_USBHOST_PSC_PRIO             4
+#define CONFIG_USBHOST_PSC_STACKSIZE        2048
+#define CONFIG_USBHOST_MAX_SERIAL_CLASS     2
+#define CONFIG_USBHOST_MAX_HID_CLASS        2
+#define CONFIG_USBHOST_MAX_MSC_CLASS        2
+#define CONFIG_USBHOST_MAX_AUDIO_CLASS      1
+#define CONFIG_USBHOST_MAX_VIDEO_CLASS      1
+#define CONFIG_USBHOST_MSC_TIMEOUT          5000
+#define CONFIG_USBHOST_MAX_RHPORTS          1
+#define CONFIG_USBHOST_MAX_EXTHUBS          1
+#define CONFIG_USBHOST_MAX_EHPORTS          4
+#define CONFIG_USBHOST_MAX_INTERFACES       8
+#define CONFIG_USBHOST_MAX_INTF_ALTSETTINGS 2
+#define CONFIG_USBHOST_MAX_ENDPOINTS        4
+#define CONFIG_USB_MUSB_PIPE_NUM            5   /* WL82: EP0~EP4 作主机通道 */
+#define CONFIG_USBH_JL82_FORCE_FS           1   /* 1=FS 主机(bulk 64B); 0=HS(需确认 EP2+ FIFO>=512) */
+
 /* ================ MUSB DCD (port/jl82) ================ */
 #define CONFIG_USB_MUSB_JL82            1   /* JL 变体: 读清中断/无FIFO配置寄存器/桥接器同步 */
 #define CONFIG_USB_MUSB_EP_NUM          5

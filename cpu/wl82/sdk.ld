@@ -313,6 +313,9 @@ SECTIONS
     .data ALIGN(32):
     {
         . = ALIGN(4);
+        *(.ui_ram)
+
+        . = ALIGN(4);
 
 
     _vfs_ops_begin = .;
@@ -394,6 +397,12 @@ SECTIONS
         *(.device)
     _device_node_end = .;
     PROVIDE(device_node_end = .);
+
+    __usbh_class_info_start__ = .;
+    PROVIDE(usbh_class_info_start = .);
+        KEEP(*(.usbh_class_info))
+    __usbh_class_info_end__ = .;
+    PROVIDE(usbh_class_info_end = .);
 
     lp_target_begin = .;
     PROVIDE(lp_target_begin = .);

@@ -37,18 +37,18 @@ objs/third/CherryUSB/port/jl82/usb_glue_jl82.c.o: \
   ../../../include_lib/system\os/os_error.h \
   ../../../include_lib/system\os/os_type.h \
   ../../../include_lib/system\os/FreeRTOS/FreeRTOS.h \
-  ../../../include_lib/system\os/FreeRTOS/FreeRTOSConfig.h \
-  ../../../include_lib/system\os/FreeRTOS/pi32v2/portmacro.h \
+  ../../../include_lib/system/os/FreeRTOS/FreeRTOSConfig.h \
+  ../../../include_lib/system/os/FreeRTOS/pi32v2/portmacro.h \
   C:/JL/pi32/pi32v2-include\stdint.h \
   C:/JL/pi32/pi32v2-include\sys/_intsup.h \
-  ../../../include_lib/system\os/FreeRTOS/projdefs.h \
-  ../../../include_lib/system\os/FreeRTOS/portable.h \
-  ../../../include_lib/system\os/FreeRTOS/deprecated_definitions.h \
-  ../../../include_lib/system\os/FreeRTOS/mpu_wrappers.h \
+  ../../../include_lib/system/os/FreeRTOS/projdefs.h \
+  ../../../include_lib/system/os/FreeRTOS/portable.h \
+  ../../../include_lib/system/os/FreeRTOS/deprecated_definitions.h \
+  ../../../include_lib/system/os/FreeRTOS/mpu_wrappers.h \
   ../../../include_lib/system\os/FreeRTOS/semphr.h \
-  ../../../include_lib/system\os/FreeRTOS/queue.h \
+  ../../../include_lib/system/os/FreeRTOS/queue.h \
   ../../../include_lib/system\os/FreeRTOS/task.h \
-  ../../../include_lib/system\os/FreeRTOS/list.h \
+  ../../../include_lib/system/os/FreeRTOS/list.h \
   ../../../include_lib/system\generic/list.h \
   ../../../third/CherryUSB/core\usbd_core.h \
   C:/JL/pi32/pi32v2-include\stdlib.h \

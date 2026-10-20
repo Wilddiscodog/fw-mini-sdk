@@ -1,0 +1,56 @@
+/*
+ * CherryUSB 主机栈 JL WL82 (AC791x) 粘层 —— USB1(HUSB, 高速)
+ *
+ * 与设备端 usb_glue_jl82.c 互斥使用（两控制器共用一组 D+/D-，
+ * 由 app_config.h 的 MINI_USB_MODE 选择角色）。
+ *
+ * 注意：主机模式需要给 USB 座子供电 VBUS(5V)，硬件上需确认供电回路。
+ */
+#include "typedef.h"
+#include "asm/usb.h"
+#include "asm/hwi.h"
+#include "asm/irq.h"
+#include "os/os_api.h"
+#include "fw_version.h"
+#include "usbh_core.h"
+
+#define JL82_HUSB_ID        1
+#define JL82_HUSB_SIE_BASE  0x16000UL
+
+extern void USBH_IRQHandler(uint8_t busid);
+
+___interrupt
+static void usb1_host_isr(void)
+{
+    uint32_t cpu;
+
+    __asm__ volatile("%0 = cnum" : "=r"(cpu));
+    if (cpu != 0) {
+        return; /* 双核并发进主机 ISR 同样致命, 直接退出 */
+    }
+
+    __asm__ volatile("ssync");
+    USBH_IRQHandler(0);
+    __asm__ volatile("csync");
+}
+
+void usb_hc_low_level_init(struct usbh_bus *bus)
+{
+    (void)bus;
+    usb_h_sie_init(JL82_HUSB_ID);   /* HUSB 主机角色 PHY/桥接器上电(闭源库) */
+    usb_iomode(JL82_HUSB_ID, 0);
+
+    /* 中断按核使能独立: 先清双核, 再只开 CPU0 */
+    unrequest_irq(IRQ_USB1_CTRL_IDX, 0);
+    unrequest_irq(IRQ_USB1_CTRL_IDX, 1);
+    request_irq(IRQ_USB1_CTRL_IDX, 3, usb1_host_isr, 0);
+
+    printf("[usbh] hc low level init ok, fw=%s\n", FW_VERSION);
+}
+
+void usb_hc_low_level_deinit(struct usbh_bus *bus)
+{
+    (void)bus;
+    unrequest_irq(IRQ_USB1_CTRL_IDX, 0);
+    usb_sie_disable(JL82_HUSB_ID);
+}

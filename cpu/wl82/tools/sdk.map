@@ -15,7 +15,7 @@ Archive member included to satisfy reference by file (symbol)
 ../../../cpu/wl82/liba/cpu.a(rtc.c.o)
                               gpio.c.o (symbol from plugin) (rtc_port_pr_in)
 ../../../cpu/wl82/liba/cpu.a(usb.c.o)
-                              objs/third/CherryUSB/port/jl82/usb_glue_jl82.c.o (symbol from plugin) (usb_sie_disable)
+                              objs/third/CherryUSB/port/jl82/usb_glue_jl82_host.c.o (symbol from plugin) (usb_sie_disable)
 ../../../cpu/wl82/liba/cpu.a(timer.c.o)
                               (clock_timer1)
 ../../../cpu/wl82/liba/cpu.a(spec_uart.c.o)
@@ -34,6 +34,8 @@ Archive member included to satisfy reference by file (symbol)
                               power_hw.c.o (symbol from plugin) (dac_power_off)
 ../../../cpu/wl82/liba/cpu.a(pwm.c.o)
                               objs/app/board/wl82/board.c.o (symbol from plugin) (pwm_dev_ops)
+../../../cpu/wl82/liba/cpu.a(emi.c.o)
+                              objs/app/board/wl82/board.c.o (symbol from plugin) (emi_dev_ops)
 ../../../cpu/wl82/liba/cpu.a(vm_sfc.c.o)
                               power_hw.c.o (symbol from plugin) (dsp_corex_enter_hold)
 ../../../cpu/wl82/liba/cpu.a(otg.c.o)
@@ -71,11 +73,13 @@ Archive member included to satisfy reference by file (symbol)
 ../../../cpu/wl82/liba/system.a(hwi.c.o)
                               objs/app/app_main.c.o (symbol from plugin) (request_irq)
 ../../../cpu/wl82/liba/system.a(port.c.o)
-                              objs/driver/system/init.c.o (symbol from plugin) (cpu1_run_flag)
+                              objs/third/CherryUSB/osal/usb_osal_freertos.c.o (symbol from plugin) (vPortYield)
 ../../../cpu/wl82/liba/system.a(movable.c.o)
                               objs/cpu/wl82/setup.c.o (symbol from plugin) (code_movable_init)
+../../../cpu/wl82/liba/system.a(queue.c.o)
+                              objs/third/CherryUSB/osal/usb_osal_freertos.c.o (symbol from plugin) (xQueueGenericReset)
 ../../../cpu/wl82/liba/system.a(tasks.c.o)
-                              port.c.o (symbol from plugin) (xTaskSwitchContext)
+                              objs/third/CherryUSB/osal/usb_osal_freertos.c.o (symbol from plugin) (xTaskCreate)
 ../../../cpu/wl82/liba/system.a(main.c.o)
                               tasks.c.o (symbol from plugin) (vApplicationIdleHook)
 ../../../cpu/wl82/liba/system.a(os_api.c.o)
@@ -91,7 +95,7 @@ Archive member included to satisfy reference by file (symbol)
 ../../../cpu/wl82/liba/system.a(task.c.o)
                               os_api.c.o (symbol from plugin) (get_task_priority)
 ../../../cpu/wl82/liba/system.a(timer.c.o)
-                              key0_decode.c.o (symbol from plugin) (sys_timeout_add)
+                              objs/third/CherryUSB/osal/usb_osal_freertos.c.o (symbol from plugin) (sys_timer_add)
 ../../../cpu/wl82/liba/system.a(wait_completion.c.o)
                               os_api.c.o (symbol from plugin) (wait_completion_before_kill_owner_task)
 ../../../cpu/wl82/liba/system.a(sys_timer_task.c.o)
@@ -105,9 +109,7 @@ Archive member included to satisfy reference by file (symbol)
 ../../../cpu/wl82/liba/system.a(port_overwrite.c.o)
                               tasks.c.o (symbol from plugin) (vPortSuppressTicksAndSleep)
 ../../../cpu/wl82/liba/system.a(list.c.o)
-                              tasks.c.o (symbol from plugin) (vListInitialise)
-../../../cpu/wl82/liba/system.a(queue.c.o)
-                              os_api.c.o (symbol from plugin) (xQueueGenericReset)
+                              queue.c.o (symbol from plugin) (vListInitialise)
 ../../../cpu/wl82/liba/system.a(event_groups.c.o)
                               os_api.c.o (symbol from plugin) (xEventGroupCreate)
 ../../../cpu/wl82/liba/system.a(lbuf.c.o)
@@ -143,7 +145,7 @@ Archive member included to satisfy reference by file (symbol)
 ../../../cpu/wl82/liba/fs.a(ff_opr.c.o)
                               fat_compact.c.o (symbol from plugin) (ff_scan)
 ../../../cpu/wl82/liba/common_lib.a(Vsnprintf.c.o)
-                              os_api.c.o (symbol from plugin) (snprintf)
+                              objs/third/CherryUSB/class/msc/usbh_msc.c.o (symbol from plugin) (snprintf)
 ../../../cpu/wl82/liba/common_lib.a(time.c.o)
                               rtc.c.o (symbol from plugin) (localtime_r)
 ../../../cpu/wl82/liba/common_lib.a(mktime.c.o)
@@ -173,27 +175,29 @@ C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memcpy.o)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcat.o)
                               ff_opr.c.o (symbol from plugin) (strcat)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strchr.o)
-                              sdfile_new.c.o (symbol from plugin) (strchr)
+                              objs/third/CherryUSB/core/usbh_core.c.o (symbol from plugin) (strchr)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcmp.o)
-                              clock.c.o (symbol from plugin) (strcmp)
+                              objs/third/CherryUSB/core/usbh_core.c.o (symbol from plugin) (strcmp)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcpy.o)
                               tasks.c.o (symbol from plugin) (strcpy)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strlen.o)
                               objs/third/CherryUSB/core/usbd_core.c.o (symbol from plugin) (strlen)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strncmp.o)
-                              vm.c.o (symbol from plugin) (strncmp)
+                              objs/third/CherryUSB/core/usbh_core.c.o (symbol from plugin) (strncmp)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strnlen.o)
                               Vsnprintf.c.o (symbol from plugin) (strnlen)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strrchr.o)
                               sdfile_new.c.o (symbol from plugin) (strrchr)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strstr.o)
                               rtc.c.o (symbol from plugin) (strstr)
+C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtol.o)
+                              objs/third/CherryUSB/core/usbh_core.c.o (symbol from plugin) (strtol)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtoul.o)
                               rtc.c.o (symbol from plugin) (strtoul)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-ctype_.o)
-                              C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtoul.o) (__ctype_ptr__)
+                              C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtol.o) (__ctype_ptr__)
 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
-                              C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtoul.o) (_impure_ptr)
+                              C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtol.o) (_impure_ptr)
 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(subdf3.o)
                               C:/JL/pi32/pi32v2-lib/r3/libm.a(lib_a-s_modf.o) (__subdf3)
 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(adddf3.o)
@@ -213,9 +217,16 @@ Discarded input sections
 
  .text          0x00000000        0x0 objs/app/app_main.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/app/cdc_acm_app.c.o (symbol from plugin)
+ .text          0x00000000        0x0 objs/app/usbh_msc_app.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/app/board/wl82/board.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/third/CherryUSB/core/usbd_core.c.o (symbol from plugin)
+ .text          0x00000000        0x0 objs/third/CherryUSB/core/usbh_core.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/third/CherryUSB/class/cdc/usbd_cdc_acm.c.o (symbol from plugin)
+ .text          0x00000000        0x0 objs/third/CherryUSB/class/msc/usbh_msc.c.o (symbol from plugin)
+ .text          0x00000000        0x0 objs/third/CherryUSB/class/hub/usbh_hub.c.o (symbol from plugin)
+ .text          0x00000000        0x0 objs/third/CherryUSB/osal/usb_osal_freertos.c.o (symbol from plugin)
+ .text          0x00000000        0x0 objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o (symbol from plugin)
+ .text          0x00000000        0x0 objs/third/CherryUSB/port/jl82/usb_glue_jl82_host.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/third/CherryUSB/port/jl82/usb_dc_jl82.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/third/CherryUSB/port/jl82/usb_glue_jl82.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/driver/config/log_config/lib_driver_config.c.o (symbol from plugin)
@@ -235,6 +246,9 @@ Discarded input sections
  .text          0x00000000        0x0 objs/cpu/wl82/key/adc_api.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/cpu/wl82/port_waked_up.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/cpu/wl82/setup.c.o (symbol from plugin)
+ .text          0x00000000        0x0 objs/driver/lcd/lcd_drive.c.o (symbol from plugin)
+ .text          0x00000000        0x0 objs/driver/lcd/lcd_ili9341.c.o (symbol from plugin)
+ .text          0x00000000        0x0 objs/driver/lcd/lcd_te_stub.c.o (symbol from plugin)
  .text          0x00000000        0x0 uart.c.o (symbol from plugin)
  .text          0x00000000        0x0 delay.c.o (symbol from plugin)
  .text          0x00000000        0x0 wdt.c.o (symbol from plugin)
@@ -252,6 +266,7 @@ Discarded input sections
  .text          0x00000000        0x0 power_wakeup.c.o (symbol from plugin)
  .text          0x00000000        0x0 dac.c.o (symbol from plugin)
  .text          0x00000000        0x0 pwm.c.o (symbol from plugin)
+ .text          0x00000000        0x0 emi.c.o (symbol from plugin)
  .text          0x00000000        0x0 vm_sfc.c.o (symbol from plugin)
  .text          0x00000000        0x0 otg.c.o (symbol from plugin)
  .text          0x00000000        0x0 usb_phy.c.o (symbol from plugin)
@@ -269,6 +284,7 @@ Discarded input sections
  .text          0x00000000        0x0 hwi.c.o (symbol from plugin)
  .text          0x00000000        0x0 port.c.o (symbol from plugin)
  .text          0x00000000        0x0 movable.c.o (symbol from plugin)
+ .text          0x00000000        0x0 queue.c.o (symbol from plugin)
  .text          0x00000000        0x0 tasks.c.o (symbol from plugin)
  .text          0x00000000        0x0 main.c.o (symbol from plugin)
  .text          0x00000000        0x0 os_api.c.o (symbol from plugin)
@@ -282,7 +298,6 @@ Discarded input sections
  .text          0x00000000        0x0 sys_timer_task.c.o (symbol from plugin)
  .text          0x00000000        0x0 port_overwrite.c.o (symbol from plugin)
  .text          0x00000000        0x0 list.c.o (symbol from plugin)
- .text          0x00000000        0x0 queue.c.o (symbol from plugin)
  .text          0x00000000        0x0 event_groups.c.o (symbol from plugin)
  .text          0x00000000        0x0 lbuf.c.o (symbol from plugin)
  .text          0x00000000        0x0 fcvt.c.o (symbol from plugin)
@@ -323,9 +338,16 @@ Linker script and memory map
 LOAD objs/app/app_main.c.o
 LOAD ../../../cpu/wl82/tools/sdk.elf.o
 LOAD objs/app/cdc_acm_app.c.o
+LOAD objs/app/usbh_msc_app.c.o
 LOAD objs/app/board/wl82/board.c.o
 LOAD objs/third/CherryUSB/core/usbd_core.c.o
+LOAD objs/third/CherryUSB/core/usbh_core.c.o
 LOAD objs/third/CherryUSB/class/cdc/usbd_cdc_acm.c.o
+LOAD objs/third/CherryUSB/class/msc/usbh_msc.c.o
+LOAD objs/third/CherryUSB/class/hub/usbh_hub.c.o
+LOAD objs/third/CherryUSB/osal/usb_osal_freertos.c.o
+LOAD objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o
+LOAD objs/third/CherryUSB/port/jl82/usb_glue_jl82_host.c.o
 LOAD objs/third/CherryUSB/port/jl82/usb_dc_jl82.c.o
 LOAD objs/third/CherryUSB/port/jl82/usb_glue_jl82.c.o
 LOAD objs/driver/config/log_config/lib_driver_config.c.o
@@ -345,6 +367,9 @@ LOAD objs/cpu/wl82/iic.c.o
 LOAD objs/cpu/wl82/key/adc_api.c.o
 LOAD objs/cpu/wl82/port_waked_up.c.o
 LOAD objs/cpu/wl82/setup.c.o
+LOAD objs/driver/lcd/lcd_drive.c.o
+LOAD objs/driver/lcd/lcd_ili9341.c.o
+LOAD objs/driver/lcd/lcd_te_stub.c.o
 LOAD objs/include_lib/btctrler/version.z.S.o
 LOAD objs/include_lib/btstack/version.z.S.o
 LOAD objs/include_lib/driver/version.z.S.o
@@ -376,9 +401,9 @@ END GROUP
                 0x00000000                CACHE_RAM_SIZE = ((FREE_DACHE_WAY * 0x1000) + (FREE_IACHE_WAY * 0x1000))
                 0x02000120                . = ORIGIN (rom)
 
-.text           0x02000120    0x1cda0
+.text           0x02000120    0x1f4e0
                 0x02000120                _text_rodata_begin = .
-                0x02000120                PROVIDE (text_rodata_begin, .)
+                [!provide]                PROVIDE (text_rodata_begin, .)
  *startup.S.o(.text)
  .text          0x02000120       0xc4 ../../../cpu/wl82/liba/cpu.a(startup.S.o)
                 0x02000120                _start
@@ -391,165 +416,167 @@ END GROUP
                 0x0200037e                startup_boot_hook
                 0x02000380                boot_info_init
  *(.text*)
- .text          0x020003b2    0x16de8 ../../../cpu/wl82/tools/sdk.elf.o
-                0x02004910                __errno
-                0x02004bf0                cpu1_main
-                0x02004d82                main
-                0x02006266                update_result_get
-                0x0200629e                exception_analyze
-                0x020065f0                sp_ovf_unen
-                0x02006604                sp_ovf_en
- .text          0x0201719a        0x0 objs/include_lib/btctrler/version.z.S.o
- .text          0x0201719a        0x0 objs/include_lib/btstack/version.z.S.o
- .text          0x0201719a        0x0 objs/include_lib/driver/version.z.S.o
- .text          0x0201719a        0x0 objs/include_lib/media/version.z.S.o
- .text          0x0201719a        0x0 objs/include_lib/net/version.z.S.o
- .text          0x0201719a        0x0 objs/include_lib/server/version.z.S.o
- .text          0x0201719a        0x0 objs/include_lib/system/version.z.S.o
- .text          0x0201719a        0x0 objs/include_lib/update/version.z.S.o
- .text          0x0201719a        0x0 objs/include_lib/utils/version.z.S.o
- .text          0x0201719a        0x0 objs/lib/net/version.z.S.o
- .text          0x0201719a        0x0 objs/lib/server/version.z.S.o
- .text          0x0201719a        0x0 objs/lib/utils/version.z.S.o
- .text          0x0201719a        0x0 ../../../cpu/wl82/liba/cpu.a(version.z.o)
- .text          0x0201719a        0x0 ../../../cpu/wl82/liba/event.a(version.z.o)
- .text          0x0201719a       0x78 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
-                0x0201719a                vSoftwareInterruptISR
- .text          0x02017212        0x0 ../../../cpu/wl82/liba/system.a(movable.S.o)
- .text          0x02017212        0x0 ../../../cpu/wl82/liba/system.a(version.z.o)
- .text          0x02017212        0x0 ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
- .text          0x02017212        0x0 ../../../cpu/wl82/liba/fs.a(version.z.o)
- .text          0x02017212        0x0 ../../../cpu/wl82/liba/common_lib.a(version.z.o)
- .text          0x02017212        0x0 ../../../cpu/wl82/liba/update.a(version.z.o)
- .text          0x02017212       0x8e C:/JL/pi32/pi32v2-lib/r3/libm.a(lib_a-s_modf.o)
-                0x02017212                modf
- .text          0x020172a0       0x38 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memcmp.o)
-                0x020172a0                memcmp
- .text          0x020172d8       0xc2 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memcpy.o)
-                0x020172d8                memcpy
-                0x020172d8                memmove
- .text          0x0201739a       0x18 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcat.o)
-                0x0201739a                strcat
- .text          0x020173b2       0x14 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strchr.o)
-                0x020173b2                strchr
- .text          0x020173c6       0xa0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcmp.o)
-                0x020173c6                strcmp
- .text          0x02017466       0x6e C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcpy.o)
-                0x02017466                strcpy
- .text          0x020174d4        0xc C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strlen.o)
-                0x020174d4                strlen
- .text          0x020174e0       0x1a C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strncmp.o)
-                0x020174e0                strncmp
- .text          0x020174fa       0x14 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strnlen.o)
-                0x020174fa                strnlen
- .text          0x0201750e       0x24 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strrchr.o)
-                0x0201750e                strrchr
- .text          0x02017532       0x2a C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strstr.o)
-                0x02017532                strstr
- .text          0x0201755c       0xfe C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtoul.o)
-                0x0201755c                _strtoul_r
-                0x02017642                strtoul
- .text          0x0201765a        0x0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-ctype_.o)
- .text          0x0201765a        0x0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
- .text          0x0201765a        0x6 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(subdf3.o)
-                0x0201765a                __subdf3
- .text          0x02017660      0x314 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(adddf3.o)
-                0x020176a0                __adddf3
- .text          0x02017974       0x2c C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memset.o)
-                0x02017974                memset
- .text          0x020179a0      0x1a0 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(comparedf2.o)
-                0x020179a0                __ledf2
-                0x020179a0                __cmpdf2
-                0x02017a50                __gedf2
-                0x02017af8                __unorddf2
-                0x02017b38                __eqdf2
-                0x02017b3a                __ltdf2
-                0x02017b3c                __nedf2
-                0x02017b3e                __gtdf2
- .text          0x02017b40      0x346 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(divdf3.o)
-                0x02017b76                __divdf3
- .text          0x02017e86       0x54 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(fixdfsi.o)
-                0x02017e86                __fixdfsi
- .text          0x02017eda      0x2fa C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(muldf3.o)
-                0x02017f10                __muldf3
+ .text          0x020003b2    0x1883c ../../../cpu/wl82/tools/sdk.elf.o
+                0x02006628                __errno
+                0x0200679a                cpu1_main
+                0x0200692e                main
+                0x02007bfc                update_result_get
+                0x02007c34                exception_analyze
+                0x02007f88                sp_ovf_unen
+                0x02007f9c                sp_ovf_en
+ .text          0x02018bee        0x0 objs/include_lib/btctrler/version.z.S.o
+ .text          0x02018bee        0x0 objs/include_lib/btstack/version.z.S.o
+ .text          0x02018bee        0x0 objs/include_lib/driver/version.z.S.o
+ .text          0x02018bee        0x0 objs/include_lib/media/version.z.S.o
+ .text          0x02018bee        0x0 objs/include_lib/net/version.z.S.o
+ .text          0x02018bee        0x0 objs/include_lib/server/version.z.S.o
+ .text          0x02018bee        0x0 objs/include_lib/system/version.z.S.o
+ .text          0x02018bee        0x0 objs/include_lib/update/version.z.S.o
+ .text          0x02018bee        0x0 objs/include_lib/utils/version.z.S.o
+ .text          0x02018bee        0x0 objs/lib/net/version.z.S.o
+ .text          0x02018bee        0x0 objs/lib/server/version.z.S.o
+ .text          0x02018bee        0x0 objs/lib/utils/version.z.S.o
+ .text          0x02018bee        0x0 ../../../cpu/wl82/liba/cpu.a(version.z.o)
+ .text          0x02018bee        0x0 ../../../cpu/wl82/liba/event.a(version.z.o)
+ .text          0x02018bee       0x78 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
+                0x02018bee                vSoftwareInterruptISR
+ .text          0x02018c66        0x0 ../../../cpu/wl82/liba/system.a(movable.S.o)
+ .text          0x02018c66        0x0 ../../../cpu/wl82/liba/system.a(version.z.o)
+ .text          0x02018c66        0x0 ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
+ .text          0x02018c66        0x0 ../../../cpu/wl82/liba/fs.a(version.z.o)
+ .text          0x02018c66        0x0 ../../../cpu/wl82/liba/common_lib.a(version.z.o)
+ .text          0x02018c66        0x0 ../../../cpu/wl82/liba/update.a(version.z.o)
+ .text          0x02018c66       0x8e C:/JL/pi32/pi32v2-lib/r3/libm.a(lib_a-s_modf.o)
+                0x02018c66                modf
+ .text          0x02018cf4       0x38 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memcmp.o)
+                0x02018cf4                memcmp
+ .text          0x02018d2c       0xc2 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memcpy.o)
+                0x02018d2c                memcpy
+                0x02018d2c                memmove
+ .text          0x02018dee       0x18 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcat.o)
+                0x02018dee                strcat
+ .text          0x02018e06       0x14 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strchr.o)
+                0x02018e06                strchr
+ .text          0x02018e1a       0xa0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcmp.o)
+                0x02018e1a                strcmp
+ .text          0x02018eba       0x6e C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcpy.o)
+                0x02018eba                strcpy
+ .text          0x02018f28        0xc C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strlen.o)
+                0x02018f28                strlen
+ .text          0x02018f34       0x1a C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strncmp.o)
+                0x02018f34                strncmp
+ .text          0x02018f4e       0x14 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strnlen.o)
+                0x02018f4e                strnlen
+ .text          0x02018f62       0x24 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strrchr.o)
+                0x02018f62                strrchr
+ .text          0x02018f86       0x2a C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strstr.o)
+                0x02018f86                strstr
+ .text          0x02018fb0      0x108 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtol.o)
+                0x02018fb0                _strtol_r
+                0x020190a0                strtol
+ .text          0x020190b8       0xfe C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtoul.o)
+                0x020190b8                _strtoul_r
+                0x0201919e                strtoul
+ .text          0x020191b6        0x0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-ctype_.o)
+ .text          0x020191b6        0x0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
+ .text          0x020191b6        0x6 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(subdf3.o)
+                0x020191b6                __subdf3
+ .text          0x020191bc      0x314 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(adddf3.o)
+                0x020191fc                __adddf3
+ .text          0x020194d0       0x2c C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memset.o)
+                0x020194d0                memset
+ .text          0x020194fc      0x1a0 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(comparedf2.o)
+                0x020194fc                __ledf2
+                0x020194fc                __cmpdf2
+                0x020195ac                __gedf2
+                0x02019654                __unorddf2
+                0x02019694                __eqdf2
+                0x02019696                __ltdf2
+                0x02019698                __nedf2
+                0x0201969a                __gtdf2
+ .text          0x0201969c      0x346 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(divdf3.o)
+                0x020196d2                __divdf3
+ .text          0x020199e2       0x54 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(fixdfsi.o)
+                0x020199e2                __fixdfsi
+ .text          0x02019a36      0x2fa C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(muldf3.o)
+                0x02019a6c                __muldf3
  *(.LOG_TAG_CONST*)
  *(.rodata*)
- *fill*         0x020181d4        0xc 
  .rodata.str1.16
-                0x020181e0      0x520 ../../../cpu/wl82/tools/sdk.elf.o
-                                0x51d (size before relaxing)
+                0x02019d30      0x920 ../../../cpu/wl82/tools/sdk.elf.o
+                                0x91d (size before relaxing)
  .rodata.str1.1
-                0x02018700      0x453 ../../../cpu/wl82/tools/sdk.elf.o
-                                0x457 (size before relaxing)
- *fill*         0x02018b53        0xd 
- .rodata        0x02018b60     0x354c ../../../cpu/wl82/tools/sdk.elf.o
- .rodata.cst32  0x0201c0ac       0x20 ../../../cpu/wl82/tools/sdk.elf.o
- .rodata.cst16  0x0201c0cc       0x20 ../../../cpu/wl82/tools/sdk.elf.o
- .rodata        0x0201c0ec      0x281 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-ctype_.o)
-                0x0201c26c                _ctype_
- *fill*         0x0201c36d        0x3 
- .rodata        0x0201c370        0x4 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
-                0x0201c370                _global_impure_ptr
+                0x0201a650      0x49d ../../../cpu/wl82/tools/sdk.elf.o
+                                0x4a1 (size before relaxing)
+ *fill*         0x0201aaed       0x13 
+ .rodata        0x0201ab00     0x3cd4 ../../../cpu/wl82/tools/sdk.elf.o
+ .rodata.cst32  0x0201e7d4       0x20 ../../../cpu/wl82/tools/sdk.elf.o
+ .rodata.cst16  0x0201e7f4       0x20 ../../../cpu/wl82/tools/sdk.elf.o
+ .rodata        0x0201e814      0x281 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-ctype_.o)
+                0x0201e994                _ctype_
+ *fill*         0x0201ea95        0x3 
+ .rodata        0x0201ea98        0x4 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
+                0x0201ea98                _global_impure_ptr
  .rodata.str1.1
-                0x0201c374        0x2 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
+                0x0201ea9c        0x2 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
  *(.fat_data_code)
  .fat_data_code
-                0x0201c376      0x9b4 ../../../cpu/wl82/tools/sdk.elf.o
-                0x0201cd2c                . = ALIGN (0x4)
- *fill*         0x0201cd2a        0x2 
-                0x0201cd2c                __VERSION_BEGIN = .
+                0x0201ea9e      0x9b4 ../../../cpu/wl82/tools/sdk.elf.o
+                0x0201f454                . = ALIGN (0x4)
+ *fill*         0x0201f452        0x2 
+                0x0201f454                __VERSION_BEGIN = .
  *(.sys.version)
- .sys.version   0x0201cd2c       0x1a objs/include_lib/btctrler/version.z.S.o
- .sys.version   0x0201cd46       0x19 objs/include_lib/btstack/version.z.S.o
-                0x0201cd46                include_lib_btstack_version
- .sys.version   0x0201cd5f       0x18 objs/include_lib/driver/version.z.S.o
-                0x0201cd5f                include_lib_driver_version
- .sys.version   0x0201cd77       0x17 objs/include_lib/media/version.z.S.o
-                0x0201cd77                include_lib_media_version
- .sys.version   0x0201cd8e       0x15 objs/include_lib/net/version.z.S.o
-                0x0201cd8e                include_lib_net_version
- .sys.version   0x0201cda3       0x18 objs/include_lib/server/version.z.S.o
-                0x0201cda3                include_lib_server_version
- .sys.version   0x0201cdbb       0x18 objs/include_lib/system/version.z.S.o
-                0x0201cdbb                include_lib_system_version
- .sys.version   0x0201cdd3       0x18 objs/include_lib/update/version.z.S.o
-                0x0201cdd3                include_lib_update_version
- .sys.version   0x0201cdeb       0x17 objs/include_lib/utils/version.z.S.o
-                0x0201cdeb                include_lib_utils_version
- .sys.version   0x0201ce02        0xd objs/lib/net/version.z.S.o
-                0x0201ce02                lib_net_version
- .sys.version   0x0201ce0f       0x10 objs/lib/server/version.z.S.o
-                0x0201ce0f                lib_server_version
- .sys.version   0x0201ce1f        0xf objs/lib/utils/version.z.S.o
-                0x0201ce1f                lib_utils_version
- .sys.version   0x0201ce2e       0x10 ../../../cpu/wl82/liba/cpu.a(version.z.o)
-                0x0201ce2e                lib_driver_version
- .sys.version   0x0201ce3e        0x0 ../../../cpu/wl82/liba/event.a(version.z.o)
-                0x0201ce3e                lib_event_version
- .sys.version   0x0201ce3e       0x10 ../../../cpu/wl82/liba/system.a(version.z.o)
-                0x0201ce3e                lib_system_version
- .sys.version   0x0201ce4e        0x0 ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
-                0x0201ce4e                lib_cfg_tool_version
- .sys.version   0x0201ce4e        0x0 ../../../cpu/wl82/liba/fs.a(version.z.o)
-                0x0201ce4e                lib_fs_version
- .sys.version   0x0201ce4e        0x0 ../../../cpu/wl82/liba/common_lib.a(version.z.o)
-                0x0201ce4e                lib_common_version
- .sys.version   0x0201ce4e       0x10 ../../../cpu/wl82/liba/update.a(version.z.o)
-                0x0201ce4e                lib_update_version
-                0x0201ce5e                __VERSION_END = .
+ .sys.version   0x0201f454       0x1a objs/include_lib/btctrler/version.z.S.o
+ .sys.version   0x0201f46e       0x19 objs/include_lib/btstack/version.z.S.o
+                0x0201f46e                include_lib_btstack_version
+ .sys.version   0x0201f487       0x18 objs/include_lib/driver/version.z.S.o
+                0x0201f487                include_lib_driver_version
+ .sys.version   0x0201f49f       0x17 objs/include_lib/media/version.z.S.o
+                0x0201f49f                include_lib_media_version
+ .sys.version   0x0201f4b6       0x15 objs/include_lib/net/version.z.S.o
+                0x0201f4b6                include_lib_net_version
+ .sys.version   0x0201f4cb       0x18 objs/include_lib/server/version.z.S.o
+                0x0201f4cb                include_lib_server_version
+ .sys.version   0x0201f4e3       0x18 objs/include_lib/system/version.z.S.o
+                0x0201f4e3                include_lib_system_version
+ .sys.version   0x0201f4fb       0x18 objs/include_lib/update/version.z.S.o
+                0x0201f4fb                include_lib_update_version
+ .sys.version   0x0201f513       0x17 objs/include_lib/utils/version.z.S.o
+                0x0201f513                include_lib_utils_version
+ .sys.version   0x0201f52a        0xd objs/lib/net/version.z.S.o
+                0x0201f52a                lib_net_version
+ .sys.version   0x0201f537       0x10 objs/lib/server/version.z.S.o
+                0x0201f537                lib_server_version
+ .sys.version   0x0201f547        0xf objs/lib/utils/version.z.S.o
+                0x0201f547                lib_utils_version
+ .sys.version   0x0201f556       0x10 ../../../cpu/wl82/liba/cpu.a(version.z.o)
+                0x0201f556                lib_driver_version
+ .sys.version   0x0201f566        0x0 ../../../cpu/wl82/liba/event.a(version.z.o)
+                0x0201f566                lib_event_version
+ .sys.version   0x0201f566       0x10 ../../../cpu/wl82/liba/system.a(version.z.o)
+                0x0201f566                lib_system_version
+ .sys.version   0x0201f576        0x0 ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
+                0x0201f576                lib_cfg_tool_version
+ .sys.version   0x0201f576        0x0 ../../../cpu/wl82/liba/fs.a(version.z.o)
+                0x0201f576                lib_fs_version
+ .sys.version   0x0201f576        0x0 ../../../cpu/wl82/liba/common_lib.a(version.z.o)
+                0x0201f576                lib_common_version
+ .sys.version   0x0201f576       0x10 ../../../cpu/wl82/liba/update.a(version.z.o)
+                0x0201f576                lib_update_version
+                0x0201f586                __VERSION_END = .
  *(.jlsp_code)
-                0x0201ce60                . = ALIGN (0x4)
- *fill*         0x0201ce5e        0x2 
+                0x0201f588                . = ALIGN (0x4)
+ *fill*         0x0201f586        0x2 
  *(.jlsp_const)
-                0x0201ce60                . = ALIGN (0x4)
+                0x0201f588                . = ALIGN (0x4)
  *(.update_const)
  *(.update_code)
- .update_code   0x0201ce60       0x46 ../../../cpu/wl82/tools/sdk.elf.o
+ .update_code   0x0201f588       0x46 ../../../cpu/wl82/tools/sdk.elf.o
  *(.bt_updata_ram_code)
-                0x0201cea8                . = ALIGN (0x4)
- *fill*         0x0201cea6        0x2 
-                0x0201cea8                btctler_code_start = .
-                0x0201cea8                BTCTLER_CONTROLLER_CODE_START = .
+                0x0201f5d0                . = ALIGN (0x4)
+ *fill*         0x0201f5ce        0x2 
+                0x0201f5d0                btctler_code_start = .
+                0x0201f5d0                BTCTLER_CONTROLLER_CODE_START = .
  *(.bt_rf_const)
  *(.bt_rf_code)
  *(.vendor_manager_const)
@@ -561,7 +588,7 @@ END GROUP
  *(.hci_interface_const)
  *(.hci_interface_code)
                 0x00000000                BTCTLER_CONTROLLER_CODE_SIZE = ABSOLUTE ((. - BTCTLER_CONTROLLER_CODE_START))
-                0x0201cea8                BTCTLER_LE_CONTROLLER_CODE_START = .
+                0x0201f5d0                BTCTLER_LE_CONTROLLER_CODE_START = .
  *(.ble_rf_const)
  *(.ble_rf_code)
  *(.ble_ll_const)
@@ -569,7 +596,7 @@ END GROUP
  *(.ble_hci_const)
  *(.ble_hci_code)
                 0x00000000                BTCTLER_LE_CONTROLLER_CODE_SIZE = ABSOLUTE ((. - BTCTLER_LE_CONTROLLER_CODE_START))
-                0x0201cea8                BTCTLER_CL_CODE_START = .
+                0x0201f5d0                BTCTLER_CL_CODE_START = .
  *(.bredr_irq)
  *(.bredr_irq_code)
  *(.bredr_irq_const)
@@ -579,7 +606,7 @@ END GROUP
  *(.classic_lmp_linkbulk_code)
  *(.classic_hci_const)
  *(.classic_hci_code)
-                0x0201cea8                LMP_ENC_CODE_START = .
+                0x0201f5d0                LMP_ENC_CODE_START = .
  *(.classic_lmp_auth_const)
  *(.classic_lmp_bigint_const)
  *(.classic_lmp_crypt_const)
@@ -596,7 +623,7 @@ END GROUP
  *(.classic_bb_const)
  *(.classic_bb_code)
                 0x00000000                BTCTLER_CL_CODE_SIZE = ABSOLUTE ((. - BTCTLER_CL_CODE_START))
-                0x0201cea8                . = ALIGN (0x4)
+                0x0201f5d0                . = ALIGN (0x4)
  *(.classic_tws_const)
  *(.classic_tws_code)
  *(.classic_tws_code.esco)
@@ -604,27 +631,27 @@ END GROUP
  *(.tws_media_sync_const)
  *(.tws_data_forward_code)
  *(.tws_data_forward_const)
-                0x0201cea8                . = ALIGN (0x4)
-                0x0201cea8                tws_func_stub_begin = .
+                0x0201f5d0                . = ALIGN (0x4)
+                0x0201f5d0                tws_func_stub_begin = .
  *(.tws_func_stub)
-                0x0201cea8                tws_func_stub_end = .
+                0x0201f5d0                tws_func_stub_end = .
  *(.lmp_irq_code)
  *(.link_bulk_code)
  *(.frame_irq_code)
-                0x0201cea8                . = ALIGN (0x4)
+                0x0201f5d0                . = ALIGN (0x4)
  *(.link_task_const)
  *(.link_task_code)
-                0x0201cea8                . = ALIGN (0x4)
+                0x0201f5d0                . = ALIGN (0x4)
  *(.classic_irq_const)
  *(.classic_irq_code)
-                0x0201cea8                . = ALIGN (0x4)
+                0x0201f5d0                . = ALIGN (0x4)
  *(.tws_irq_code)
-                0x0201cea8                . = ALIGN (0x4)
-                0x0201cea8                tws_sync_call_begin = .
+                0x0201f5d0                . = ALIGN (0x4)
+                0x0201f5d0                tws_sync_call_begin = .
  *(.tws_sync_call)
-                0x0201cea8                tws_sync_call_end = .
-                0x0201cea8                . = ALIGN (0x4)
-                0x0201cea8                tws_sync_channel_begin = .
+                0x0201f5d0                tws_sync_call_end = .
+                0x0201f5d0                . = ALIGN (0x4)
+                0x0201f5d0                tws_sync_channel_begin = .
  *(.tws_sync_channel.0)
  *(.tws_sync_channel.1)
  *(.tws_sync_channel.2)
@@ -639,30 +666,30 @@ END GROUP
  *(.tws_sync_channel.11)
  *(.tws_sync_channel.12)
  *(.tws_sync_channel.13)
-                0x0201cea8                tws_sync_channel_end = .
-                0x0201cea8                btctler_code_end = .
-                0x0201cea8                . = ALIGN (0x4)
-                0x0201cea8                . = ALIGN (0x4)
-                0x0201cea8                btstack_code_start = .
-                0x0201cea8                . = ALIGN (0x4)
-                0x0201cea8                a2dp_source_media_codec_begin = .
+                0x0201f5d0                tws_sync_channel_end = .
+                0x0201f5d0                btctler_code_end = .
+                0x0201f5d0                . = ALIGN (0x4)
+                0x0201f5d0                . = ALIGN (0x4)
+                0x0201f5d0                btstack_code_start = .
+                0x0201f5d0                . = ALIGN (0x4)
+                0x0201f5d0                a2dp_source_media_codec_begin = .
  *(.a2dp_source_media_codec)
-                0x0201cea8                a2dp_source_media_codec_end = .
-                0x0201cea8                a2dp_sink_media_probe_begin = .
+                0x0201f5d0                a2dp_source_media_codec_end = .
+                0x0201f5d0                a2dp_sink_media_probe_begin = .
  *(.a2dp_sink_media_probe)
-                0x0201cea8                a2dp_sink_media_probe_end = .
-                0x0201cea8                a2dp_sink_media_codec_begin = .
+                0x0201f5d0                a2dp_sink_media_probe_end = .
+                0x0201f5d0                a2dp_sink_media_codec_begin = .
  *(.a2dp_sink_media_codec)
-                0x0201cea8                a2dp_sink_media_codec_end = .
-                0x0201cea8                a2dp_event_handler_begin = .
+                0x0201f5d0                a2dp_sink_media_codec_end = .
+                0x0201f5d0                a2dp_event_handler_begin = .
  *(.a2dp_event_handler)
-                0x0201cea8                a2dp_event_handler_end = .
-                0x0201cea8                sdp_record_item_begin = .
+                0x0201f5d0                a2dp_event_handler_end = .
+                0x0201f5d0                sdp_record_item_begin = .
  *(.sdp_record_item)
-                0x0201cea8                sdp_record_item_end = .
-                0x0201cea8                bt_sleep_begin = .
+                0x0201f5d0                sdp_record_item_end = .
+                0x0201f5d0                bt_sleep_begin = .
  *(.bt_sleep)
-                0x0201cea8                bt_sleep_end = .
+                0x0201f5d0                bt_sleep_end = .
  *(.bt_stack_const)
  *(.bt_stack_code)
  *(.ble_db_const)
@@ -673,40 +700,41 @@ END GROUP
  *(.ble_att_code)
  *(.ble_gatt_const)
  *(.ble_gatt_code)
-                0x0201cea8                BTSTACK_LE_HOST_MESH_CODE_START = .
+                0x0201f5d0                BTSTACK_LE_HOST_MESH_CODE_START = .
  *(.ble_mesh_code)
  *(.ble_mesh_tinycrypt_code)
  *(.ble_mesh_const)
  *(.ble_mesh_tinycrypt_const)
                 0x00000000                BTSTACK_LE_HOST_MESH_CODE_SIZE = ABSOLUTE ((. - BTSTACK_LE_HOST_MESH_CODE_START))
-                0x0201cea8                btstack_code_end = .
-                0x0201cea8                . = ALIGN (0x4)
+                0x0201f5d0                btstack_code_end = .
+                0x0201f5d0                . = ALIGN (0x4)
                 0x00000000                BTSTACK_CODE_TOTAL_SIZE = (btstack_code_end - btstack_code_start)
-                0x0201cea8                . = ALIGN (0x4)
-                0x0201cea8                lcd_interface_begin = .
+                0x0201f5d0                . = ALIGN (0x4)
+                0x0201f5d0                lcd_interface_begin = .
  *(.lcd_if_info)
-                0x0201cea8                lcd_interface_end = .
-                0x0201cea8                ui_style_begin = .
+ .lcd_if_info   0x0201f5d0       0x28 ../../../cpu/wl82/tools/sdk.elf.o
+                0x0201f5f8                lcd_interface_end = .
+                0x0201f5f8                ui_style_begin = .
  *(.ui_style)
-                0x0201cea8                ui_style_end = .
-                0x0201cea8                elm_event_handler_begin_JL = .
+                0x0201f5f8                ui_style_end = .
+                0x0201f5f8                elm_event_handler_begin_JL = .
  *(.elm_event_handler_JL)
-                0x0201cea8                elm_event_handler_end_JL = .
-                0x0201cea8                elm_event_handler_begin_UPGRADE = .
+                0x0201f5f8                elm_event_handler_end_JL = .
+                0x0201f5f8                elm_event_handler_begin_UPGRADE = .
  *(.elm_event_handler_UPGRADE)
-                0x0201cea8                elm_event_handler_end_UPGRADE = .
-                0x0201cea8                elm_event_handler_begin_DIAL = .
+                0x0201f5f8                elm_event_handler_end_UPGRADE = .
+                0x0201f5f8                elm_event_handler_begin_DIAL = .
  *(.elm_event_handler_DIAL)
-                0x0201cea8                elm_event_handler_end_DIAL = .
-                0x0201cea8                control_event_handler_begin = .
+                0x0201f5f8                elm_event_handler_end_DIAL = .
+                0x0201f5f8                control_event_handler_begin = .
  *(.control_event_handler)
-                0x0201cea8                control_event_handler_end = .
-                0x0201cea8                control_ops_begin = .
+                0x0201f5f8                control_event_handler_end = .
+                0x0201f5f8                control_ops_begin = .
  *(.control_ops)
-                0x0201cea8                control_ops_end = .
-                0x0201cea8                battery_notify_begin = .
+                0x0201f5f8                control_ops_end = .
+                0x0201f5f8                battery_notify_begin = .
  *(.battery_notify)
-                0x0201cea8                battery_notify_end = .
+                0x0201f5f8                battery_notify_end = .
                 [!provide]                PROVIDE (__fsymtab_start, .)
  *(.FSymTab)
                 [!provide]                PROVIDE (__fsymtab_end, .)
@@ -716,18 +744,20 @@ END GROUP
                 [!provide]                PROVIDE (__rtatcmdtab_start, .)
  *(.RtAtCmdTab)
                 [!provide]                PROVIDE (__rtatcmdtab_end, .)
-                0x0201cea8                . = ALIGN (0x4)
+                0x0201f5f8                . = ALIGN (0x4)
  *(*.rf.text.cache.L2.rf_trim)
-                0x0201cea8                __rf_trim_movable_region_start = .
+                0x0201f5f8                __rf_trim_movable_region_start = .
  *(.movable.region.1)
-                0x0201cea8                __rf_trim_movable_region_end = .
-                0x0201cec0                . = ALIGN (0x20)
- *fill*         0x0201cea8       0x18 
-                0x0201cec0                _text_rodata_end = .
-                0x0201cec0                PROVIDE (text_rodata_end, .)
+                0x0201f5f8                __rf_trim_movable_region_end = .
+                0x0201f600                . = ALIGN (0x20)
+ *fill*         0x0201f5f8        0x8 
+                0x0201f600                _text_rodata_end = .
+                [!provide]                PROVIDE (text_rodata_end, .)
                 0x04000120                . = ORIGIN (sdram)
 
-.data           0x04000120      0xb8c
+.data           0x04000120      0xc48
+                0x04000120                . = ALIGN (0x4)
+ *(.ui_ram)
                 0x04000120                . = ALIGN (0x4)
                 0x04000120                _vfs_ops_begin = .
                 0x04000120                PROVIDE (vfs_ops_begin, .)
@@ -824,156 +854,167 @@ END GROUP
                 0x04000378                _device_node_begin = .
                 0x04000378                PROVIDE (device_node_begin, .)
  *(.device)
- .device        0x04000378       0x48 ../../../cpu/wl82/tools/sdk.elf.o
+ .device        0x04000378       0x54 ../../../cpu/wl82/tools/sdk.elf.o
                 0x04000378                device_table
-                0x040003c0                _device_node_end = .
-                0x040003c0                PROVIDE (device_node_end, .)
-                0x040003c0                lp_target_begin = .
+                0x040003cc                _device_node_end = .
+                0x040003cc                PROVIDE (device_node_end, .)
+                0x040003cc                __usbh_class_info_start__ = .
+                [!provide]                PROVIDE (usbh_class_info_start, .)
+ *(.usbh_class_info)
+ .usbh_class_info
+                0x040003cc       0x20 ../../../cpu/wl82/tools/sdk.elf.o
+                0x040003cc                msc_class_info
+                0x040003dc                hub_class_info
+                0x040003ec                __usbh_class_info_end__ = .
+                [!provide]                PROVIDE (usbh_class_info_end, .)
+                0x040003ec                lp_target_begin = .
                 [!provide]                PROVIDE (lp_target_begin, .)
  *(.lp_target)
- .lp_target     0x040003c0       0x60 ../../../cpu/wl82/tools/sdk.elf.o
-                0x040003c0                ota_lp_target
-                0x040003c8                iic_lp_target
-                0x040003d0                adc_scan_lp_target
-                0x040003d8                uart_lp_target
-                0x040003e0                spi_lp_target
-                0x040003e8                sys_power_lp_target
-                0x040003f0                dac_lp_target
-                0x040003f8                pwm_lp_target
-                0x04000400                norflash_lp_target
-                0x04000408                usb_dev_lp_target
-                0x04000410                usr_systimer_lp_target
-                0x04000418                vm_lp_target
-                0x04000420                lp_target_end = .
+ .lp_target     0x040003ec       0x68 ../../../cpu/wl82/tools/sdk.elf.o
+                0x040003ec                ota_lp_target
+                0x040003f4                iic_lp_target
+                0x040003fc                adc_scan_lp_target
+                0x04000404                uart_lp_target
+                0x0400040c                spi_lp_target
+                0x04000414                sys_power_lp_target
+                0x0400041c                dac_lp_target
+                0x04000424                pwm_lp_target
+                0x0400042c                emi_lp_target
+                0x04000434                norflash_lp_target
+                0x0400043c                usb_dev_lp_target
+                0x04000444                usr_systimer_lp_target
+                0x0400044c                vm_lp_target
+                0x04000454                lp_target_end = .
                 [!provide]                PROVIDE (lp_target_end, .)
-                0x04000420                _ai_sdk_api_begin = .
+                0x04000454                _ai_sdk_api_begin = .
                 [!provide]                PROVIDE (ai_sdk_api_begin, .)
  *(.ai_sdk)
-                0x04000420                _ai_sdk_api_end = .
+                0x04000454                _ai_sdk_api_end = .
                 [!provide]                PROVIDE (ai_sdk_api_end, .)
-                0x04000420                config_target_begin = .
+                0x04000454                config_target_begin = .
                 [!provide]                PROVIDE (config_target_begin, .)
  *(.config_target)
-                0x04000420                config_target_end = .
+                0x04000454                config_target_end = .
                 [!provide]                PROVIDE (config_target_end, .)
-                0x04000420                _tool_interface_begin = .
+                0x04000454                _tool_interface_begin = .
                 [!provide]                PROVIDE (tool_interface_begin, .)
  *(.tool_interface)
-                0x04000420                _tool_interface_end = .
+                0x04000454                _tool_interface_end = .
                 [!provide]                PROVIDE (tool_interface_end, .)
-                0x04000420                _lcd_device_begin = .
-                [!provide]                PROVIDE (lcd_device_begin, .)
+                0x04000454                _lcd_device_begin = .
+                0x04000454                PROVIDE (lcd_device_begin, .)
  *(.lcd)
-                0x04000420                _lcd_device_end = .
-                [!provide]                PROVIDE (lcd_device_end, .)
-                0x04000420                _camera_dev_begin = .
+ .lcd           0x04000454       0x34 ../../../cpu/wl82/tools/sdk.elf.o
+                0x04000488                _lcd_device_end = .
+                0x04000488                PROVIDE (lcd_device_end, .)
+                0x04000488                _camera_dev_begin = .
                 [!provide]                PROVIDE (camera_dev_begin, .)
  *(.camera_dev)
-                0x04000420                _camera_dev_end = .
+                0x04000488                _camera_dev_end = .
                 [!provide]                PROVIDE (camera_dev_end, .)
-                0x04000420                _camera1_dev_begin = .
+                0x04000488                _camera1_dev_begin = .
                 [!provide]                PROVIDE (camera1_dev_begin, .)
  *(.camera1_dev)
-                0x04000420                _camera1_dev_end = .
+                0x04000488                _camera1_dev_end = .
                 [!provide]                PROVIDE (camera1_dev_end, .)
-                0x04000420                _iic_device_begin = .
-                0x04000420                PROVIDE (iic_device_begin, .)
+                0x04000488                _iic_device_begin = .
+                0x04000488                PROVIDE (iic_device_begin, .)
  *(.iic)
- .iic           0x04000420       0x30 ../../../cpu/wl82/tools/sdk.elf.o
-                0x04000450                _iic_device_end = .
-                0x04000450                PROVIDE (iic_device_end, .)
-                0x04000450                _video_pkg_sys_begin = .
+ .iic           0x04000488       0x30 ../../../cpu/wl82/tools/sdk.elf.o
+                0x040004b8                _iic_device_end = .
+                0x040004b8                PROVIDE (iic_device_end, .)
+                0x040004b8                _video_pkg_sys_begin = .
                 [!provide]                PROVIDE (video_pkg_sys_begin, .)
  *(.video_pkg_sys)
-                0x04000450                _video_pkg_sys_end = .
+                0x040004b8                _video_pkg_sys_end = .
                 [!provide]                PROVIDE (video_pkg_sys_end, .)
-                0x04000450                _video_pkg_begin = .
+                0x040004b8                _video_pkg_begin = .
                 [!provide]                PROVIDE (video_pkg_begin, .)
  *(.video_pkg)
-                0x04000450                _video_pkg_end = .
+                0x040004b8                _video_pkg_end = .
                 [!provide]                PROVIDE (video_pkg_end, .)
-                0x04000450                . = ALIGN (0x4)
-                0x04000450                _app_begin = .
-                0x04000450                PROVIDE (app_begin, .)
+                0x040004b8                . = ALIGN (0x4)
+                0x040004b8                _app_begin = .
+                0x040004b8                PROVIDE (app_begin, .)
  *(.app)
-                0x04000450                _app_end = .
-                0x04000450                PROVIDE (app_end, .)
-                0x04000450                _static_hi_timer_begin = .
+                0x040004b8                _app_end = .
+                0x040004b8                PROVIDE (app_end, .)
+                0x040004b8                _static_hi_timer_begin = .
                 [!provide]                PROVIDE (static_hi_timer_begin, .)
  *(.hi_timer)
-                0x04000450                _static_hi_timer_end = .
+                0x040004b8                _static_hi_timer_end = .
                 [!provide]                PROVIDE (static_hi_timer_end, .)
-                0x04000450                _sys_cpu_timer_begin = .
-                0x04000450                PROVIDE (sys_cpu_timer_begin, .)
+                0x040004b8                _sys_cpu_timer_begin = .
+                0x040004b8                PROVIDE (sys_cpu_timer_begin, .)
  *(.sys_cpu_timer)
  .sys_cpu_timer
-                0x04000450       0x10 ../../../cpu/wl82/tools/sdk.elf.o
-                0x04000450                cpu_timer4
-                0x04000460                _sys_cpu_timer_end = .
-                0x04000460                PROVIDE (sys_cpu_timer_end, .)
-                0x04000460                _gsensor_dev_begin = .
+                0x040004b8       0x10 ../../../cpu/wl82/tools/sdk.elf.o
+                0x040004b8                cpu_timer4
+                0x040004c8                _sys_cpu_timer_end = .
+                0x040004c8                PROVIDE (sys_cpu_timer_end, .)
+                0x040004c8                _gsensor_dev_begin = .
                 [!provide]                PROVIDE (gsensor_dev_begin, .)
  *(.gsensor_dev)
-                0x04000460                _gsensor_dev_end = .
+                0x040004c8                _gsensor_dev_end = .
                 [!provide]                PROVIDE (gsensor_dev_end, .)
-                0x04000460                _clock_critical_handler_begin = .
-                0x04000460                PROVIDE (clock_critical_handler_begin, .)
+                0x040004c8                _clock_critical_handler_begin = .
+                0x040004c8                PROVIDE (clock_critical_handler_begin, .)
  *(.clock_critical_txt)
  .clock_critical_txt
-                0x04000460       0x10 ../../../cpu/wl82/tools/sdk.elf.o
-                0x04000460                clock_timer1
-                0x04000468                clock_port
-                0x04000470                _clock_critical_handler_end = .
-                0x04000470                PROVIDE (clock_critical_handler_end, .)
-                0x04000470                _audio_decoder_begin = .
+                0x040004c8       0x10 ../../../cpu/wl82/tools/sdk.elf.o
+                0x040004c8                clock_timer1
+                0x040004d0                clock_port
+                0x040004d8                _clock_critical_handler_end = .
+                0x040004d8                PROVIDE (clock_critical_handler_end, .)
+                0x040004d8                _audio_decoder_begin = .
                 [!provide]                PROVIDE (audio_decoder_begin, .)
  *(.audio_decoder)
-                0x04000470                _audio_decoder_end = .
+                0x040004d8                _audio_decoder_end = .
                 [!provide]                PROVIDE (audio_decoder_end, .)
-                0x04000470                _audio_package_begin = .
+                0x040004d8                _audio_package_begin = .
                 [!provide]                PROVIDE (audio_package_begin, .)
  *(.audio_package)
-                0x04000470                _audio_package_end = .
+                0x040004d8                _audio_package_end = .
                 [!provide]                PROVIDE (audio_package_end, .)
-                0x04000470                _audio_effect_begin = .
+                0x040004d8                _audio_effect_begin = .
                 [!provide]                PROVIDE (audio_effect_begin, .)
  *(.audio_effect)
-                0x04000470                _audio_effect_end = .
+                0x040004d8                _audio_effect_end = .
                 [!provide]                PROVIDE (audio_effect_end, .)
-                0x04000470                _audio_hwaccel_begin = .
+                0x040004d8                _audio_hwaccel_begin = .
                 [!provide]                PROVIDE (audio_hwaccel_begin, .)
  *(.audio_hwaccel)
-                0x04000470                _audio_hwaccel_end = .
+                0x040004d8                _audio_hwaccel_end = .
                 [!provide]                PROVIDE (audio_hwaccel_end, .)
-                0x04000470                _audio_output_handler_begin = .
+                0x040004d8                _audio_output_handler_begin = .
                 [!provide]                PROVIDE (audio_output_handler_begin, .)
  *(.audio_output_handler)
-                0x04000470                _audio_output_handler_end = .
+                0x040004d8                _audio_output_handler_end = .
                 [!provide]                PROVIDE (audio_output_handler_end, .)
-                0x04000470                _audio_input_handler_begin = .
+                0x040004d8                _audio_input_handler_begin = .
                 [!provide]                PROVIDE (audio_input_handler_begin, .)
  *(.audio_input_handler)
-                0x04000470                _audio_input_handler_end = .
+                0x040004d8                _audio_input_handler_end = .
                 [!provide]                PROVIDE (audio_input_handler_end, .)
-                0x04000470                _audio_subdev_begin = .
+                0x040004d8                _audio_subdev_begin = .
                 [!provide]                PROVIDE (audio_subdev_begin, .)
  *(.audio_subdev.0)
  *(.audio_subdev.1)
  *(.audio_subdev.2)
  *(.audio_subdev.3)
-                0x04000470                _audio_subdev_end = .
+                0x040004d8                _audio_subdev_end = .
                 [!provide]                PROVIDE (audio_subdev_end, .)
-                0x04000470                _fm_dev_begin = .
+                0x040004d8                _fm_dev_begin = .
                 [!provide]                PROVIDE (fm_dev_begin, .)
  *(.fm_dev)
-                0x04000470                _fm_dev_end = .
+                0x040004d8                _fm_dev_end = .
                 [!provide]                PROVIDE (fm_dev_end, .)
-                0x04000470                _video_dev_begin = .
+                0x040004d8                _video_dev_begin = .
                 [!provide]                PROVIDE (video_dev_begin, .)
  *(.video_device)
-                0x04000470                _video_dev_end = .
+                0x040004d8                _video_dev_end = .
                 [!provide]                PROVIDE (video_dev_end, .)
-                0x04000470                _video_subdev_begin = .
+                0x040004d8                _video_subdev_begin = .
                 [!provide]                PROVIDE (video_subdev_begin, .)
  *(.video_subdev.0)
  *(.video_subdev.1)
@@ -981,94 +1022,94 @@ END GROUP
  *(.video_subdev.3)
  *(.video_subdev.4)
  *(.video_subdev.5)
-                0x04000470                _video_subdev_end = .
+                0x040004d8                _video_subdev_end = .
                 [!provide]                PROVIDE (video_subdev_end, .)
-                0x04000470                . = ALIGN (0x4)
-                0x04000470                _ctp_mapping_tab_begin = .
+                0x040004d8                . = ALIGN (0x4)
+                0x040004d8                _ctp_mapping_tab_begin = .
                 [!provide]                PROVIDE (ctp_mapping_tab_begin, .)
-                0x04000470                _ctp_mapping_tab_system_cmd_begin = .
+                0x040004d8                _ctp_mapping_tab_system_cmd_begin = .
                 [!provide]                PROVIDE (ctp_mapping_tab_system_cmd_begin, .)
  *(.ctp_system_cmd)
-                0x04000470                _ctp_mapping_tab_system_cmd_end = .
+                0x040004d8                _ctp_mapping_tab_system_cmd_end = .
                 [!provide]                PROVIDE (ctp_mapping_tab_system_cmd_end, .)
-                0x04000470                _ctp_mapping_tab_video_cmd_begin = .
+                0x040004d8                _ctp_mapping_tab_video_cmd_begin = .
                 [!provide]                PROVIDE (ctp_mapping_tab_video_cmd_begin, .)
  *(.ctp_video_cmd)
-                0x04000470                _ctp_mapping_tab_video_cmd_end = .
+                0x040004d8                _ctp_mapping_tab_video_cmd_end = .
                 [!provide]                PROVIDE (ctp_mapping_tab_video_cmd_end, .)
-                0x04000470                _ctp_mapping_tab_photo_cmd_begin = .
+                0x040004d8                _ctp_mapping_tab_photo_cmd_begin = .
                 [!provide]                PROVIDE (ctp_mapping_tab_photo_cmd_begin, .)
  *(.ctp_photo_cmd)
-                0x04000470                _ctp_mapping_tab_photo_cmd_end = .
+                0x040004d8                _ctp_mapping_tab_photo_cmd_end = .
                 [!provide]                PROVIDE (ctp_mapping_tab_photo_cmd_end, .)
-                0x04000470                _ctp_mapping_tab_end = .
+                0x040004d8                _ctp_mapping_tab_end = .
                 [!provide]                PROVIDE (ctp_mapping_tab_end, .)
-                0x04000470                _net_video_stream_sub_begin = .
+                0x040004d8                _net_video_stream_sub_begin = .
                 [!provide]                PROVIDE (net_video_stream_sub_begin, .)
  *(.net_video_stream)
-                0x04000470                _net_video_stream_sub_end = .
+                0x040004d8                _net_video_stream_sub_end = .
                 [!provide]                PROVIDE (net_video_stream_sub_end, .)
-                0x04000470                . = ALIGN (0x4)
-                0x04000470                btstack_data_start = .
+                0x040004d8                . = ALIGN (0x4)
+                0x040004d8                btstack_data_start = .
  *(.bt_stack_data)
  *(.ble_db_data)
  *(.ble_sm_data)
  *(.ble_att_data)
  *(.ble_gatt_data)
-                0x04000470                BTSTACK_LE_HOST_MESH_DATA_START = .
-                0x04000470                . = ((. + 0x3) & 0xfffffffc)
-                0x04000470                _net_buf_pool_list = .
+                0x040004d8                BTSTACK_LE_HOST_MESH_DATA_START = .
+                0x040004d8                . = ((. + 0x3) & 0xfffffffc)
+                0x040004d8                _net_buf_pool_list = .
  *(._net_buf_pool.static.*)
  *(.ble_mesh_data)
  *(.ble_mesh_tinycrypt_data)
                 0x00000000                BTSTACK_LE_HOST_MESH_DATA_SIZE = ABSOLUTE ((. - BTSTACK_LE_HOST_MESH_DATA_START))
-                0x04000470                btstack_data_end = .
-                0x04000470                . = ALIGN (0x4)
+                0x040004d8                btstack_data_end = .
+                0x040004d8                . = ALIGN (0x4)
  *(.data)
- *fill*         0x04000470       0x10 
- .data          0x04000480      0x40c ../../../cpu/wl82/tools/sdk.elf.o
- .data          0x0400088c        0x4 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-ctype_.o)
-                0x0400088c                __ctype_ptr__
- .data          0x04000890      0x41c C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
-                0x04000890                _impure_ptr
-                0x04000cac                . = ALIGN (0x4)
+ *fill*         0x040004d8        0x8 
+ .data          0x040004e0      0x468 ../../../cpu/wl82/tools/sdk.elf.o
+ .data          0x04000948        0x4 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-ctype_.o)
+                0x04000948                __ctype_ptr__
+ .data          0x0400094c      0x41c C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
+                0x0400094c                _impure_ptr
+                0x04000d68                . = ALIGN (0x4)
 
-.bss            0x04000cc0     0x25f8
+.bss            0x04000d80     0x8cd0
  *(.bss)
- .bss           0x04000cc0     0x1cfc ../../../cpu/wl82/tools/sdk.elf.o
+ .bss           0x04000d80     0x83d4 ../../../cpu/wl82/tools/sdk.elf.o
  *(COMMON)
  *(.mem_heap)
  *(.memp_memory_x)
-                0x040029bc                . = ALIGN (0x4)
+                0x04009154                . = ALIGN (0x4)
  *(.os_port_bss)
  *(.os_bss)
- .os_bss        0x040029bc      0x8fc ../../../cpu/wl82/tools/sdk.elf.o
+ .os_bss        0x04009154      0x8fc ../../../cpu/wl82/tools/sdk.elf.o
  *(.update_bss)
-                0x040032b8                . = ALIGN (0x4)
-                0x040032b8                btstack_bss_start = .
+                0x04009a50                . = ALIGN (0x4)
+                0x04009a50                btstack_bss_start = .
  *(.bt_stack_bss)
  *(.ble_db_bss)
  *(.ble_sm_bss)
  *(.ble_att_bss)
  *(.ble_gatt_bss)
  *(.btstack_pool)
-                0x040032b8                BTSTACK_LE_HOST_MESH_BSS_START = .
+                0x04009a50                BTSTACK_LE_HOST_MESH_BSS_START = .
  *(.ble_mesh_bss)
  *(.ble_mesh_tinycrypt_bss)
                 0x00000000                BTSTACK_LE_HOST_MESH_BSS_SIZE = ABSOLUTE ((. - BTSTACK_LE_HOST_MESH_BSS_START))
-                0x040032b8                btstack_bss_end = .
-                0x040032b8                . = ALIGN (0x4)
-                0x040032c0                _HEAP_BEGIN = (((. + 0x1f) / 0x20) * 0x20)
-                0x040032c0                PROVIDE (HEAP_BEGIN, (((. + 0x1f) / 0x20) * 0x20))
+                0x04009a50                btstack_bss_end = .
+                0x04009a50                . = ALIGN (0x4)
+                0x04009a60                _HEAP_BEGIN = (((. + 0x1f) / 0x20) * 0x20)
+                0x04009a60                PROVIDE (HEAP_BEGIN, (((. + 0x1f) / 0x20) * 0x20))
                 0x04800100                _HEAP_END = ((0x4000120 + SDRAM_SIZE) - 0x20)
                 0x04800100                PROVIDE (HEAP_END, ((0x4000120 + SDRAM_SIZE) - 0x20))
-                0x007fce40                _MALLOC_SIZE = (_HEAP_END - _HEAP_BEGIN)
+                0x007f66a0                _MALLOC_SIZE = (_HEAP_END - _HEAP_BEGIN)
                 [!provide]                PROVIDE (MALLOC_SIZE, (_HEAP_END - _HEAP_BEGIN))
                 0x01c00000                . = ORIGIN (ram0)
 
-.ram0_data      0x01c00000     0x86f0
+.ram0_data      0x01c00000     0x8bf8
                 0x01c00000                _ram_text_rodata_begin = .
-                0x01c00000                PROVIDE (ram_text_rodata_begin, .)
+                [!provide]                PROVIDE (ram_text_rodata_begin, .)
                 0x01c00000                _VM_CODE_START = .
  *(.vm)
                 0x01c00000                _VM_CODE_END = .
@@ -1119,70 +1160,70 @@ END GROUP
  *(.dlmalloc_code)
  *fill*         0x01c02623        0x1 
  .dlmalloc_code
-                0x01c02624     0x2078 ../../../cpu/wl82/tools/sdk.elf.o
-                0x01c0469a                memory_init
+                0x01c02624     0x2234 ../../../cpu/wl82/tools/sdk.elf.o
+                0x01c04856                memory_init
  *(.dlmalloc_const)
  *(.mem_heap_code)
  *(.mem_heap_const)
-                0x01c0469c                _os_begin = .
+                0x01c04858                _os_begin = .
                 [!provide]                PROVIDE (os_begin, .)
  *(.os_code)
- .os_code       0x01c0469c     0x36b4 ../../../cpu/wl82/tools/sdk.elf.o
-                0x01c06d4e                OS_ClrPending
+ .os_code       0x01c04858     0x39c8 ../../../cpu/wl82/tools/sdk.elf.o
+                0x01c0752e                OS_ClrPending
  *(.os_const)
  *(.os_str)
- .os_str        0x01c07d50      0x661 ../../../cpu/wl82/tools/sdk.elf.o
+ .os_str        0x01c08220      0x699 ../../../cpu/wl82/tools/sdk.elf.o
  *(.os_data)
- *fill*         0x01c083b1        0x3 
- .os_data       0x01c083b4       0x4f ../../../cpu/wl82/tools/sdk.elf.o
-                0x01c083bc                CurrentTCB
-                0x01c083d0                highCurrentTCB
+ *fill*         0x01c088b9        0x3 
+ .os_data       0x01c088bc       0x4f ../../../cpu/wl82/tools/sdk.elf.o
+                0x01c088c4                CurrentTCB
+                0x01c088d8                highCurrentTCB
  *(.os_critical_code)
- *fill*         0x01c08403        0x1 
+ *fill*         0x01c0890b        0x1 
  .os_critical_code
-                0x01c08404       0xdc ../../../cpu/wl82/tools/sdk.elf.o
-                0x01c08404                jiffies_half_msec
-                0x01c0845c                jiffies_msec
-                0x01c08464                os_current_task
+                0x01c0890c       0xdc ../../../cpu/wl82/tools/sdk.elf.o
+                0x01c0890c                jiffies_half_msec
+                0x01c08964                jiffies_msec
+                0x01c0896c                os_current_task
  *(.os_port_code)
  *(.os_port_data)
  *(.os_port_const)
-                0x01c084e0                _os_end = .
+                0x01c089e8                _os_end = .
                 [!provide]                PROVIDE (os_end, .)
-                0x01c084e0                . = ALIGN (0x4)
+                0x01c089e8                . = ALIGN (0x4)
  *(.movable.stub.1)
  *(*.text.cache.L1)
  *(*.text.cache.L2)
  *(*.text.const.cache.L2)
-                0x01c084e0                . = ALIGN (0x4)
-                0x01c084e0                __rf_trim_movable_slot_start = .
+                0x01c089e8                . = ALIGN (0x4)
+                0x01c089e8                __rf_trim_movable_slot_start = .
  *(.movable.slot.1)
-                0x01c084e0                __rf_trim_movable_slot_end = .
-                0x01c084e0                _ram_text_rodata_end = .
-                0x01c084e0                PROVIDE (ram_text_rodata_end, .)
+                0x01c089e8                __rf_trim_movable_slot_end = .
+                0x01c089e8                _ram_text_rodata_end = .
+                [!provide]                PROVIDE (ram_text_rodata_end, .)
  *(.volatile_ram)
- .volatile_ram  0x01c084e0      0x210 ../../../cpu/wl82/tools/sdk.elf.o
-                0x01c086e0                cpu_lock_cnt
-                0x01c086e8                irq_lock_cnt
+ .volatile_ram  0x01c089e8      0x210 ../../../cpu/wl82/tools/sdk.elf.o
+                0x01c08be8                cpu_lock_cnt
+                0x01c08bf0                irq_lock_cnt
  *(.non_volatile_ram)
  *(.fft_data)
  *(.deepsleep_target)
-                0x01c086f0                . = ALIGN (0x4)
-                0x01c086f0                btctler_data_start = .
-                0x01c086f0                BTCTLER_CONTROLLER_DATA_START = .
+                0x01c08bf8                . = ALIGN (0x4)
+                0x01c08bf8                btctler_data_start = .
+                0x01c08bf8                BTCTLER_CONTROLLER_DATA_START = .
  *(.bt_rf_data)
  *(.vendor_manager_data)
  *(.device_manager_data)
  *(.hci_controller_data)
  *(.hci_interface_data)
                 0x00000000                BTCTLER_CONTROLLER_DATA_SIZE = ABSOLUTE ((. - BTCTLER_CONTROLLER_DATA_START))
-                0x01c086f0                BTCTLER_LE_CONTROLLER_DATA_START = .
+                0x01c08bf8                BTCTLER_LE_CONTROLLER_DATA_START = .
  *(.ble_ll_data)
  *(.ble_hci_data)
  *(.classic_hci_data)
  *(.ble_rf_data)
                 0x00000000                BTCTLER_LE_CONTROLLER_DATA_SIZE = ABSOLUTE ((. - BTCTLER_LE_CONTROLLER_DATA_START))
-                0x01c086f0                BTCTLER_CL_DATA_START = .
+                0x01c08bf8                BTCTLER_CL_DATA_START = .
  *(.classic_lmp_data)
  *(.classic_lmp_auth_data)
  *(.classic_lmp_bigint_data)
@@ -1193,37 +1234,37 @@ END GROUP
  *(.classic_rf_data)
  *(.classic_bb_data)
                 0x00000000                BTCTLER_CL_DATA_SIZE = ABSOLUTE ((. - BTCTLER_CL_DATA_START))
-                0x01c086f0                btctler_data_end = .
-                0x01c086f0                . = ALIGN (0x4)
+                0x01c08bf8                btctler_data_end = .
+                0x01c08bf8                . = ALIGN (0x4)
 
-.ram0_bss       0x01c086f0     0x26d4
-                0x01c086f0                btctler_bss_start = .
-                0x01c086f0                BTCTLER_CONTROLLER_BSS_START = .
+.ram0_bss       0x01c08bf8     0x26d8
+                0x01c08bf8                btctler_bss_start = .
+                0x01c08bf8                BTCTLER_CONTROLLER_BSS_START = .
  *(.bd_base)
  *(.bredr_rxtx_bulk)
-                0x01c086f0                acl_tx_pool = .
+                0x01c08bf8                acl_tx_pool = .
  *(.bredr_tx_bulk)
-                0x01c086f0                acl_tx_pool_end = acl_tx_pool
-                0x01c086f0                . = acl_tx_pool_end
-                0x01c086f0                acl_rx_pool = .
+                0x01c08bf8                acl_tx_pool_end = acl_tx_pool
+                0x01c08bf8                . = acl_tx_pool_end
+                0x01c08bf8                acl_rx_pool = .
  *(.bredr_rx_bulk)
-                0x01c086f0                acl_rx_pool_end = acl_rx_pool
-                0x01c086f0                . = acl_rx_pool_end
-                0x01c086f0                tws_bulk_pool = .
-                0x01c086f0                tws_bulk_pool_end = tws_bulk_pool
-                0x01c086f0                . = tws_bulk_pool_end
+                0x01c08bf8                acl_rx_pool_end = acl_rx_pool
+                0x01c08bf8                . = acl_rx_pool_end
+                0x01c08bf8                tws_bulk_pool = .
+                0x01c08bf8                tws_bulk_pool_end = tws_bulk_pool
+                0x01c08bf8                . = tws_bulk_pool_end
  *(.bt_rf_bss)
  *(.hci_controller_bss)
  *(.hci_interface_bss)
  *(.device_manager_bss)
  *(.vendor_manager_bss)
                 0x00000000                BTCTLER_CONTROLLER_BSS_SIZE = ABSOLUTE ((. - BTCTLER_CONTROLLER_BSS_START))
-                0x01c086f0                BTCTLER_LE_CONTROLLER_BSS_START = .
+                0x01c08bf8                BTCTLER_LE_CONTROLLER_BSS_START = .
  *(.ble_hci_bss)
  *(.ble_ll_bss)
  *(.ble_rf_bss)
                 0x00000000                BTCTLER_LE_CONTROLLER_BSS_SIZE = ABSOLUTE ((. - BTCTLER_LE_CONTROLLER_BSS_START))
-                0x01c086f0                BTCTLER_CL_BSS_START = .
+                0x01c08bf8                BTCTLER_CL_BSS_START = .
  *(.classic_rf_bss)
  *(.classic_lmp_bss)
  *(.classic_lmp_auth_bss)
@@ -1235,44 +1276,44 @@ END GROUP
  *(.classic_bb_bss)
  *(.classic_hci_bss)
                 0x00000000                BTCTLER_CL_BSS_SIZE = ABSOLUTE ((. - BTCTLER_CL_BSS_START))
-                0x01c086f0                btctler_bss_end = .
-                0x01c086f0                . = ALIGN (0x4)
+                0x01c08bf8                btctler_bss_end = .
+                0x01c08bf8                . = ALIGN (0x4)
  *(.the_debug_isr_stack_c0)
  *(.the_debug_isr_stack_c1)
-                0x01c086f0                _stack_info_begin = .
+                0x01c08bf8                _stack_info_begin = .
                 [!provide]                PROVIDE (stack_info_begin, .)
  *(.stack)
  *(.cpu0_ustack)
- .cpu0_ustack   0x01c086f0      0x300 ../../../cpu/wl82/liba/cpu.a(startup.S.o)
-                0x01c089f0                _cpu0_ustack
+ .cpu0_ustack   0x01c08bf8      0x300 ../../../cpu/wl82/liba/cpu.a(startup.S.o)
+                0x01c08ef8                _cpu0_ustack
  *(.stack_magic)
  *(.stack_magic0)
-                0x01c089f0                _cpu0_sstack_begin = .
-                0x01c089f0                PROVIDE (cpu0_sstack_begin, .)
+                0x01c08ef8                _cpu0_sstack_begin = .
+                0x01c08ef8                PROVIDE (cpu0_sstack_begin, .)
  *(.cpu0_sstack)
- .cpu0_sstack   0x01c089f0     0x1000 ../../../cpu/wl82/liba/cpu.a(startup.S.o)
-                0x01c099f0                _cpu0_sstack
-                0x01c099f0                _cpu0_sstack_end = .
-                0x01c099f0                PROVIDE (cpu0_sstack_end, .)
+ .cpu0_sstack   0x01c08ef8     0x1000 ../../../cpu/wl82/liba/cpu.a(startup.S.o)
+                0x01c09ef8                _cpu0_sstack
+                0x01c09ef8                _cpu0_sstack_end = .
+                0x01c09ef8                PROVIDE (cpu0_sstack_end, .)
  *(.cpu1_ustack)
- .cpu1_ustack   0x01c099f0      0x300 ../../../cpu/wl82/liba/cpu.a(startup.S.o)
-                0x01c09cf0                _cpu1_ustack
-                0x01c09cf0                _cpu1_sstack_begin = .
-                0x01c09cf0                PROVIDE (cpu1_sstack_begin, .)
+ .cpu1_ustack   0x01c09ef8      0x300 ../../../cpu/wl82/liba/cpu.a(startup.S.o)
+                0x01c0a1f8                _cpu1_ustack
+                0x01c0a1f8                _cpu1_sstack_begin = .
+                0x01c0a1f8                PROVIDE (cpu1_sstack_begin, .)
  *(.cpu1_sstack)
- .cpu1_sstack   0x01c09cf0     0x1000 ../../../cpu/wl82/liba/cpu.a(startup.S.o)
-                0x01c0acf0                _cpu1_sstack
-                0x01c0acf0                _cpu1_sstack_end = .
-                0x01c0acf0                PROVIDE (cpu1_sstack_end, .)
-                0x01c0acf0                _stack_info_end = .
+ .cpu1_sstack   0x01c0a1f8     0x1000 ../../../cpu/wl82/liba/cpu.a(startup.S.o)
+                0x01c0b1f8                _cpu1_sstack
+                0x01c0b1f8                _cpu1_sstack_end = .
+                0x01c0b1f8                PROVIDE (cpu1_sstack_end, .)
+                0x01c0b1f8                _stack_info_end = .
                 [!provide]                PROVIDE (stack_info_end, .)
  *(.sd_var)
  *(.sram)
- .sram          0x01c0acf0       0xd2 ../../../cpu/wl82/tools/sdk.elf.o
-                0x01c0adc1                cpu1_run_flag
-                0x01c0adc4                . = ALIGN (0x4)
- *fill*         0x01c0adc2        0x2 
-                0x01c0adc4                _usb_data_begin = .
+ .sram          0x01c0b1f8       0xd6 ../../../cpu/wl82/tools/sdk.elf.o
+                0x01c0b2cd                cpu1_run_flag
+                0x01c0b2d0                . = ALIGN (0x4)
+ *fill*         0x01c0b2ce        0x2 
+                0x01c0b2d0                _usb_data_begin = .
                 [!provide]                PROVIDE (usb_data_begin, .)
  *(.usb_h_bss)
  *(.usb_g_bss)
@@ -1285,14 +1326,14 @@ END GROUP
  *(.uac_rx)
  *(.usb_h_udisk)
  *(.cdc_var)
-                0x01c0adc4                _usb_data_end = .
+                0x01c0b2d0                _usb_data_end = .
                 [!provide]                PROVIDE (usb_data_end, .)
-                0x01c0adc4                . = ALIGN (0x4)
-                0x01c0ade0                _RAM_HEAP_BEGIN = (((. + 0x1f) / 0x20) * 0x20)
+                0x01c0b2d0                . = ALIGN (0x4)
+                0x01c0b2e0                _RAM_HEAP_BEGIN = (((. + 0x1f) / 0x20) * 0x20)
                 [!provide]                PROVIDE (RAM_HEAP_BEGIN, (((. + 0x1f) / 0x20) * 0x20))
                 0x01c7fd2c                _RAM_HEAP_END = (((0x1c00000 + TLB_SIZE) + RAM0_SIZE) - 0x20)
                 [!provide]                PROVIDE (RAM_HEAP_END, (((0x1c00000 + TLB_SIZE) + RAM0_SIZE) - 0x20))
-                0x00074f4c                _RAM_MALLOC_SIZE = (_RAM_HEAP_END - _RAM_HEAP_BEGIN)
+                0x00074a4c                _RAM_MALLOC_SIZE = (_RAM_HEAP_END - _RAM_HEAP_BEGIN)
                 [!provide]                PROVIDE (RAM_MALLOC_SIZE, (_RAM_HEAP_END - _RAM_HEAP_BEGIN))
                 0x01c7fd4c                . = ORIGIN (boot_info)
 
@@ -1309,26 +1350,26 @@ END GROUP
 .cache_ram_bss  0x01f28000        0x0
                 0x01f28000                . = ALIGN (0x4)
                 0x02000120                text_begin = ADDR (.text)
-                0x0001cda0                text_size = SIZEOF (.text)
+                0x0001f4e0                text_size = SIZEOF (.text)
                 [!provide]                PROVIDE (text_size, SIZEOF (.text))
-                0x04000cc0                bss_begin = ADDR (.bss)
-                0x000025f8                bss_size = SIZEOF (.bss)
+                0x04000d80                bss_begin = ADDR (.bss)
+                0x00008cd0                bss_size = SIZEOF (.bss)
                 [!provide]                PROVIDE (bss_size, SIZEOF (.bss))
                 0x04000120                data_vma = ADDR (.data)
-                0x0201cec0                data_lma = (text_begin + SIZEOF (.text))
-                0x00000b8c                data_size = SIZEOF (.data)
+                0x0201f600                data_lma = (text_begin + SIZEOF (.text))
+                0x00000c48                data_size = SIZEOF (.data)
                 [!provide]                PROVIDE (data_size, SIZEOF (.data))
-                0x01c086f0                _ram0_bss_vma = ADDR (.ram0_bss)
-                0x000026d4                _ram0_bss_size = SIZEOF (.ram0_bss)
-                0x000026d4                PROVIDE (ram0_bss_size, SIZEOF (.ram0_bss))
+                0x01c08bf8                _ram0_bss_vma = ADDR (.ram0_bss)
+                0x000026d8                _ram0_bss_size = SIZEOF (.ram0_bss)
+                0x000026d8                PROVIDE (ram0_bss_size, SIZEOF (.ram0_bss))
                 0x01c00000                _ram0_data_vma = ADDR (.ram0_data)
-                0x0201da4c                _ram0_data_lma = ((text_begin + SIZEOF (.text)) + SIZEOF (.data))
-                0x000086f0                _ram0_data_size = SIZEOF (.ram0_data)
-                0x000086f0                PROVIDE (ram0_data_size, SIZEOF (.ram0_data))
+                0x02020248                _ram0_data_lma = ((text_begin + SIZEOF (.text)) + SIZEOF (.data))
+                0x00008bf8                _ram0_data_size = SIZEOF (.ram0_data)
+                0x00008bf8                PROVIDE (ram0_data_size, SIZEOF (.ram0_data))
                 0x01f28000                PROVIDE (cache_ram_bss_vma, ADDR (.cache_ram_bss))
                 0x00000000                PROVIDE (cache_ram_bss_size, SIZEOF (.cache_ram_bss))
                 0x01f28000                PROVIDE (cache_ram_data_vma, ADDR (.cache_ram_data))
-                0x0202613c                PROVIDE (cache_ram_data_lma, (((text_begin + SIZEOF (.text)) + SIZEOF (.data)) + SIZEOF (.ram0_data)))
+                0x02028e40                PROVIDE (cache_ram_data_lma, (((text_begin + SIZEOF (.text)) + SIZEOF (.data)) + SIZEOF (.ram0_data)))
                 0x00000000                PROVIDE (cache_ram_data_size, SIZEOF (.cache_ram_data))
                 0x00000000                BTCTLER_LE_RAM_TOTAL = (BTCTLER_LE_CONTROLLER_DATA_SIZE + BTCTLER_LE_CONTROLLER_BSS_SIZE)
                 0x00000000                BTCTLER_LE_CODE_TOTAL = BTCTLER_LE_CONTROLLER_CODE_SIZE
@@ -1347,69 +1388,69 @@ LOAD C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a
 LOAD ../../../cpu/wl82/liba/lib_usb_syn.a
 OUTPUT(../../../cpu/wl82/tools/sdk.elf elf32-pi32v2)
 
-.debug_str      0x00000000    0x129b0
- .debug_str     0x00000000    0x129b0 ../../../cpu/wl82/tools/sdk.elf.o
-                              0x140c9 (size before relaxing)
+.debug_str      0x00000000    0x13c14
+ .debug_str     0x00000000    0x13c14 ../../../cpu/wl82/tools/sdk.elf.o
+                              0x1550d (size before relaxing)
 
-.debug_loc      0x00000000    0x19a60
- .debug_loc     0x00000000    0x19a60 ../../../cpu/wl82/tools/sdk.elf.o
+.debug_loc      0x00000000    0x1b210
+ .debug_loc     0x00000000    0x1b210 ../../../cpu/wl82/tools/sdk.elf.o
 
-.debug_abbrev   0x00000000      0xdb3
- .debug_abbrev  0x00000000      0xd3b ../../../cpu/wl82/tools/sdk.elf.o
- .debug_abbrev  0x00000d3b       0x28 ../../../cpu/wl82/liba/cpu.a(startup.S.o)
- .debug_abbrev  0x00000d63       0x28 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
- .debug_abbrev  0x00000d8b       0x28 ../../../cpu/wl82/liba/system.a(movable.S.o)
+.debug_abbrev   0x00000000      0xe4a
+ .debug_abbrev  0x00000000      0xdd2 ../../../cpu/wl82/tools/sdk.elf.o
+ .debug_abbrev  0x00000dd2       0x28 ../../../cpu/wl82/liba/cpu.a(startup.S.o)
+ .debug_abbrev  0x00000dfa       0x28 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
+ .debug_abbrev  0x00000e22       0x28 ../../../cpu/wl82/liba/system.a(movable.S.o)
 
-.debug_info     0x00000000    0x3b0f0
- .debug_info    0x00000000    0x3ad07 ../../../cpu/wl82/tools/sdk.elf.o
- .debug_info    0x0003ad07      0x1de ../../../cpu/wl82/liba/cpu.a(startup.S.o)
- .debug_info    0x0003aee5      0x10d ../../../cpu/wl82/liba/system.a(port_asm.S.o)
- .debug_info    0x0003aff2       0xfe ../../../cpu/wl82/liba/system.a(movable.S.o)
+.debug_info     0x00000000    0x411d5
+ .debug_info    0x00000000    0x40dec ../../../cpu/wl82/tools/sdk.elf.o
+ .debug_info    0x00040dec      0x1de ../../../cpu/wl82/liba/cpu.a(startup.S.o)
+ .debug_info    0x00040fca      0x10d ../../../cpu/wl82/liba/system.a(port_asm.S.o)
+ .debug_info    0x000410d7       0xfe ../../../cpu/wl82/liba/system.a(movable.S.o)
 
-.debug_ranges   0x00000000     0x2c30
- .debug_ranges  0x00000000     0x2c30 ../../../cpu/wl82/tools/sdk.elf.o
+.debug_ranges   0x00000000     0x2ee0
+ .debug_ranges  0x00000000     0x2ee0 ../../../cpu/wl82/tools/sdk.elf.o
 
 .debug_macinfo  0x00000000        0x1
  .debug_macinfo
                 0x00000000        0x1 ../../../cpu/wl82/tools/sdk.elf.o
 
 .debug_pubnames
-                0x00000000     0x95cd
+                0x00000000     0x9e96
  .debug_pubnames
-                0x00000000     0x95cd ../../../cpu/wl82/tools/sdk.elf.o
+                0x00000000     0x9e96 ../../../cpu/wl82/tools/sdk.elf.o
 
 .debug_pubtypes
-                0x00000000     0x4e7d
+                0x00000000     0x5ea1
  .debug_pubtypes
-                0x00000000     0x4e7d ../../../cpu/wl82/tools/sdk.elf.o
+                0x00000000     0x5ea1 ../../../cpu/wl82/tools/sdk.elf.o
 
-.debug_frame    0x00000000     0x549c
- .debug_frame   0x00000000     0x549c ../../../cpu/wl82/tools/sdk.elf.o
+.debug_frame    0x00000000     0x5aa8
+ .debug_frame   0x00000000     0x5aa8 ../../../cpu/wl82/tools/sdk.elf.o
 
-.debug_line     0x00000000    0x27623
- .debug_line    0x00000000    0x2707f ../../../cpu/wl82/tools/sdk.elf.o
- .debug_line    0x0002707f       0x2c objs/include_lib/btctrler/version.z.S.o
- .debug_line    0x000270ab       0x2c objs/include_lib/btstack/version.z.S.o
- .debug_line    0x000270d7       0x2c objs/include_lib/driver/version.z.S.o
- .debug_line    0x00027103       0x2c objs/include_lib/media/version.z.S.o
- .debug_line    0x0002712f       0x2c objs/include_lib/net/version.z.S.o
- .debug_line    0x0002715b       0x2c objs/include_lib/server/version.z.S.o
- .debug_line    0x00027187       0x2c objs/include_lib/system/version.z.S.o
- .debug_line    0x000271b3       0x2c objs/include_lib/update/version.z.S.o
- .debug_line    0x000271df       0x2c objs/include_lib/utils/version.z.S.o
- .debug_line    0x0002720b       0x2c objs/lib/net/version.z.S.o
- .debug_line    0x00027237       0x2c objs/lib/server/version.z.S.o
- .debug_line    0x00027263       0x2c objs/lib/utils/version.z.S.o
- .debug_line    0x0002728f       0xcf ../../../cpu/wl82/liba/cpu.a(startup.S.o)
- .debug_line    0x0002735e       0x2c ../../../cpu/wl82/liba/cpu.a(version.z.o)
- .debug_line    0x0002738a       0x2c ../../../cpu/wl82/liba/event.a(version.z.o)
- .debug_line    0x000273b6       0xd2 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
- .debug_line    0x00027488       0xbf ../../../cpu/wl82/liba/system.a(movable.S.o)
- .debug_line    0x00027547       0x2c ../../../cpu/wl82/liba/system.a(version.z.o)
- .debug_line    0x00027573       0x2c ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
- .debug_line    0x0002759f       0x2c ../../../cpu/wl82/liba/fs.a(version.z.o)
- .debug_line    0x000275cb       0x2c ../../../cpu/wl82/liba/common_lib.a(version.z.o)
- .debug_line    0x000275f7       0x2c ../../../cpu/wl82/liba/update.a(version.z.o)
+.debug_line     0x00000000    0x29d2a
+ .debug_line    0x00000000    0x29786 ../../../cpu/wl82/tools/sdk.elf.o
+ .debug_line    0x00029786       0x2c objs/include_lib/btctrler/version.z.S.o
+ .debug_line    0x000297b2       0x2c objs/include_lib/btstack/version.z.S.o
+ .debug_line    0x000297de       0x2c objs/include_lib/driver/version.z.S.o
+ .debug_line    0x0002980a       0x2c objs/include_lib/media/version.z.S.o
+ .debug_line    0x00029836       0x2c objs/include_lib/net/version.z.S.o
+ .debug_line    0x00029862       0x2c objs/include_lib/server/version.z.S.o
+ .debug_line    0x0002988e       0x2c objs/include_lib/system/version.z.S.o
+ .debug_line    0x000298ba       0x2c objs/include_lib/update/version.z.S.o
+ .debug_line    0x000298e6       0x2c objs/include_lib/utils/version.z.S.o
+ .debug_line    0x00029912       0x2c objs/lib/net/version.z.S.o
+ .debug_line    0x0002993e       0x2c objs/lib/server/version.z.S.o
+ .debug_line    0x0002996a       0x2c objs/lib/utils/version.z.S.o
+ .debug_line    0x00029996       0xcf ../../../cpu/wl82/liba/cpu.a(startup.S.o)
+ .debug_line    0x00029a65       0x2c ../../../cpu/wl82/liba/cpu.a(version.z.o)
+ .debug_line    0x00029a91       0x2c ../../../cpu/wl82/liba/event.a(version.z.o)
+ .debug_line    0x00029abd       0xd2 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
+ .debug_line    0x00029b8f       0xbf ../../../cpu/wl82/liba/system.a(movable.S.o)
+ .debug_line    0x00029c4e       0x2c ../../../cpu/wl82/liba/system.a(version.z.o)
+ .debug_line    0x00029c7a       0x2c ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
+ .debug_line    0x00029ca6       0x2c ../../../cpu/wl82/liba/fs.a(version.z.o)
+ .debug_line    0x00029cd2       0x2c ../../../cpu/wl82/liba/common_lib.a(version.z.o)
+ .debug_line    0x00029cfe       0x2c ../../../cpu/wl82/liba/update.a(version.z.o)
 
 .debug_aranges  0x00000000       0x60
  .debug_aranges

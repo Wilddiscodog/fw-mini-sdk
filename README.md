@@ -1,7 +1,9 @@
 # fw-mini-sdk（AC7912BB / WL82 精简 SDK）
 
-当前版本: **V0.0.5**（`app/include/fw_version.h`，启动横幅与 usb-irq 探针均打印）
-**CherryUSB CDC 在 AC7912BB 高速口上枚举与收发验证通过**（Windows10+ 免驱）。
+当前版本: **V0.2.0**（`app/include/fw_version.h`，启动横幅与 usb-irq 探针均打印）
+- USB **从机 CDC**（CherryUSB，高速口）枚举与收发验证通过（Windows10+ 免驱）
+- USB **主机 MSC**（CherryUSB，U盘）已移植，首版以全速主机运行（`CONFIG_USBH_JL82_FORCE_FS=1`）
+- **LCD 8 位 8080 并口（EMI）+ LVGL 8.2.0** 移植完成（ ili9341 参考驱动，彩条自检/LVGL 可选）
 
 从官方 AC79 AIoT SDK 精简而来的最小开发框架：**只保留外设驱动 + FreeRTOS + USB 从机栈**，
 不含蓝牙/WiFi/媒体/服务器等大模块。应用逻辑全部在 `app/` 下自定义。
@@ -46,7 +48,9 @@ set PATH=C:\JL\pi32\bin;D:\fw-mini-sdk\tools\utils;%PATH%
 make            # 编译 + 打包，固件输出到 cpu\wl82\tools\jl_isd.fw
 make clean      # 清理；改过 app_config.h 后必须先 clean 再编
 make VERBOSE=1  # 显示详细命令
+make MINI_CXX_SUPPORT=1   # 启用 C++ 运行时（先 clean）；开机自检会打印 [cxx] smoke PASS
 ```
+C++ 开关说明：开启后自动加入全局构造调用（`cpp_run_init`）、new/delete、libcxx/libcxxabi（`-fno-exceptions -fno-rtti` 保持），并编译 `app/cxx_smoke.cpp` 冒烟自检；关闭时为纯 C 固件。
 
 ## 演示功能（烧录后）
 
@@ -60,7 +64,8 @@ make VERBOSE=1  # 显示详细命令
 | PWM 输出 | PA5 @1kHz (TIMER2+输出通道2) | 呼吸灯（占空比 0↔100，约 5s 周期） |
 | ADC 采样 | PB1 | 每 2s 打印原始值与毫伏电压 |
 | 硬件定时器 | 内部 TIMER5 | 1Hz 中断，打印 1s tick |
-| USB 从机(CDC) | USB D+/D- | 高速口(USB1)枚举为 CDC 串口：回显 + 每5s上行一行 |
+| USB 从机(CDC) | USB D+/D- | 默认关闭；`MINI_USB_MODE_DEVICE` 时高速口枚举为串口 |
+| USB 主机(MSC) | USB D+/D-（需 VBUS 5V 供电） | 默认；U盘插入枚举，打印容量并读 0 号扇区 |
 | 调试打印 | PB2 @1000000 | 日志输出 |
 
 ## 二次开发要点
@@ -74,10 +79,35 @@ make VERBOSE=1  # 显示详细命令
    （`gpio_direction_output / gpio_set_hd / clk_get("sys") / system_clock_set(...)`）。
 6. **设备框架 API** → `dev_open/dev_read/dev_write/dev_ioctl/dev_close`
    （UART/SPI/SD 等都走这套，见 `include_lib/driver/device/`）。
+7. **C++ 开发** → `make MINI_CXX_SUPPORT=1`；全局/静态对象的构造由
+   `cpp_run_init()` 在 `app_main()` 最先执行，`app/cxx_smoke.cpp` 是可用的
+   起步样例（全局对象 + 虚函数 + new/delete）。
 
-## USB：CherryUSB 设备栈（已替换杰理协议栈）
+## USB：CherryUSB 设备栈 + 主机栈（已替换杰理协议栈）
 
-- 使用 **USB1（HUSB 2.0，高速 480M）**；USB0（FUSB 1.1，全速）不用。
+`app_config.h` 的 `MINI_USB_MODE` 选择角色（**同一时刻只能一个**，共用管脚）：
+`MINI_USB_MODE_DEVICE`=CDC 从机 / `MINI_USB_MODE_HOST`=MSC 主机（默认）。
+
+### 主机栈（usbh）移植要点
+
+- 新增 `port/jl82/usb_hc_jl82.c`（HC 移植：与设备端相同的 INT_MODE 窗口读清、
+  字节 FIFO、免 FIFO 配置）+ `port/jl82/usb_glue_jl82_host.c`
+  （`usb_h_sie_init(1)` 主机角色 PHY 上电 + IRQ54）。
+- OSAL：直接使用 `osal/usb_osal_freertos.c`（JL OS 即 FreeRTOS，system.a 导出
+  xTask/xQueue/xSemaphore 原生符号），两处适配：
+  - 定时器：JL 未开 FreeRTOS 软定时器(`configUSE_TIMERS=0`)，改用杰理
+    `sys_timer_add/del` 实现 `usb_osal_timer_*`；
+  - `xPortIsInsideInterrupt()` → 杰理 `cpu_in_irq()`。
+- 类注册：CherryUSB 用自定义段 `usbh_class_info` 收集类，已在
+  `include_lib/driver/cpu/wl82/system.ld` 增加 `__usbh_class_info_start__/end__`。
+- **首版强制全速主机**（`CONFIG_USBH_JL82_FORCE_FS=1`）：pipe 分配为 IN→EP1、
+  OUT→EP2，EP1 已验证 512×2 双向 FIFO 但 EP2+ 容量未知，FS(64B) 规避；
+  HS 主机留作后续实验（改 0 即可，需实测 EP2 FIFO ≥512）。
+- 硬件注意：主机模式必须给 USB 座提供 **VBUS 5V** 供电。
+
+### 从机 CDC（已验证）
+
+- 从机使用 **USB1（HUSB 2.0，高速 480M）**；USB0（FUSB 1.1，全速）不用。
   两控制器共用一组 D+/D-，同一时刻只能起一个。
 - 移植层 `third/CherryUSB/port/jl82/`（基于 CherryUSB 自带的 MUSB DCD，HUSB 即 MUSB IP）。
   **与标准 MUSB 的差异（全部经板级实测/闭源库 IR 逆向验证）**：
@@ -111,9 +141,29 @@ make VERBOSE=1  # 显示详细命令
 | V0.0.4 | FIFO 强制字节访问——SETUP 包解析正确，枚举启动 |
 | V0.0.5 | 跳过不存在的 FIFOSZ 寄存器断言——SET_CONFIG 后不再崩溃 |
 | V0.0.5 | **USB CDC 枚举 + 回显 + 定时上行全链路验证通过** |
+| V0.1.0 | USB 主机栈（usbh_core/hub/msc + musb HC 移植 + FreeRTOS OSAL）接入，U盘 MSC 演示（FS 主机） |
+| V0.1.0 | `MINI_CXX_SUPPORT` 一键开关：C++ 运行时（全局构造/new-delete/STL）可切换，含冒烟自检 |
+| V0.2.0 | LCD 8位 8080 并口（EMI）+ 屏驱动框架移植（ili9341 彩条自检）；LVGL 8.2.0 适配层就绪（开关+获取脚本） |
 
 USB 移植调试方法论备忘：ISR 内 PRE/POST 寄存器回读探针 + EP0 SETUP 跟踪打印 +
 风暴熔断，配合版本号，每轮日志都能把问题边界收窄一层。
+
+## LCD（EMI 8080-8bit 并口）与 LVGL
+
+WL82 显示外设：**EMI**(8080 并口时序)/PAP/LCDC/IMD(硬件图层)。官方 8 位并口屏
+（ili9341 等）走 **EMI 接口**：`dev_open("emi")`(闭源库, 已链接) + 开源屏驱动
+`REGISTER_LCD_INTERFACE` 注册。移植文件在 `driver/lcd/`（框架+ili9341 参考驱动，
+来自官方 apps/common/ui 与 LVGL 补丁）。
+
+- 开关：`MINI_LCD_SUPPORT`（Makefile，默认 1）/ `MINI_LVGL_SUPPORT`（默认 0）
+- 板级：`board.c` 的 `emi_data`（时序）+ `ui_cfg_data`（RS/BL/TE 引脚）——按硬件调整
+- 上电现象：`lcd_test_task` 跑 8 色彩条循环（240x320 ili9341）
+- LVGL 启用三步：
+  1. `git clone --branch v8.2.0 --depth 1 https://github.com/lvgl/lvgl.git third\lvgl\lvgl`
+  2. `toolspply_lvgl_patch.bat`（覆盖杰理适配文件 + 放置 lv_conf.h）
+  3. `make clean && make MINI_LVGL_SUPPORT=1`（LCD 任务自动切到 LVGL 主循环）
+- TE 撕裂同步与触摸（ft6236/gt911）暂未移植（桩实现），需要时从官方
+  `apps/common/ui/lcd_driver/te_driver/`、`touch_panel/` 补齐。
 
 ## 与官方 SDK 的关系
 

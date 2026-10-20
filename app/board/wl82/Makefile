@@ -6,6 +6,17 @@
 #
 # 工具链：C:\JL\pi32 (杰理 pi32v2 clang/LTO)
 
+# ================ LCD / LVGL 开关 ================
+#   MINI_LCD_SUPPORT=0  关闭 EMI 8080 并口 LCD(ili9341 参考驱动)
+#   MINI_LVGL_SUPPORT=1 启用 LVGL(需 lvgl v8.2.0 源码 + tools/apply_lvgl_patch.bat)
+MINI_LCD_SUPPORT  ?= 1
+MINI_LVGL_SUPPORT ?= 0
+
+# ================= C++ 支持开关 =================
+#   make MINI_CXX_SUPPORT=1   启用 C++ 运行时(全局对象构造/new-delete/STL, -fno-exceptions -fno-rtti)
+#   make clean 后再编译生效; 关闭时为纯 C 固件
+MINI_CXX_SUPPORT ?= 0
+
 ifeq ($(OS), Windows_NT)
 TOOL_DIR := C:/JL/pi32/bin
 CC    := clang.exe
@@ -116,6 +127,11 @@ DEFINES := \
 
 DEFINES += $(EXT_CFLAGS)
 
+ifeq ($(MINI_CXX_SUPPORT),1)
+DEFINES += -DMINI_CXX_SUPPORT=1 -DCONFIG_CXX_SUPPORT
+endif
+DEFINES += -DMINI_LCD_SUPPORT=$(MINI_LCD_SUPPORT) -DMINI_LVGL_SUPPORT=$(MINI_LVGL_SUPPORT)
+
 # 头文件搜索路径
 INCLUDES := \
 	-I../../../app/include \
@@ -137,6 +153,10 @@ INCLUDES := \
 	-I../../../third/CherryUSB/core \
 	-I../../../third/CherryUSB/common \
 	-I../../../third/CherryUSB/class/cdc \
+	-I../../../third/CherryUSB/class/msc \
+	-I../../../third/CherryUSB/class/hub \
+	-I../../../third/CherryUSB/osal \
+	-I../../../include_lib/system/os/FreeRTOS \
 	-I../../../third/CherryUSB/port/musb \
 	-I../../../third/CherryUSB/port/jl82 \
 	-I$(SYS_INC_DIR) \
@@ -146,9 +166,16 @@ INCLUDES := \
 c_SRC_FILES := \
 	../../../app/app_main.c \
 	../../../app/cdc_acm_app.c \
+	../../../app/usbh_msc_app.c \
 	../../../app/board/wl82/board.c \
 	../../../third/CherryUSB/core/usbd_core.c \
+	../../../third/CherryUSB/core/usbh_core.c \
 	../../../third/CherryUSB/class/cdc/usbd_cdc_acm.c \
+	../../../third/CherryUSB/class/msc/usbh_msc.c \
+	../../../third/CherryUSB/class/hub/usbh_hub.c \
+	../../../third/CherryUSB/osal/usb_osal_freertos.c \
+	../../../third/CherryUSB/port/jl82/usb_hc_jl82.c \
+	../../../third/CherryUSB/port/jl82/usb_glue_jl82_host.c \
 	../../../third/CherryUSB/port/jl82/usb_dc_jl82.c \
 	../../../third/CherryUSB/port/jl82/usb_glue_jl82.c \
 	../../../driver/config/log_config/lib_driver_config.c \
@@ -240,6 +267,40 @@ LIBS := \
 	../../../cpu/wl82/liba/lib_usb_syn.a \
 
 
+# ---------------- C++ 支持条件块 ----------------
+ifeq ($(MINI_CXX_SUPPORT),1)
+CXXFLAGS   := -std=c++11 -fno-exceptions -fno-rtti
+c_SRC_FILES += ../../../driver/c++/cpp_run_init.c
+cpp_SRC_FILES += ../../../driver/c++/cxx_runtime.cpp
+cpp_SRC_FILES += ../../../app/cxx_smoke.cpp
+INCLUDES   += -I../../../include_lib/c++ -I../../../include_lib/c++/include
+LIBS       += ../../../include_lib/c++/libstdc++/libcxx.a
+LIBS       += ../../../include_lib/c++/libstdc++/libcxxabi.a
+endif
+
+
+# ---------------- LCD / LVGL 条件块 ----------------
+# LCD: EMI 8080-8bit 并口 + 屏驱动(默认 ili9341, 由 app_config.h 的 TCFG_LCD_xxx 选择)
+ifeq ($(MINI_LCD_SUPPORT),1)
+c_SRC_FILES += ../../../driver/lcd/lcd_drive.c
+c_SRC_FILES += ../../../driver/lcd/lcd_ili9341.c
+c_SRC_FILES += ../../../driver/lcd/lcd_te_stub.c
+INCLUDES    += -I../../../driver/lcd/include
+endif
+
+# LVGL: 需先获取 lvgl v8.2.0 源码到 third/lvgl/lvgl 并运行 tools/apply_lvgl_patch.bat
+ifeq ($(MINI_LVGL_SUPPORT),1)
+LVGL_DIR  := ../../../third/lvgl/lvgl
+rwildcard = $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
+LVGL_C_SRC += $(call rwildcard, $(LVGL_DIR)/src/, *.c)
+c_SRC_FILES += $(LVGL_C_SRC)
+c_SRC_FILES += ../../../third/lvgl_port/driver/lv_port_disp.c
+c_SRC_FILES += ../../../third/lvgl_port/lv_mian/lv_main.c
+INCLUDES    += -I$(LVGL_DIR) -I$(LVGL_DIR)/src -I../../../third/lvgl_port/driver
+DEFINES     += -DLV_CONF_INCLUDE_SIMPLE
+endif
+
+
 c_OBJS    := $(c_SRC_FILES:%.c=%.c.o)
 S_OBJS    := $(S_SRC_FILES:%.S=%.S.o)
 s_OBJS    := $(s_SRC_FILES:%.s=%.s.o)
@@ -306,6 +367,8 @@ $(BUILD_DIR)/%.c.o : $(ROOT_PREFIX)/%.c
 
 # CherryUSB 源文件注入配置头（限定范围, 避免与 SDK 宏冲突）
 $(BUILD_DIR)/third/CherryUSB/%.c.o $(BUILD_DIR)/app/cdc_acm_app.c.o : CFLAGS += -include usb_config.h
+$(BUILD_DIR)/app/usbh_msc_app.c.o : CFLAGS += -include usb_config.h
+$(BUILD_DIR)/app/usbh_msc_app.c.o : CFLAGS += -include usb_config.h
 
 $(BUILD_DIR)/%.S.o : $(ROOT_PREFIX)/%.S
 	$(info +AS $<)
@@ -318,5 +381,11 @@ $(BUILD_DIR)/%.s.o : $(ROOT_PREFIX)/%.s
 	$(QUITE) $(MKDIR) $(@D)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/%.cpp.o : $(ROOT_PREFIX)/%.cpp
+	$(info +CXX $<)
+	$(QUITE) $(MKDIR) $(@D)
+	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
+	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
 
 -include $(DEP_FILES)

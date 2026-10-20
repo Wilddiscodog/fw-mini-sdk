@@ -79,6 +79,12 @@
     _device_node_end = .;
     PROVIDE(device_node_end = .);
 
+    __usbh_class_info_start__ = .;
+    PROVIDE(usbh_class_info_start = .);
+        KEEP(*(.usbh_class_info))
+    __usbh_class_info_end__ = .;
+    PROVIDE(usbh_class_info_end = .);
+
     lp_target_begin = .;
     PROVIDE(lp_target_begin = .);
         *(.lp_target)
