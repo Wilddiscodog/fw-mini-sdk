@@ -40,16 +40,19 @@ fw-mini-sdk/
 
 ## 编译
 
-前置：杰理工具链装在 `C:\JL\pi32`。
+前置：杰理工具链装在 `C:\JL\pi32`（路径已写死，改动请改 Makefile 顶部的
+`TOOL_DIR`/`UTILS_DIR` 与 `make.bat`）。
 
 ```
 cd app\board\wl82
-set PATH=C:\JL\pi32\bin;D:\fw-mini-sdk\tools\utils;%PATH%
-make            # 编译 + 打包，固件输出到 cpu\wl82\tools\jl_isd.fw
-make clean      # 清理；改过 app_config.h 后必须先 clean 再编
-make VERBOSE=1  # 显示详细命令
-make MINI_CXX_SUPPORT=1   # 启用 C++ 运行时（先 clean）；开机自检会打印 [cxx] smoke PASS
+make.bat                # 一键编译+打包（零环境配置），固件在 cpu\wl82\tools\jl_isd.fw
+clean.bat               # 清理
+make.bat MINI_CXX_SUPPORT=1   # 启用 C++ 运行时；开机自检打印 [cxx] smoke PASS
+make.bat MINI_LVGL_SUPPORT=1  # 启用 LVGL（先获取 lvgl 源码，见下文）
+make.bat MINI_LCD_SUPPORT=0   # 关闭 LCD
 ```
+
+> 直接敲 `make` 也可以（Makefile 内已写死工具路径并 export）；`clean` 建议用 `clean.bat`。
 C++ 开关说明：开启后自动加入全局构造调用（`cpp_run_init`）、new/delete、libcxx/libcxxabi（`-fno-exceptions -fno-rtti` 保持），并编译 `app/cxx_smoke.cpp` 冒烟自检；关闭时为纯 C 固件。
 
 ## 演示功能（烧录后）
