@@ -285,6 +285,7 @@ objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_ep0_setup_cnt,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_ep0_last_csr0,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_urb_err_cnt,pl
+-r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_port_speed_latch,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_musb_hcd,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_usbhost_bus,l
 objs/third/CherryUSB/port/jl82/usb_glue_jl82_host.c.o

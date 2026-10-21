@@ -34,6 +34,7 @@ volatile uint32_t g_ep0_irq_cnt = 0;      /* EP0 中断次数 */
 volatile uint32_t g_ep0_setup_cnt = 0;    /* 控制传输提交次数 */
 volatile uint32_t g_ep0_last_csr0 = 0xFF; /* 最后一次 EP0 中断的 CSR0 */
 volatile uint32_t g_urb_err_cnt = 0;      /* 出错完成的 URB 数 */
+volatile uint8_t g_port_speed_latch = 0;  /* 复位后锁存的速度(0=未锁存) */
 
 #define USB_BASE (bus->hcd.reg_base)
 
@@ -593,7 +594,17 @@ static int usbh_reset_port(struct usbh_bus *bus, const uint8_t port)
         usb_write_power(1, 0x60);          /* HSENAB | SOFTCONN */
         chirp_ret = usb_host_init(1, delay_ms, 500);
         if (chirp_ret == 0) {
-            break;                          /* 啁啾+复位成功 */
+            /* 速度必须在啁啾刚完成时锁存(此时 DEVCTL 速度位可信),
+             * 之后 FSDEV 位可能因设备状态漂移而翻转 */
+            if (HWREGB(USB_BASE + MUSB_DEVCTL_OFFSET) & USB_DEVCTL_FSDEV) {
+                g_port_speed_latch = USB_SPEED_FULL;
+            } else if (HWREGB(USB_BASE + MUSB_DEVCTL_OFFSET) & USB_DEVCTL_LSDEV) {
+                g_port_speed_latch = USB_SPEED_LOW;
+            } else {
+                g_port_speed_latch = USB_SPEED_HIGH;
+            }
+            printf("[usbh] chirp ok, speed latch=%d\n", g_port_speed_latch);
+            break;
         }
         printf("[usbh] chirp retry %d ret=%u\n", retry, chirp_ret);
         delay_ms += 10;
@@ -607,9 +618,9 @@ static int usbh_reset_port(struct usbh_bus *bus, const uint8_t port)
         USB_IE_BABBLE | USB_IE_SESREQ | USB_IE_VBUSERR;
     HWREGH(USB_BASE + MUSB_TXIE_OFFSET) = USB_TXIE_EP0;
     HWREGH(USB_BASE + MUSB_RXIE_OFFSET) = 0;
-    /* 重新进入主机角色并使能 SOF(usb_host_init 可能改变角色状态) */
-    *(volatile uint8_t *)0x16060UL = 0x03;   /* DEVCTL: SESSION | HOST */
-    *(volatile uint32_t *)0x16800UL |= 0x400; /* HUSB_SOFIE */
+    /* 重新维持主机角色(非破坏式): OTG 会话信号 + DEVCTL.HOST/SESSION */
+    *(volatile uint32_t *)0x16800UL |= (0x01 << 23) | (0x01 << 25) | 0x400; /* AVALID|VBUSVALID|SOFIE */
+    *(volatile uint8_t *)0x16060UL |= 0x05;  /* SESSION | HOST(不清硬件置的其他位) */
     g_musb_hcd[bus->hcd.hcd_id].port_pe = 1;
     return 0;
 #else
@@ -627,6 +638,9 @@ static uint8_t usbh_get_port_speed(struct usbh_bus *bus, const uint8_t port)
     uint8_t speed = USB_SPEED_UNKNOWN;
 
 #ifdef CONFIG_USB_MUSB_JL82
+    if (g_port_speed_latch) {
+        return g_port_speed_latch;   /* 复位后锁存的速度(权威) */
+    }
     /* JL HUSB: POWER.HSMODE 位含义与标准 MUSB 不同(常读 1, 会把全速设备
      * 误报为高速 → 主机按高速时序发令牌, FS 设备不应答, 枚举超时)。
      * 以 DEVCTL 的设备速度位为准: FSDEV/LSDEV 置位即 FS/LS, 都为 0 = HS。 */

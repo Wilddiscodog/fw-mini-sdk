@@ -49,10 +49,13 @@ void usb_hc_low_level_init(struct usbh_bus *bus)
     usb_h_sie_init(JL82_HUSB_ID);   /* HUSB 主机角色 PHY/桥接器上电(闭源库) */
     usb_iomode(JL82_HUSB_ID, 0);
 
-    /* 关键: 必须显式进入主机角色(DEVCTL = SESSION|HOST = 0x03, 与闭源
-     * usb_h_chirp_and_reset 同款写法)。只设 SESSION 时核心不产生 SOF,
-     * U盘复位后 3ms 即挂起, 枚举控制传输超时(-USB_ERR_TIMEOUT/-14)。 */
-    *(volatile uint8_t *)0x16060UL = 0x03;   /* DEVCTL: SESSION | HOST */
+    /* OTG 会话维持: 桥接器 CPU 直驱 UTMI OTG 信号 —— AVALID(bit23)+VBUSVALID(bit25)=1,
+     * IDDIG(bit22)=0(A 设备)。不驱动这些信号时 OTG 状态机会因"会话结束"释放
+     * 主机角色(实测 DEVCTL.HOST 位被硬件清掉), 总线释放后设备掉回全速重连。 */
+    *(volatile uint32_t *)0x16800UL |= (0x01 << 23) | (0x01 << 25);   /* AVALID | VBUSVALID */
+
+    /* 进入主机角色: SESSION(bit0) | HOST(bit2, 非破坏式置位) */
+    *(volatile uint8_t *)0x16060UL |= 0x05;
 
     /* 关键: 使能 SOF 帧时钟引擎(桥接器 bit10 HUSB_SOFIE, 与闭源
      * usb_sofie_enable(id!=0) 同款)。主机角色由自己产生 SOF;
