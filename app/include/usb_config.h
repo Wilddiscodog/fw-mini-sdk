@@ -40,7 +40,7 @@
 #define CONFIG_USBHOST_MAX_INTF_ALTSETTINGS 2
 #define CONFIG_USBHOST_MAX_ENDPOINTS        4
 #define CONFIG_USB_MUSB_PIPE_NUM            5   /* WL82: EP0~EP4 作主机通道 */
-#define CONFIG_USBH_JL82_FORCE_FS           1   /* 1=FS 主机(bulk 64B); 0=HS(需确认 EP2+ FIFO>=512) */
+#define CONFIG_USBH_JL82_FORCE_FS           0   /* 0=HS 主机(480M); 1=FS(旧选项, FS 帧时钟未验证) */
 
 /* ================ MUSB DCD (port/jl82) ================ */
 #define CONFIG_USB_MUSB_JL82            1   /* JL 变体: 读清中断/无FIFO配置寄存器/桥接器同步 */
