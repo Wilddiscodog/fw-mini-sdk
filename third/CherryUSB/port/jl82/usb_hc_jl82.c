@@ -447,10 +447,7 @@ int musb_bulk_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
     }
 
     if (urb->ep->bEndpointAddress & 0x80) {
-        if ((8 << HWREGB(USB_BASE + MUSB_RXFIFOSZ_OFFSET)) < USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize)) {
-            USB_LOG_ERR("Ep %02x fifo is overflow\r\n", urb->ep->bEndpointAddress);
-            return -USB_ERR_RANGE;
-        }
+        /* JL: FIFOSZ 寄存器不存在(读垃圾值恒误报), 跳过容量断言 */
 
 #ifdef CONFIG_USB_MUSB_WITHOUT_MULTIPOINT
         HWREGB(USB_BASE + MUSB_FADDR_OFFSET) = (urb->hport->dev_addr & 0x7F);
@@ -470,10 +467,7 @@ int musb_bulk_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
 
         HWREGH(USB_BASE + MUSB_RXIE_OFFSET) |= (1 << chidx);
     } else {
-        if ((8 << HWREGB(USB_BASE + MUSB_TXFIFOSZ_OFFSET)) < USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize)) {
-            USB_LOG_ERR("Ep %02x fifo is overflow\r\n", urb->ep->bEndpointAddress);
-            return -USB_ERR_RANGE;
-        }
+        /* JL: FIFOSZ 寄存器不存在(读垃圾值恒误报), 跳过容量断言 */
 
 #ifdef CONFIG_USB_MUSB_WITHOUT_MULTIPOINT
         HWREGB(USB_BASE + MUSB_FADDR_OFFSET) = (urb->hport->dev_addr & 0x7F);
@@ -520,10 +514,7 @@ int musb_intr_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
     }
 
     if (urb->ep->bEndpointAddress & 0x80) {
-        if ((8 << HWREGB(USB_BASE + MUSB_RXFIFOSZ_OFFSET)) < USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize)) {
-            USB_LOG_ERR("Ep %02x fifo is overflow\r\n", urb->ep->bEndpointAddress);
-            return -USB_ERR_RANGE;
-        }
+        /* JL: FIFOSZ reg not present (reads garbage), capacity assert removed */
 
 #ifdef CONFIG_USB_MUSB_WITHOUT_MULTIPOINT
         HWREGB(USB_BASE + MUSB_FADDR_OFFSET) = (urb->hport->dev_addr & 0x7F);
@@ -543,10 +534,7 @@ int musb_intr_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
 
         HWREGH(USB_BASE + MUSB_RXIE_OFFSET) |= (1 << chidx);
     } else {
-        if ((8 << HWREGB(USB_BASE + MUSB_TXFIFOSZ_OFFSET)) < USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize)) {
-            USB_LOG_ERR("Ep %02x fifo is overflow\r\n", urb->ep->bEndpointAddress);
-            return -USB_ERR_RANGE;
-        }
+        /* JL: FIFOSZ reg not present (reads garbage), capacity assert removed */
 
 #ifdef CONFIG_USB_MUSB_WITHOUT_MULTIPOINT
         HWREGB(USB_BASE + MUSB_FADDR_OFFSET) = (urb->hport->dev_addr & 0x7F);
