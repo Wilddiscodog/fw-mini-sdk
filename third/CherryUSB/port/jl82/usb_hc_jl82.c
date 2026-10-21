@@ -582,6 +582,26 @@ static int usbh_reset_port(struct usbh_bus *bus, const uint8_t port)
 #ifdef CONFIG_USB_MUSB_SIFLI
     extern void musb_sifli_reset_port(struct usbh_bus *bus);
     musb_sifli_reset_port(bus);
+#elif defined(CONFIG_USB_MUSB_JL82)
+    /* JL 官方主机建链序列(还原 apps/common/usb/host/usb_ctrl_transfer.c 所属的
+     * _usb_host_mount 流程): POWER(HSENAB|SOFTCONN) -> 闭源 usb_host_init
+     * (完整 chirp+复位+速度协商) -> SIE 使能 -> 稳定等待。 */
+    extern unsigned int usb_host_init(unsigned char usb_id, unsigned int reset_delay, unsigned int timeout);
+    usb_write_power(1, 0x60);              /* HSENAB | SOFTCONN */
+    usb_host_init(1, 20, 500);             /* chirp + 复位 + 速度检测(闭源) */
+    usb_sie_enable(1);                     /* HUSB_SIE_EN */
+    usb_osal_msleep(20);
+    /* 恢复 CherryUSB 所需中断: usb_host_init 内部清了 INTRUSBE/TXIE/RXIE */
+    HWREGB(USB_BASE + MUSB_IE_OFFSET) = USB_IE_RESET | USB_IE_CONN |
+        USB_IE_DISCON | USB_IE_RESUME | USB_IE_SUSPND |
+        USB_IE_BABBLE | USB_IE_SESREQ | USB_IE_VBUSERR;
+    HWREGH(USB_BASE + MUSB_TXIE_OFFSET) = USB_TXIE_EP0;
+    HWREGH(USB_BASE + MUSB_RXIE_OFFSET) = 0;
+    /* 重新进入主机角色并使能 SOF(usb_host_init 可能改变角色状态) */
+    *(volatile uint8_t *)0x16060UL = 0x03;   /* DEVCTL: SESSION | HOST */
+    *(volatile uint32_t *)0x16800UL |= 0x400; /* HUSB_SOFIE */
+    g_musb_hcd[bus->hcd.hcd_id].port_pe = 1;
+    return 0;
 #else
     HWREGB(USB_BASE + MUSB_POWER_OFFSET) |= USB_POWER_RESET;
     usb_osal_msleep(200);
