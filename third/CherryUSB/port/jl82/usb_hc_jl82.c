@@ -753,8 +753,8 @@ int usb_hc_init(struct usbh_bus *bus)
     HWREGH(USB_BASE + MUSB_TXIE_OFFSET) = USB_TXIE_EP0;
     HWREGH(USB_BASE + MUSB_RXIE_OFFSET) = 0;
 
-#ifdef CONFIG_USBH_JL82_FORCE_FS
-    /* 首版 FS 主机: 不使能 HS, 设备将以全速连接(bulk 64B), 规避 EP2+ FIFO 容量未知问题 */
+#if defined(CONFIG_USBH_JL82_FORCE_FS) && CONFIG_USBH_JL82_FORCE_FS
+    /* FS 主机选项(注意: #ifdef 对 =0 的定义同样成立, 必须判值) */
 #else
     HWREGB(USB_BASE + MUSB_POWER_OFFSET) |= USB_POWER_HSENAB;
 #endif
