@@ -583,12 +583,22 @@ static int usbh_reset_port(struct usbh_bus *bus, const uint8_t port)
     extern void musb_sifli_reset_port(struct usbh_bus *bus);
     musb_sifli_reset_port(bus);
 #elif defined(CONFIG_USB_MUSB_JL82)
-    /* JL 官方主机建链序列(还原 apps/common/usb/host/usb_ctrl_transfer.c 所属的
-     * _usb_host_mount 流程): POWER(HSENAB|SOFTCONN) -> 闭源 usb_host_init
-     * (完整 chirp+复位+速度协商) -> SIE 使能 -> 稳定等待。 */
+    /* JL 官方主机建链序列(还原 _usb_host_mount): POWER(HSENAB|SOFTCONN) ->
+     * 闭源 usb_host_init(完整 chirp+复位+速度协商) -> SIE 使能 -> 稳定等待。
+     * 官方流程本身带递增延迟重试(reset_delay += 10), 此处同款重试 3 次。 */
     extern unsigned int usb_host_init(unsigned char usb_id, unsigned int reset_delay, unsigned int timeout);
-    usb_write_power(1, 0x60);              /* HSENAB | SOFTCONN */
-    usb_host_init(1, 20, 500);             /* chirp + 复位 + 速度检测(闭源) */
+    unsigned int delay_ms = 20;
+    unsigned int chirp_ret = 1;
+    for (int retry = 0; retry < 3; retry++) {
+        usb_write_power(1, 0x60);          /* HSENAB | SOFTCONN */
+        chirp_ret = usb_host_init(1, delay_ms, 500);
+        if (chirp_ret == 0) {
+            break;                          /* 啁啾+复位成功 */
+        }
+        printf("[usbh] chirp retry %d ret=%u\n", retry, chirp_ret);
+        delay_ms += 10;
+        usb_osal_msleep(50);
+    }
     usb_sie_enable(1);                     /* HUSB_SIE_EN */
     usb_osal_msleep(20);
     /* 恢复 CherryUSB 所需中断: usb_host_init 内部清了 INTRUSBE/TXIE/RXIE */

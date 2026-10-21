@@ -392,7 +392,7 @@ END GROUP
                 0x00000000                CACHE_RAM_SIZE = ((FREE_DACHE_WAY * 0x1000) + (FREE_IACHE_WAY * 0x1000))
                 0x02000120                . = ORIGIN (rom)
 
-.text           0x02000120    0x1e6e0
+.text           0x02000120    0x1e740
                 0x02000120                _text_rodata_begin = .
                 0x02000120                PROVIDE (text_rodata_begin, .)
  *startup.S.o(.text)
@@ -407,167 +407,168 @@ END GROUP
                 0x0200037e                startup_boot_hook
                 0x02000380                boot_info_init
  *(.text*)
- .text          0x020003b2    0x17ea2 ../../../cpu/wl82/tools/sdk.elf.o
-                0x02006714                __errno
-                0x020068ca                cpu1_main
-                0x02006a5e                main
-                0x02007d1a                update_result_get
-                0x02007d54                exception_analyze
-                0x020080a8                sp_ovf_unen
-                0x020080bc                sp_ovf_en
- .text          0x02018254        0x0 objs/include_lib/btctrler/version.z.S.o
- .text          0x02018254        0x0 objs/include_lib/btstack/version.z.S.o
- .text          0x02018254        0x0 objs/include_lib/driver/version.z.S.o
- .text          0x02018254        0x0 objs/include_lib/media/version.z.S.o
- .text          0x02018254        0x0 objs/include_lib/net/version.z.S.o
- .text          0x02018254        0x0 objs/include_lib/server/version.z.S.o
- .text          0x02018254        0x0 objs/include_lib/system/version.z.S.o
- .text          0x02018254        0x0 objs/include_lib/update/version.z.S.o
- .text          0x02018254        0x0 objs/include_lib/utils/version.z.S.o
- .text          0x02018254        0x0 objs/lib/net/version.z.S.o
- .text          0x02018254        0x0 objs/lib/server/version.z.S.o
- .text          0x02018254        0x0 objs/lib/utils/version.z.S.o
- .text          0x02018254        0x0 ../../../cpu/wl82/liba/cpu.a(version.z.o)
- .text          0x02018254        0x0 ../../../cpu/wl82/liba/event.a(version.z.o)
- .text          0x02018254       0x78 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
-                0x02018254                vSoftwareInterruptISR
- .text          0x020182cc        0x0 ../../../cpu/wl82/liba/system.a(movable.S.o)
- .text          0x020182cc        0x0 ../../../cpu/wl82/liba/system.a(version.z.o)
- .text          0x020182cc        0x0 ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
- .text          0x020182cc        0x0 ../../../cpu/wl82/liba/fs.a(version.z.o)
- .text          0x020182cc        0x0 ../../../cpu/wl82/liba/common_lib.a(version.z.o)
- .text          0x020182cc        0x0 ../../../cpu/wl82/liba/update.a(version.z.o)
- .text          0x020182cc       0x8e C:/JL/pi32/pi32v2-lib/r3/libm.a(lib_a-s_modf.o)
-                0x020182cc                modf
- .text          0x0201835a       0x38 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memcmp.o)
-                0x0201835a                memcmp
- .text          0x02018392       0xc2 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memcpy.o)
-                0x02018392                memcpy
-                0x02018392                memmove
- .text          0x02018454       0x18 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcat.o)
-                0x02018454                strcat
- .text          0x0201846c       0x14 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strchr.o)
-                0x0201846c                strchr
- .text          0x02018480       0xa0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcmp.o)
-                0x02018480                strcmp
- .text          0x02018520       0x6e C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcpy.o)
-                0x02018520                strcpy
- .text          0x0201858e        0xc C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strlen.o)
-                0x0201858e                strlen
- .text          0x0201859a       0x1a C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strncmp.o)
-                0x0201859a                strncmp
- .text          0x020185b4       0x14 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strnlen.o)
-                0x020185b4                strnlen
- .text          0x020185c8       0x24 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strrchr.o)
-                0x020185c8                strrchr
- .text          0x020185ec       0x2a C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strstr.o)
-                0x020185ec                strstr
- .text          0x02018616      0x108 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtol.o)
-                0x02018616                _strtol_r
-                0x02018706                strtol
- .text          0x0201871e       0xfe C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtoul.o)
-                0x0201871e                _strtoul_r
-                0x02018804                strtoul
- .text          0x0201881c        0x0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-ctype_.o)
- .text          0x0201881c        0x0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
- .text          0x0201881c        0x6 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(subdf3.o)
-                0x0201881c                __subdf3
- .text          0x02018822      0x314 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(adddf3.o)
-                0x02018862                __adddf3
- .text          0x02018b36       0x2c C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memset.o)
-                0x02018b36                memset
- .text          0x02018b62      0x1a0 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(comparedf2.o)
-                0x02018b62                __ledf2
-                0x02018b62                __cmpdf2
-                0x02018c12                __gedf2
-                0x02018cba                __unorddf2
-                0x02018cfa                __eqdf2
-                0x02018cfc                __ltdf2
-                0x02018cfe                __nedf2
-                0x02018d00                __gtdf2
- .text          0x02018d02      0x346 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(divdf3.o)
-                0x02018d38                __divdf3
- .text          0x02019048       0x54 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(fixdfsi.o)
-                0x02019048                __fixdfsi
- .text          0x0201909c      0x2fa C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(muldf3.o)
-                0x020190d2                __muldf3
+ .text          0x020003b2    0x17ed6 ../../../cpu/wl82/tools/sdk.elf.o
+                0x02006740                __errno
+                0x020068f6                cpu1_main
+                0x02006a8a                main
+                0x02007d4a                update_result_get
+                0x02007d84                exception_analyze
+                0x020080d8                sp_ovf_unen
+                0x020080ec                sp_ovf_en
+ .text          0x02018288        0x0 objs/include_lib/btctrler/version.z.S.o
+ .text          0x02018288        0x0 objs/include_lib/btstack/version.z.S.o
+ .text          0x02018288        0x0 objs/include_lib/driver/version.z.S.o
+ .text          0x02018288        0x0 objs/include_lib/media/version.z.S.o
+ .text          0x02018288        0x0 objs/include_lib/net/version.z.S.o
+ .text          0x02018288        0x0 objs/include_lib/server/version.z.S.o
+ .text          0x02018288        0x0 objs/include_lib/system/version.z.S.o
+ .text          0x02018288        0x0 objs/include_lib/update/version.z.S.o
+ .text          0x02018288        0x0 objs/include_lib/utils/version.z.S.o
+ .text          0x02018288        0x0 objs/lib/net/version.z.S.o
+ .text          0x02018288        0x0 objs/lib/server/version.z.S.o
+ .text          0x02018288        0x0 objs/lib/utils/version.z.S.o
+ .text          0x02018288        0x0 ../../../cpu/wl82/liba/cpu.a(version.z.o)
+ .text          0x02018288        0x0 ../../../cpu/wl82/liba/event.a(version.z.o)
+ .text          0x02018288       0x78 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
+                0x02018288                vSoftwareInterruptISR
+ .text          0x02018300        0x0 ../../../cpu/wl82/liba/system.a(movable.S.o)
+ .text          0x02018300        0x0 ../../../cpu/wl82/liba/system.a(version.z.o)
+ .text          0x02018300        0x0 ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
+ .text          0x02018300        0x0 ../../../cpu/wl82/liba/fs.a(version.z.o)
+ .text          0x02018300        0x0 ../../../cpu/wl82/liba/common_lib.a(version.z.o)
+ .text          0x02018300        0x0 ../../../cpu/wl82/liba/update.a(version.z.o)
+ .text          0x02018300       0x8e C:/JL/pi32/pi32v2-lib/r3/libm.a(lib_a-s_modf.o)
+                0x02018300                modf
+ .text          0x0201838e       0x38 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memcmp.o)
+                0x0201838e                memcmp
+ .text          0x020183c6       0xc2 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memcpy.o)
+                0x020183c6                memcpy
+                0x020183c6                memmove
+ .text          0x02018488       0x18 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcat.o)
+                0x02018488                strcat
+ .text          0x020184a0       0x14 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strchr.o)
+                0x020184a0                strchr
+ .text          0x020184b4       0xa0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcmp.o)
+                0x020184b4                strcmp
+ .text          0x02018554       0x6e C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strcpy.o)
+                0x02018554                strcpy
+ .text          0x020185c2        0xc C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strlen.o)
+                0x020185c2                strlen
+ .text          0x020185ce       0x1a C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strncmp.o)
+                0x020185ce                strncmp
+ .text          0x020185e8       0x14 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strnlen.o)
+                0x020185e8                strnlen
+ .text          0x020185fc       0x24 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strrchr.o)
+                0x020185fc                strrchr
+ .text          0x02018620       0x2a C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strstr.o)
+                0x02018620                strstr
+ .text          0x0201864a      0x108 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtol.o)
+                0x0201864a                _strtol_r
+                0x0201873a                strtol
+ .text          0x02018752       0xfe C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-strtoul.o)
+                0x02018752                _strtoul_r
+                0x02018838                strtoul
+ .text          0x02018850        0x0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-ctype_.o)
+ .text          0x02018850        0x0 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
+ .text          0x02018850        0x6 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(subdf3.o)
+                0x02018850                __subdf3
+ .text          0x02018856      0x314 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(adddf3.o)
+                0x02018896                __adddf3
+ .text          0x02018b6a       0x2c C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-memset.o)
+                0x02018b6a                memset
+ .text          0x02018b96      0x1a0 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(comparedf2.o)
+                0x02018b96                __ledf2
+                0x02018b96                __cmpdf2
+                0x02018c46                __gedf2
+                0x02018cee                __unorddf2
+                0x02018d2e                __eqdf2
+                0x02018d30                __ltdf2
+                0x02018d32                __nedf2
+                0x02018d34                __gtdf2
+ .text          0x02018d36      0x346 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(divdf3.o)
+                0x02018d6c                __divdf3
+ .text          0x0201907c       0x54 C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(fixdfsi.o)
+                0x0201907c                __fixdfsi
+ .text          0x020190d0      0x2fa C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a(muldf3.o)
+                0x02019106                __muldf3
  *(.LOG_TAG_CONST*)
  *(.rodata*)
- *fill*         0x02019396        0xa 
+ *fill*         0x020193ca        0x6 
  .rodata.str1.16
-                0x020193a0      0x620 ../../../cpu/wl82/tools/sdk.elf.o
+                0x020193d0      0x620 ../../../cpu/wl82/tools/sdk.elf.o
                                 0x61d (size before relaxing)
- .rodata        0x020199c0     0x3bbc ../../../cpu/wl82/tools/sdk.elf.o
+ *fill*         0x020199f0       0x10 
+ .rodata        0x02019a00     0x3bdc ../../../cpu/wl82/tools/sdk.elf.o
  .rodata.str1.1
-                0x0201d57c      0x484 ../../../cpu/wl82/tools/sdk.elf.o
+                0x0201d5dc      0x484 ../../../cpu/wl82/tools/sdk.elf.o
                                 0x488 (size before relaxing)
- .rodata.cst32  0x0201da00       0x20 ../../../cpu/wl82/tools/sdk.elf.o
- .rodata.cst16  0x0201da20       0x20 ../../../cpu/wl82/tools/sdk.elf.o
- .rodata        0x0201da40      0x281 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-ctype_.o)
-                0x0201dbc0                _ctype_
- *fill*         0x0201dcc1        0x3 
- .rodata        0x0201dcc4        0x4 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
-                0x0201dcc4                _global_impure_ptr
+ .rodata.cst32  0x0201da60       0x20 ../../../cpu/wl82/tools/sdk.elf.o
+ .rodata.cst16  0x0201da80       0x20 ../../../cpu/wl82/tools/sdk.elf.o
+ .rodata        0x0201daa0      0x281 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-ctype_.o)
+                0x0201dc20                _ctype_
+ *fill*         0x0201dd21        0x3 
+ .rodata        0x0201dd24        0x4 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
+                0x0201dd24                _global_impure_ptr
  .rodata.str1.1
-                0x0201dcc8        0x2 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
+                0x0201dd28        0x2 C:/JL/pi32/pi32v2-lib/r3/libc.a(lib_a-impure.o)
  *(.fat_data_code)
  .fat_data_code
-                0x0201dcca      0x9b4 ../../../cpu/wl82/tools/sdk.elf.o
-                0x0201e680                . = ALIGN (0x4)
- *fill*         0x0201e67e        0x2 
-                0x0201e680                __VERSION_BEGIN = .
+                0x0201dd2a      0x9b4 ../../../cpu/wl82/tools/sdk.elf.o
+                0x0201e6e0                . = ALIGN (0x4)
+ *fill*         0x0201e6de        0x2 
+                0x0201e6e0                __VERSION_BEGIN = .
  *(.sys.version)
- .sys.version   0x0201e680       0x1a objs/include_lib/btctrler/version.z.S.o
- .sys.version   0x0201e69a       0x19 objs/include_lib/btstack/version.z.S.o
-                0x0201e69a                include_lib_btstack_version
- .sys.version   0x0201e6b3       0x18 objs/include_lib/driver/version.z.S.o
-                0x0201e6b3                include_lib_driver_version
- .sys.version   0x0201e6cb       0x17 objs/include_lib/media/version.z.S.o
-                0x0201e6cb                include_lib_media_version
- .sys.version   0x0201e6e2       0x15 objs/include_lib/net/version.z.S.o
-                0x0201e6e2                include_lib_net_version
- .sys.version   0x0201e6f7       0x18 objs/include_lib/server/version.z.S.o
-                0x0201e6f7                include_lib_server_version
- .sys.version   0x0201e70f       0x18 objs/include_lib/system/version.z.S.o
-                0x0201e70f                include_lib_system_version
- .sys.version   0x0201e727       0x18 objs/include_lib/update/version.z.S.o
-                0x0201e727                include_lib_update_version
- .sys.version   0x0201e73f       0x17 objs/include_lib/utils/version.z.S.o
-                0x0201e73f                include_lib_utils_version
- .sys.version   0x0201e756        0xd objs/lib/net/version.z.S.o
-                0x0201e756                lib_net_version
- .sys.version   0x0201e763       0x10 objs/lib/server/version.z.S.o
-                0x0201e763                lib_server_version
- .sys.version   0x0201e773        0xf objs/lib/utils/version.z.S.o
-                0x0201e773                lib_utils_version
- .sys.version   0x0201e782       0x10 ../../../cpu/wl82/liba/cpu.a(version.z.o)
-                0x0201e782                lib_driver_version
- .sys.version   0x0201e792        0x0 ../../../cpu/wl82/liba/event.a(version.z.o)
-                0x0201e792                lib_event_version
- .sys.version   0x0201e792       0x10 ../../../cpu/wl82/liba/system.a(version.z.o)
-                0x0201e792                lib_system_version
- .sys.version   0x0201e7a2        0x0 ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
-                0x0201e7a2                lib_cfg_tool_version
- .sys.version   0x0201e7a2        0x0 ../../../cpu/wl82/liba/fs.a(version.z.o)
-                0x0201e7a2                lib_fs_version
- .sys.version   0x0201e7a2        0x0 ../../../cpu/wl82/liba/common_lib.a(version.z.o)
-                0x0201e7a2                lib_common_version
- .sys.version   0x0201e7a2       0x10 ../../../cpu/wl82/liba/update.a(version.z.o)
-                0x0201e7a2                lib_update_version
-                0x0201e7b2                __VERSION_END = .
+ .sys.version   0x0201e6e0       0x1a objs/include_lib/btctrler/version.z.S.o
+ .sys.version   0x0201e6fa       0x19 objs/include_lib/btstack/version.z.S.o
+                0x0201e6fa                include_lib_btstack_version
+ .sys.version   0x0201e713       0x18 objs/include_lib/driver/version.z.S.o
+                0x0201e713                include_lib_driver_version
+ .sys.version   0x0201e72b       0x17 objs/include_lib/media/version.z.S.o
+                0x0201e72b                include_lib_media_version
+ .sys.version   0x0201e742       0x15 objs/include_lib/net/version.z.S.o
+                0x0201e742                include_lib_net_version
+ .sys.version   0x0201e757       0x18 objs/include_lib/server/version.z.S.o
+                0x0201e757                include_lib_server_version
+ .sys.version   0x0201e76f       0x18 objs/include_lib/system/version.z.S.o
+                0x0201e76f                include_lib_system_version
+ .sys.version   0x0201e787       0x18 objs/include_lib/update/version.z.S.o
+                0x0201e787                include_lib_update_version
+ .sys.version   0x0201e79f       0x17 objs/include_lib/utils/version.z.S.o
+                0x0201e79f                include_lib_utils_version
+ .sys.version   0x0201e7b6        0xd objs/lib/net/version.z.S.o
+                0x0201e7b6                lib_net_version
+ .sys.version   0x0201e7c3       0x10 objs/lib/server/version.z.S.o
+                0x0201e7c3                lib_server_version
+ .sys.version   0x0201e7d3        0xf objs/lib/utils/version.z.S.o
+                0x0201e7d3                lib_utils_version
+ .sys.version   0x0201e7e2       0x10 ../../../cpu/wl82/liba/cpu.a(version.z.o)
+                0x0201e7e2                lib_driver_version
+ .sys.version   0x0201e7f2        0x0 ../../../cpu/wl82/liba/event.a(version.z.o)
+                0x0201e7f2                lib_event_version
+ .sys.version   0x0201e7f2       0x10 ../../../cpu/wl82/liba/system.a(version.z.o)
+                0x0201e7f2                lib_system_version
+ .sys.version   0x0201e802        0x0 ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
+                0x0201e802                lib_cfg_tool_version
+ .sys.version   0x0201e802        0x0 ../../../cpu/wl82/liba/fs.a(version.z.o)
+                0x0201e802                lib_fs_version
+ .sys.version   0x0201e802        0x0 ../../../cpu/wl82/liba/common_lib.a(version.z.o)
+                0x0201e802                lib_common_version
+ .sys.version   0x0201e802       0x10 ../../../cpu/wl82/liba/update.a(version.z.o)
+                0x0201e802                lib_update_version
+                0x0201e812                __VERSION_END = .
  *(.jlsp_code)
-                0x0201e7b4                . = ALIGN (0x4)
- *fill*         0x0201e7b2        0x2 
+                0x0201e814                . = ALIGN (0x4)
+ *fill*         0x0201e812        0x2 
  *(.jlsp_const)
-                0x0201e7b4                . = ALIGN (0x4)
+                0x0201e814                . = ALIGN (0x4)
  *(.update_const)
  *(.update_code)
- .update_code   0x0201e7b4       0x46 ../../../cpu/wl82/tools/sdk.elf.o
+ .update_code   0x0201e814       0x46 ../../../cpu/wl82/tools/sdk.elf.o
  *(.bt_updata_ram_code)
-                0x0201e7fc                . = ALIGN (0x4)
- *fill*         0x0201e7fa        0x2 
-                0x0201e7fc                btctler_code_start = .
-                0x0201e7fc                BTCTLER_CONTROLLER_CODE_START = .
+                0x0201e85c                . = ALIGN (0x4)
+ *fill*         0x0201e85a        0x2 
+                0x0201e85c                btctler_code_start = .
+                0x0201e85c                BTCTLER_CONTROLLER_CODE_START = .
  *(.bt_rf_const)
  *(.bt_rf_code)
  *(.vendor_manager_const)
@@ -579,7 +580,7 @@ END GROUP
  *(.hci_interface_const)
  *(.hci_interface_code)
                 0x00000000                BTCTLER_CONTROLLER_CODE_SIZE = ABSOLUTE ((. - BTCTLER_CONTROLLER_CODE_START))
-                0x0201e7fc                BTCTLER_LE_CONTROLLER_CODE_START = .
+                0x0201e85c                BTCTLER_LE_CONTROLLER_CODE_START = .
  *(.ble_rf_const)
  *(.ble_rf_code)
  *(.ble_ll_const)
@@ -587,7 +588,7 @@ END GROUP
  *(.ble_hci_const)
  *(.ble_hci_code)
                 0x00000000                BTCTLER_LE_CONTROLLER_CODE_SIZE = ABSOLUTE ((. - BTCTLER_LE_CONTROLLER_CODE_START))
-                0x0201e7fc                BTCTLER_CL_CODE_START = .
+                0x0201e85c                BTCTLER_CL_CODE_START = .
  *(.bredr_irq)
  *(.bredr_irq_code)
  *(.bredr_irq_const)
@@ -597,7 +598,7 @@ END GROUP
  *(.classic_lmp_linkbulk_code)
  *(.classic_hci_const)
  *(.classic_hci_code)
-                0x0201e7fc                LMP_ENC_CODE_START = .
+                0x0201e85c                LMP_ENC_CODE_START = .
  *(.classic_lmp_auth_const)
  *(.classic_lmp_bigint_const)
  *(.classic_lmp_crypt_const)
@@ -614,7 +615,7 @@ END GROUP
  *(.classic_bb_const)
  *(.classic_bb_code)
                 0x00000000                BTCTLER_CL_CODE_SIZE = ABSOLUTE ((. - BTCTLER_CL_CODE_START))
-                0x0201e7fc                . = ALIGN (0x4)
+                0x0201e85c                . = ALIGN (0x4)
  *(.classic_tws_const)
  *(.classic_tws_code)
  *(.classic_tws_code.esco)
@@ -622,27 +623,27 @@ END GROUP
  *(.tws_media_sync_const)
  *(.tws_data_forward_code)
  *(.tws_data_forward_const)
-                0x0201e7fc                . = ALIGN (0x4)
-                0x0201e7fc                tws_func_stub_begin = .
+                0x0201e85c                . = ALIGN (0x4)
+                0x0201e85c                tws_func_stub_begin = .
  *(.tws_func_stub)
-                0x0201e7fc                tws_func_stub_end = .
+                0x0201e85c                tws_func_stub_end = .
  *(.lmp_irq_code)
  *(.link_bulk_code)
  *(.frame_irq_code)
-                0x0201e7fc                . = ALIGN (0x4)
+                0x0201e85c                . = ALIGN (0x4)
  *(.link_task_const)
  *(.link_task_code)
-                0x0201e7fc                . = ALIGN (0x4)
+                0x0201e85c                . = ALIGN (0x4)
  *(.classic_irq_const)
  *(.classic_irq_code)
-                0x0201e7fc                . = ALIGN (0x4)
+                0x0201e85c                . = ALIGN (0x4)
  *(.tws_irq_code)
-                0x0201e7fc                . = ALIGN (0x4)
-                0x0201e7fc                tws_sync_call_begin = .
+                0x0201e85c                . = ALIGN (0x4)
+                0x0201e85c                tws_sync_call_begin = .
  *(.tws_sync_call)
-                0x0201e7fc                tws_sync_call_end = .
-                0x0201e7fc                . = ALIGN (0x4)
-                0x0201e7fc                tws_sync_channel_begin = .
+                0x0201e85c                tws_sync_call_end = .
+                0x0201e85c                . = ALIGN (0x4)
+                0x0201e85c                tws_sync_channel_begin = .
  *(.tws_sync_channel.0)
  *(.tws_sync_channel.1)
  *(.tws_sync_channel.2)
@@ -657,30 +658,30 @@ END GROUP
  *(.tws_sync_channel.11)
  *(.tws_sync_channel.12)
  *(.tws_sync_channel.13)
-                0x0201e7fc                tws_sync_channel_end = .
-                0x0201e7fc                btctler_code_end = .
-                0x0201e7fc                . = ALIGN (0x4)
-                0x0201e7fc                . = ALIGN (0x4)
-                0x0201e7fc                btstack_code_start = .
-                0x0201e7fc                . = ALIGN (0x4)
-                0x0201e7fc                a2dp_source_media_codec_begin = .
+                0x0201e85c                tws_sync_channel_end = .
+                0x0201e85c                btctler_code_end = .
+                0x0201e85c                . = ALIGN (0x4)
+                0x0201e85c                . = ALIGN (0x4)
+                0x0201e85c                btstack_code_start = .
+                0x0201e85c                . = ALIGN (0x4)
+                0x0201e85c                a2dp_source_media_codec_begin = .
  *(.a2dp_source_media_codec)
-                0x0201e7fc                a2dp_source_media_codec_end = .
-                0x0201e7fc                a2dp_sink_media_probe_begin = .
+                0x0201e85c                a2dp_source_media_codec_end = .
+                0x0201e85c                a2dp_sink_media_probe_begin = .
  *(.a2dp_sink_media_probe)
-                0x0201e7fc                a2dp_sink_media_probe_end = .
-                0x0201e7fc                a2dp_sink_media_codec_begin = .
+                0x0201e85c                a2dp_sink_media_probe_end = .
+                0x0201e85c                a2dp_sink_media_codec_begin = .
  *(.a2dp_sink_media_codec)
-                0x0201e7fc                a2dp_sink_media_codec_end = .
-                0x0201e7fc                a2dp_event_handler_begin = .
+                0x0201e85c                a2dp_sink_media_codec_end = .
+                0x0201e85c                a2dp_event_handler_begin = .
  *(.a2dp_event_handler)
-                0x0201e7fc                a2dp_event_handler_end = .
-                0x0201e7fc                sdp_record_item_begin = .
+                0x0201e85c                a2dp_event_handler_end = .
+                0x0201e85c                sdp_record_item_begin = .
  *(.sdp_record_item)
-                0x0201e7fc                sdp_record_item_end = .
-                0x0201e7fc                bt_sleep_begin = .
+                0x0201e85c                sdp_record_item_end = .
+                0x0201e85c                bt_sleep_begin = .
  *(.bt_sleep)
-                0x0201e7fc                bt_sleep_end = .
+                0x0201e85c                bt_sleep_end = .
  *(.bt_stack_const)
  *(.bt_stack_code)
  *(.ble_db_const)
@@ -691,40 +692,40 @@ END GROUP
  *(.ble_att_code)
  *(.ble_gatt_const)
  *(.ble_gatt_code)
-                0x0201e7fc                BTSTACK_LE_HOST_MESH_CODE_START = .
+                0x0201e85c                BTSTACK_LE_HOST_MESH_CODE_START = .
  *(.ble_mesh_code)
  *(.ble_mesh_tinycrypt_code)
  *(.ble_mesh_const)
  *(.ble_mesh_tinycrypt_const)
                 0x00000000                BTSTACK_LE_HOST_MESH_CODE_SIZE = ABSOLUTE ((. - BTSTACK_LE_HOST_MESH_CODE_START))
-                0x0201e7fc                btstack_code_end = .
-                0x0201e7fc                . = ALIGN (0x4)
+                0x0201e85c                btstack_code_end = .
+                0x0201e85c                . = ALIGN (0x4)
                 0x00000000                BTSTACK_CODE_TOTAL_SIZE = (btstack_code_end - btstack_code_start)
-                0x0201e7fc                . = ALIGN (0x4)
-                0x0201e7fc                lcd_interface_begin = .
+                0x0201e85c                . = ALIGN (0x4)
+                0x0201e85c                lcd_interface_begin = .
  *(.lcd_if_info)
-                0x0201e7fc                lcd_interface_end = .
-                0x0201e7fc                ui_style_begin = .
+                0x0201e85c                lcd_interface_end = .
+                0x0201e85c                ui_style_begin = .
  *(.ui_style)
-                0x0201e7fc                ui_style_end = .
-                0x0201e7fc                elm_event_handler_begin_JL = .
+                0x0201e85c                ui_style_end = .
+                0x0201e85c                elm_event_handler_begin_JL = .
  *(.elm_event_handler_JL)
-                0x0201e7fc                elm_event_handler_end_JL = .
-                0x0201e7fc                elm_event_handler_begin_UPGRADE = .
+                0x0201e85c                elm_event_handler_end_JL = .
+                0x0201e85c                elm_event_handler_begin_UPGRADE = .
  *(.elm_event_handler_UPGRADE)
-                0x0201e7fc                elm_event_handler_end_UPGRADE = .
-                0x0201e7fc                elm_event_handler_begin_DIAL = .
+                0x0201e85c                elm_event_handler_end_UPGRADE = .
+                0x0201e85c                elm_event_handler_begin_DIAL = .
  *(.elm_event_handler_DIAL)
-                0x0201e7fc                elm_event_handler_end_DIAL = .
-                0x0201e7fc                control_event_handler_begin = .
+                0x0201e85c                elm_event_handler_end_DIAL = .
+                0x0201e85c                control_event_handler_begin = .
  *(.control_event_handler)
-                0x0201e7fc                control_event_handler_end = .
-                0x0201e7fc                control_ops_begin = .
+                0x0201e85c                control_event_handler_end = .
+                0x0201e85c                control_ops_begin = .
  *(.control_ops)
-                0x0201e7fc                control_ops_end = .
-                0x0201e7fc                battery_notify_begin = .
+                0x0201e85c                control_ops_end = .
+                0x0201e85c                battery_notify_begin = .
  *(.battery_notify)
-                0x0201e7fc                battery_notify_end = .
+                0x0201e85c                battery_notify_end = .
                 [!provide]                PROVIDE (__fsymtab_start, .)
  *(.FSymTab)
                 [!provide]                PROVIDE (__fsymtab_end, .)
@@ -734,15 +735,15 @@ END GROUP
                 [!provide]                PROVIDE (__rtatcmdtab_start, .)
  *(.RtAtCmdTab)
                 [!provide]                PROVIDE (__rtatcmdtab_end, .)
-                0x0201e7fc                . = ALIGN (0x4)
+                0x0201e85c                . = ALIGN (0x4)
  *(*.rf.text.cache.L2.rf_trim)
-                0x0201e7fc                __rf_trim_movable_region_start = .
+                0x0201e85c                __rf_trim_movable_region_start = .
  *(.movable.region.1)
-                0x0201e7fc                __rf_trim_movable_region_end = .
-                0x0201e800                . = ALIGN (0x20)
- *fill*         0x0201e7fc        0x4 
-                0x0201e800                _text_rodata_end = .
-                0x0201e800                PROVIDE (text_rodata_end, .)
+                0x0201e85c                __rf_trim_movable_region_end = .
+                0x0201e860                . = ALIGN (0x20)
+ *fill*         0x0201e85c        0x4 
+                0x0201e860                _text_rodata_end = .
+                0x0201e860                PROVIDE (text_rodata_end, .)
                 0x04000120                . = ORIGIN (sdram)
 
 .data           0x04000120      0xb98
@@ -1336,26 +1337,26 @@ END GROUP
 .cache_ram_bss  0x01f28000        0x0
                 0x01f28000                . = ALIGN (0x4)
                 0x02000120                text_begin = ADDR (.text)
-                0x0001e6e0                text_size = SIZEOF (.text)
+                0x0001e740                text_size = SIZEOF (.text)
                 [!provide]                PROVIDE (text_size, SIZEOF (.text))
                 0x04000cc0                bss_begin = ADDR (.bss)
                 0x000041d4                bss_size = SIZEOF (.bss)
                 [!provide]                PROVIDE (bss_size, SIZEOF (.bss))
                 0x04000120                data_vma = ADDR (.data)
-                0x0201e800                data_lma = (text_begin + SIZEOF (.text))
+                0x0201e860                data_lma = (text_begin + SIZEOF (.text))
                 0x00000b98                data_size = SIZEOF (.data)
                 [!provide]                PROVIDE (data_size, SIZEOF (.data))
                 0x01c08bd4                _ram0_bss_vma = ADDR (.ram0_bss)
                 0x000026d4                _ram0_bss_size = SIZEOF (.ram0_bss)
                 0x000026d4                PROVIDE (ram0_bss_size, SIZEOF (.ram0_bss))
                 0x01c00000                _ram0_data_vma = ADDR (.ram0_data)
-                0x0201f398                _ram0_data_lma = ((text_begin + SIZEOF (.text)) + SIZEOF (.data))
+                0x0201f3f8                _ram0_data_lma = ((text_begin + SIZEOF (.text)) + SIZEOF (.data))
                 0x00008bd4                _ram0_data_size = SIZEOF (.ram0_data)
                 0x00008bd4                PROVIDE (ram0_data_size, SIZEOF (.ram0_data))
                 0x01f28000                PROVIDE (cache_ram_bss_vma, ADDR (.cache_ram_bss))
                 0x00000000                PROVIDE (cache_ram_bss_size, SIZEOF (.cache_ram_bss))
                 0x01f28000                PROVIDE (cache_ram_data_vma, ADDR (.cache_ram_data))
-                0x02027f6c                PROVIDE (cache_ram_data_lma, (((text_begin + SIZEOF (.text)) + SIZEOF (.data)) + SIZEOF (.ram0_data)))
+                0x02027fcc                PROVIDE (cache_ram_data_lma, (((text_begin + SIZEOF (.text)) + SIZEOF (.data)) + SIZEOF (.ram0_data)))
                 0x00000000                PROVIDE (cache_ram_data_size, SIZEOF (.cache_ram_data))
                 0x00000000                BTCTLER_LE_RAM_TOTAL = (BTCTLER_LE_CONTROLLER_DATA_SIZE + BTCTLER_LE_CONTROLLER_BSS_SIZE)
                 0x00000000                BTCTLER_LE_CODE_TOTAL = BTCTLER_LE_CONTROLLER_CODE_SIZE
@@ -1374,12 +1375,12 @@ LOAD C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a
 LOAD ../../../cpu/wl82/liba/lib_usb_syn.a
 OUTPUT(../../../cpu/wl82/tools/sdk.elf elf32-pi32v2)
 
-.debug_str      0x00000000    0x1374b
- .debug_str     0x00000000    0x1374b ../../../cpu/wl82/tools/sdk.elf.o
-                              0x14fcf (size before relaxing)
+.debug_str      0x00000000    0x13751
+ .debug_str     0x00000000    0x13751 ../../../cpu/wl82/tools/sdk.elf.o
+                              0x14fe2 (size before relaxing)
 
-.debug_loc      0x00000000    0x1ab47
- .debug_loc     0x00000000    0x1ab47 ../../../cpu/wl82/tools/sdk.elf.o
+.debug_loc      0x00000000    0x1abf4
+ .debug_loc     0x00000000    0x1abf4 ../../../cpu/wl82/tools/sdk.elf.o
 
 .debug_abbrev   0x00000000      0xe16
  .debug_abbrev  0x00000000      0xd9e ../../../cpu/wl82/tools/sdk.elf.o
@@ -1387,14 +1388,14 @@ OUTPUT(../../../cpu/wl82/tools/sdk.elf elf32-pi32v2)
  .debug_abbrev  0x00000dc6       0x28 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
  .debug_abbrev  0x00000dee       0x28 ../../../cpu/wl82/liba/system.a(movable.S.o)
 
-.debug_info     0x00000000    0x402c9
- .debug_info    0x00000000    0x3fee0 ../../../cpu/wl82/tools/sdk.elf.o
- .debug_info    0x0003fee0      0x1de ../../../cpu/wl82/liba/cpu.a(startup.S.o)
- .debug_info    0x000400be      0x10d ../../../cpu/wl82/liba/system.a(port_asm.S.o)
- .debug_info    0x000401cb       0xfe ../../../cpu/wl82/liba/system.a(movable.S.o)
+.debug_info     0x00000000    0x40304
+ .debug_info    0x00000000    0x3ff1b ../../../cpu/wl82/tools/sdk.elf.o
+ .debug_info    0x0003ff1b      0x1de ../../../cpu/wl82/liba/cpu.a(startup.S.o)
+ .debug_info    0x000400f9      0x10d ../../../cpu/wl82/liba/system.a(port_asm.S.o)
+ .debug_info    0x00040206       0xfe ../../../cpu/wl82/liba/system.a(movable.S.o)
 
-.debug_ranges   0x00000000     0x2f88
- .debug_ranges  0x00000000     0x2f88 ../../../cpu/wl82/tools/sdk.elf.o
+.debug_ranges   0x00000000     0x2fa8
+ .debug_ranges  0x00000000     0x2fa8 ../../../cpu/wl82/tools/sdk.elf.o
 
 .debug_macinfo  0x00000000        0x1
  .debug_macinfo
@@ -1410,33 +1411,33 @@ OUTPUT(../../../cpu/wl82/tools/sdk.elf elf32-pi32v2)
  .debug_pubtypes
                 0x00000000     0x5c14 ../../../cpu/wl82/tools/sdk.elf.o
 
-.debug_frame    0x00000000     0x57b0
- .debug_frame   0x00000000     0x57b0 ../../../cpu/wl82/tools/sdk.elf.o
+.debug_frame    0x00000000     0x57b4
+ .debug_frame   0x00000000     0x57b4 ../../../cpu/wl82/tools/sdk.elf.o
 
-.debug_line     0x00000000    0x2934c
- .debug_line    0x00000000    0x28da8 ../../../cpu/wl82/tools/sdk.elf.o
- .debug_line    0x00028da8       0x2c objs/include_lib/btctrler/version.z.S.o
- .debug_line    0x00028dd4       0x2c objs/include_lib/btstack/version.z.S.o
- .debug_line    0x00028e00       0x2c objs/include_lib/driver/version.z.S.o
- .debug_line    0x00028e2c       0x2c objs/include_lib/media/version.z.S.o
- .debug_line    0x00028e58       0x2c objs/include_lib/net/version.z.S.o
- .debug_line    0x00028e84       0x2c objs/include_lib/server/version.z.S.o
- .debug_line    0x00028eb0       0x2c objs/include_lib/system/version.z.S.o
- .debug_line    0x00028edc       0x2c objs/include_lib/update/version.z.S.o
- .debug_line    0x00028f08       0x2c objs/include_lib/utils/version.z.S.o
- .debug_line    0x00028f34       0x2c objs/lib/net/version.z.S.o
- .debug_line    0x00028f60       0x2c objs/lib/server/version.z.S.o
- .debug_line    0x00028f8c       0x2c objs/lib/utils/version.z.S.o
- .debug_line    0x00028fb8       0xcf ../../../cpu/wl82/liba/cpu.a(startup.S.o)
- .debug_line    0x00029087       0x2c ../../../cpu/wl82/liba/cpu.a(version.z.o)
- .debug_line    0x000290b3       0x2c ../../../cpu/wl82/liba/event.a(version.z.o)
- .debug_line    0x000290df       0xd2 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
- .debug_line    0x000291b1       0xbf ../../../cpu/wl82/liba/system.a(movable.S.o)
- .debug_line    0x00029270       0x2c ../../../cpu/wl82/liba/system.a(version.z.o)
- .debug_line    0x0002929c       0x2c ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
- .debug_line    0x000292c8       0x2c ../../../cpu/wl82/liba/fs.a(version.z.o)
- .debug_line    0x000292f4       0x2c ../../../cpu/wl82/liba/common_lib.a(version.z.o)
- .debug_line    0x00029320       0x2c ../../../cpu/wl82/liba/update.a(version.z.o)
+.debug_line     0x00000000    0x293a0
+ .debug_line    0x00000000    0x28dfc ../../../cpu/wl82/tools/sdk.elf.o
+ .debug_line    0x00028dfc       0x2c objs/include_lib/btctrler/version.z.S.o
+ .debug_line    0x00028e28       0x2c objs/include_lib/btstack/version.z.S.o
+ .debug_line    0x00028e54       0x2c objs/include_lib/driver/version.z.S.o
+ .debug_line    0x00028e80       0x2c objs/include_lib/media/version.z.S.o
+ .debug_line    0x00028eac       0x2c objs/include_lib/net/version.z.S.o
+ .debug_line    0x00028ed8       0x2c objs/include_lib/server/version.z.S.o
+ .debug_line    0x00028f04       0x2c objs/include_lib/system/version.z.S.o
+ .debug_line    0x00028f30       0x2c objs/include_lib/update/version.z.S.o
+ .debug_line    0x00028f5c       0x2c objs/include_lib/utils/version.z.S.o
+ .debug_line    0x00028f88       0x2c objs/lib/net/version.z.S.o
+ .debug_line    0x00028fb4       0x2c objs/lib/server/version.z.S.o
+ .debug_line    0x00028fe0       0x2c objs/lib/utils/version.z.S.o
+ .debug_line    0x0002900c       0xcf ../../../cpu/wl82/liba/cpu.a(startup.S.o)
+ .debug_line    0x000290db       0x2c ../../../cpu/wl82/liba/cpu.a(version.z.o)
+ .debug_line    0x00029107       0x2c ../../../cpu/wl82/liba/event.a(version.z.o)
+ .debug_line    0x00029133       0xd2 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
+ .debug_line    0x00029205       0xbf ../../../cpu/wl82/liba/system.a(movable.S.o)
+ .debug_line    0x000292c4       0x2c ../../../cpu/wl82/liba/system.a(version.z.o)
+ .debug_line    0x000292f0       0x2c ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
+ .debug_line    0x0002931c       0x2c ../../../cpu/wl82/liba/fs.a(version.z.o)
+ .debug_line    0x00029348       0x2c ../../../cpu/wl82/liba/common_lib.a(version.z.o)
+ .debug_line    0x00029374       0x2c ../../../cpu/wl82/liba/update.a(version.z.o)
 
 .debug_aranges  0x00000000       0x60
  .debug_aranges

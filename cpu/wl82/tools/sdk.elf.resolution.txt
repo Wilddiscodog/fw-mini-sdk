@@ -278,8 +278,8 @@ objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usbh_hub_thread_wakeup,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_write_power,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_host_init,l
--r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_sie_enable,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_osal_msleep,l
+-r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_sie_enable,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_hc_irq_cnt,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_ep0_irq_cnt,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_ep0_setup_cnt,pl
