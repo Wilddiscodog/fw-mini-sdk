@@ -3,10 +3,12 @@
 #include "system/includes.h"
 #include "device/includes.h"
 #include "device/iic.h"
-#include "ui_api.h"
 #include "asm/includes.h"
 #include "asm/pwm.h"
+#if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
+#include "ui_api.h"
 #include "asm/emi.h"
+#endif
 
 // *INDENT-OFF*
 

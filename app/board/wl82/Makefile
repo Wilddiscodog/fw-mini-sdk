@@ -18,7 +18,9 @@ MINI_LVGL_SUPPORT ?= 0
 MINI_CXX_SUPPORT ?= 0
 
 ifeq ($(OS), Windows_NT)
-TOOL_DIR := C:/JL/pi32/bin
+# 工具链与构建工具路径已写死, 直接 make / make clean 即可(无需手动设置 PATH)
+TOOL_DIR  := C:/JL/pi32/bin
+UTILS_DIR := D:/fw-mini-sdk/tools/utils
 CC    := clang.exe
 CXX   := clang.exe
 LD    := pi32v2-lto-wrapper.exe
@@ -29,7 +31,7 @@ RM    := rm -rf
 SYS_LIB_DIR := C:/JL/pi32/pi32v2-lib/r3
 SYS_INC_DIR := C:/JL/pi32/pi32v2-include
 EXT_CFLAGS  :=
-export PATH:=$(TOOL_DIR);$(PATH)
+export PATH := C:/JL/pi32/bin;D:/fw-mini-sdk/tools/utils;$(PATH)
 
 FIXBAT          := ..\..\..\tools\utils\fixbat.exe
 POST_SCRIPT     := ..\..\..\cpu\wl82\tools\download.bat
