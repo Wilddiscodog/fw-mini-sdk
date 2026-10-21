@@ -594,16 +594,22 @@ static int usbh_reset_port(struct usbh_bus *bus, const uint8_t port)
         usb_write_power(1, 0x60);          /* HSENAB | SOFTCONN */
         chirp_ret = usb_host_init(1, delay_ms, 500);
         if (chirp_ret == 0) {
-            /* 速度必须在啁啾刚完成时锁存(此时 DEVCTL 速度位可信),
-             * 之后 FSDEV 位可能因设备状态漂移而翻转 */
-            if (HWREGB(USB_BASE + MUSB_DEVCTL_OFFSET) & USB_DEVCTL_FSDEV) {
+            /* 速度必须在啁啾刚完成时锁存。判定依据 = POWER.HSMODE(bit4):
+             * 1=设备已啁啾到高速; 0=全速/低速(再查 DEVCTL.FSDEV/LSDEV)。
+             * 注意 JL 的 DEVCTL.FSDEV(bit6) 语义与标准 MUSB 不同, 不可用。 */
+            if (HWREGB(USB_BASE + MUSB_POWER_OFFSET) & USB_POWER_HSMODE) {
+                g_port_speed_latch = USB_SPEED_HIGH;
+            } else if (HWREGB(USB_BASE + MUSB_DEVCTL_OFFSET) & USB_DEVCTL_FSDEV) {
                 g_port_speed_latch = USB_SPEED_FULL;
             } else if (HWREGB(USB_BASE + MUSB_DEVCTL_OFFSET) & USB_DEVCTL_LSDEV) {
                 g_port_speed_latch = USB_SPEED_LOW;
             } else {
-                g_port_speed_latch = USB_SPEED_HIGH;
+                g_port_speed_latch = USB_SPEED_HIGH;  /* 无 FS/LS 标志 = 高速(闭源同款) */
             }
-            printf("[usbh] chirp ok, speed latch=%d\n", g_port_speed_latch);
+            printf("[usbh] chirp ok, speed latch=%d (POWER=%02x DEVCTL=%02x)\n",
+                   g_port_speed_latch,
+                   HWREGB(USB_BASE + MUSB_POWER_OFFSET),
+                   HWREGB(USB_BASE + MUSB_DEVCTL_OFFSET));
             break;
         }
         printf("[usbh] chirp retry %d ret=%u\n", retry, chirp_ret);
