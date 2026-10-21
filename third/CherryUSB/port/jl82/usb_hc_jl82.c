@@ -1291,12 +1291,7 @@ static void usbh_process_intr(uint8_t busid, uint32_t is, uint32_t txis, uint32_
     }
 #endif
 
-    is = HWREGB(USB_BASE + MUSB_IS_OFFSET);
-    txis = HWREGH(USB_BASE + MUSB_TXIS_OFFSET);
-    rxis = HWREGH(USB_BASE + MUSB_RXIS_OFFSET);
-
-    HWREGB(USB_BASE + MUSB_IS_OFFSET) = is;
-
+    /* is/txis/rxis 已由调用方通过 INT_MODE 窗口读取得(读即清除) */
     old_ep_idx = musb_get_active_ep(bus);
 
     if (is & USB_IS_CONN) {
