@@ -126,5 +126,4 @@ objs/app/app_main.c.o: ../../../app/app_main.c \
   ../../../include_lib/driver/cpu/wl82\asm/pwm_led.h \
   ../../../include_lib/driver/cpu/wl82\asm/wdt.h \
   ../../../include_lib/driver/cpu/wl82\asm/jpeg_decoder.h \
-  ../../../app/include\fw_version.h \
-  ../../../driver/lcd/include\lcd_drive.h
+  ../../../app/include\fw_version.h

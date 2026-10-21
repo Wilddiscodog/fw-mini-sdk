@@ -222,7 +222,7 @@ static void timer5_isr(void)
     if (TMR5->CON & BIT(15)) {
         TMR5->CON |= BIT(14);           /* 清 pnd */
         t5_ticks++;
-        printf("[t5] 1s tick %u\n", t5_ticks);
+        // printf("[t5] 1s tick %u\n", t5_ticks);
     }
 }
 static void hw_timer_task(void *p)

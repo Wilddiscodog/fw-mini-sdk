@@ -40,6 +40,11 @@ void usb_hc_low_level_init(struct usbh_bus *bus)
     usb_h_sie_init(JL82_HUSB_ID);   /* HUSB 主机角色 PHY/桥接器上电(闭源库) */
     usb_iomode(JL82_HUSB_ID, 0);
 
+    /* 关键: 必须显式进入主机角色(DEVCTL = SESSION|HOST = 0x03, 与闭源
+     * usb_h_chirp_and_reset 同款写法)。只设 SESSION 时核心不产生 SOF,
+     * U盘复位后 3ms 即挂起, 枚举控制传输超时(-USB_ERR_TIMEOUT/-14)。 */
+    *(volatile uint8_t *)0x16060UL = 0x03;   /* DEVCTL: SESSION | HOST */
+
     /* 中断按核使能独立: 先清双核, 再只开 CPU0 */
     unrequest_irq(IRQ_USB1_CTRL_IDX, 0);
     unrequest_irq(IRQ_USB1_CTRL_IDX, 1);

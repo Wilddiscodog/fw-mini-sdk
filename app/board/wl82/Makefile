@@ -9,7 +9,7 @@
 # ================ LCD / LVGL 开关 ================
 #   MINI_LCD_SUPPORT=0  关闭 EMI 8080 并口 LCD(ili9341 参考驱动)
 #   MINI_LVGL_SUPPORT=1 启用 LVGL(需 lvgl v8.2.0 源码 + tools/apply_lvgl_patch.bat)
-MINI_LCD_SUPPORT  ?= 1
+MINI_LCD_SUPPORT  ?= 0
 MINI_LVGL_SUPPORT ?= 0
 
 # ================= C++ 支持开关 =================
