@@ -30,8 +30,17 @@ static void usb1_host_isr(void)
     }
 
     __asm__ volatile("ssync");
+    extern volatile uint32_t g_hc_irq_cnt;
+    g_hc_irq_cnt++;
     USBH_IRQHandler(0);
     __asm__ volatile("csync");
+}
+
+___interrupt
+static void usb1_sof_isr(void)
+{
+    /* SOF 帧中断: 清桥接器 SOF 挂起位(bit6 HUSB_CLR_SOF_PND) */
+    *(volatile uint32_t *)0x16800UL |= 0x40;
 }
 
 void usb_hc_low_level_init(struct usbh_bus *bus)
@@ -44,6 +53,16 @@ void usb_hc_low_level_init(struct usbh_bus *bus)
      * usb_h_chirp_and_reset 同款写法)。只设 SESSION 时核心不产生 SOF,
      * U盘复位后 3ms 即挂起, 枚举控制传输超时(-USB_ERR_TIMEOUT/-14)。 */
     *(volatile uint8_t *)0x16060UL = 0x03;   /* DEVCTL: SESSION | HOST */
+
+    /* 关键: 使能 SOF 帧时钟引擎(桥接器 bit10 HUSB_SOFIE, 与闭源
+     * usb_sofie_enable(id!=0) 同款)。主机角色由自己产生 SOF;
+     * 不开启则 FRAME 计数不走、设备挂起、一切传输静默无响应。 */
+    *(volatile uint32_t *)0x16800UL |= 0x400;
+
+    /* SOF 挂起清除走独立中断(IRQ_USB1_SOF_IDX=53), 不清会挂起累积 */
+    unrequest_irq(IRQ_USB1_SOF_IDX, 0);
+    unrequest_irq(IRQ_USB1_SOF_IDX, 1);
+    request_irq(IRQ_USB1_SOF_IDX, 3, usb1_sof_isr, 0);
 
     /* 中断按核使能独立: 先清双核, 再只开 CPU0 */
     unrequest_irq(IRQ_USB1_CTRL_IDX, 0);

@@ -22,12 +22,6 @@ REM %OBJDUMP% -D -address-mask=0x1ffffff -print-dbg %ELFFILE% > sdk.lst
 %OBJDUMP% -t %ELFFILE% > symbol_tbl.txt
 
 copy /b text.bin+data.bin+ram0_data.bin+cache_ram_data.bin app.bin
-
-
-
-
-
-set UI_RES=ui_res
 REM set KEY_FILE=-key JL_791N-XXXX.key
 REM set KEY_FILE=-key1 JL_791N-XXXX.key1 -mkey JL_791N-XXXX.mkey
 

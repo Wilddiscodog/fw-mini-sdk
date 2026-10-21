@@ -21,6 +21,20 @@
 #define HWREGB(x) \
     (*((volatile uint8_t *)(x)))
 
+#ifdef CONFIG_USB_MUSB_JL82
+/* 主机 EP0 CSR0 为 16 位: 低字节=标准 CSR0, 高字节 bit3=DISPING(禁 PING)。
+ * 高速设备 EP0 不应答 PING, 所有 CSR0 写必须带 0x800(闭源 usb_ctrl_transfer.c
+ * 每次 usb_write_csr0 都 | CSR0H_DISPING 同款)。 */
+#define JL82_CSR0_DISPING  0x0800
+#endif
+
+/* ---- 主机 EP0 运行时计数(供外部任务周期打印, 排查枚举卡点) ---- */
+volatile uint32_t g_hc_irq_cnt = 0;       /* USB1 总中断次数 */
+volatile uint32_t g_ep0_irq_cnt = 0;      /* EP0 中断次数 */
+volatile uint32_t g_ep0_setup_cnt = 0;    /* 控制传输提交次数 */
+volatile uint32_t g_ep0_last_csr0 = 0xFF; /* 最后一次 EP0 中断的 CSR0 */
+volatile uint32_t g_urb_err_cnt = 0;      /* 出错完成的 URB 数 */
+
 #define USB_BASE (bus->hcd.reg_base)
 
 #ifdef CONFIG_USB_MUSB_JL82
@@ -400,9 +414,18 @@ void musb_control_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb 
 #endif
 
     HWREGH(USB_BASE + MUSB_TXIE_OFFSET) |= USB_TXIE_EP0;
+    g_ep0_setup_cnt++;
 
     musb_write_packet(bus, chidx, (uint8_t *)setup, 8);
-    HWREGB(USB_TXCSRL_BASE(chidx)) = USB_CSRL0_TXRDY | USB_CSRL0_SETUP;
+    HWREGH(USB_TXCSRL_BASE(chidx)) = JL82_CSR0_DISPING | USB_CSRL0_TXRDY | USB_CSRL0_SETUP;
+    {
+        static uint8_t ctrl_cnt = 0;
+        if (ctrl_cnt++ < 8) {
+            printf("[h-ep0] submit #%u addr=%d speed=%d req=%02x val=%04x\n",
+                   ctrl_cnt, urb->hport->dev_addr, urb->hport->speed,
+                   setup->bRequest, setup->wValue);
+        }
+    }
     musb_set_active_ep(bus, old_ep_index);
 }
 
@@ -573,12 +596,25 @@ static uint8_t usbh_get_port_speed(struct usbh_bus *bus, const uint8_t port)
 {
     uint8_t speed = USB_SPEED_UNKNOWN;
 
+#ifdef CONFIG_USB_MUSB_JL82
+    /* JL HUSB: POWER.HSMODE 位含义与标准 MUSB 不同(常读 1, 会把全速设备
+     * 误报为高速 → 主机按高速时序发令牌, FS 设备不应答, 枚举超时)。
+     * 以 DEVCTL 的设备速度位为准: FSDEV/LSDEV 置位即 FS/LS, 都为 0 = HS。 */
+    if (HWREGB(USB_BASE + MUSB_DEVCTL_OFFSET) & USB_DEVCTL_FSDEV) {
+        speed = USB_SPEED_FULL;
+    } else if (HWREGB(USB_BASE + MUSB_DEVCTL_OFFSET) & USB_DEVCTL_LSDEV) {
+        speed = USB_SPEED_LOW;
+    } else {
+        speed = USB_SPEED_HIGH;
+    }
+#else
     if (HWREGB(USB_BASE + MUSB_POWER_OFFSET) & USB_POWER_HSMODE)
         speed = USB_SPEED_HIGH;
     else if (HWREGB(USB_BASE + MUSB_DEVCTL_OFFSET) & USB_DEVCTL_FSDEV)
         speed = USB_SPEED_FULL;
     else if (HWREGB(USB_BASE + MUSB_DEVCTL_OFFSET) & USB_DEVCTL_LSDEV)
         speed = USB_SPEED_LOW;
+#endif
 
     return speed;
 }
@@ -727,7 +763,7 @@ int usb_hc_init(struct usbh_bus *bus)
 
 #ifdef CONFIG_USB_MUSB_SUNXI
     musb_set_active_ep(bus, 0);
-    HWREGB(USB_TXCSRL_BASE(0)) = USB_CSRL0_TXRDY;
+    HWREGH(USB_TXCSRL_BASE(0)) = JL82_CSR0_DISPING | USB_CSRL0_TXRDY;
 #endif
     return 0;
 }
@@ -1048,6 +1084,13 @@ static void musb_urb_waitup(struct usbh_urb *urb)
     struct musb_pipe *pipe;
 
     pipe = (struct musb_pipe *)urb->hcpriv;
+    if (urb->errorcode < 0) {
+        g_urb_err_cnt++;
+        static uint8_t err_cnt = 0;
+        if (err_cnt++ < 8) {
+            printf("[h-urb] done err=%d\n", urb->errorcode);
+        }
+    }
 
     if (urb->timeout) {
         usb_osal_sem_give(pipe->waitsem);
@@ -1072,6 +1115,7 @@ void handle_ep0(struct usbh_bus *bus)
     struct usbh_urb *urb;
     uint32_t size;
 
+    g_ep0_irq_cnt++;
     pipe = (struct musb_pipe *)&g_musb_hcd[bus->hcd.hcd_id].pipe_pool[0];
     urb = pipe->urb;
     if (urb == NULL) {
@@ -1080,6 +1124,13 @@ void handle_ep0(struct usbh_bus *bus)
 
     musb_set_active_ep(bus, 0);
     ep0_status = HWREGB(USB_TXCSRL_BASE(ep_idx));
+    g_ep0_last_csr0 = ep0_status;
+    {
+        static uint32_t ep0_cnt = 0;
+        if (ep0_cnt++ < 10 || (ep0_cnt % 5000) == 0) {
+            printf("[h-ep0] irq n=%u state=%d CSR0=%02x\n", ep0_cnt, pipe->ep0_state, ep0_status);
+        }
+    }
     if (ep0_status & USB_CSRL0_STALLED) {
         HWREGB(USB_TXCSRL_BASE(ep_idx)) &= ~USB_CSRL0_STALLED;
         pipe->ep0_state = USB_EP0_STATE_SETUP;
@@ -1102,7 +1153,7 @@ void handle_ep0(struct usbh_bus *bus)
             if (urb->transfer_buffer_length) {
                 if (urb->setup->bmRequestType & 0x80) {
                     pipe->ep0_state = USB_EP0_STATE_IN_DATA;
-                    HWREGB(USB_TXCSRL_BASE(ep_idx)) = USB_CSRL0_REQPKT;
+                    HWREGH(USB_TXCSRL_BASE(ep_idx)) = JL82_CSR0_DISPING | USB_CSRL0_REQPKT;
                 } else {
                     pipe->ep0_state = USB_EP0_STATE_OUT_DATA;
                     size = urb->transfer_buffer_length;
@@ -1111,7 +1162,7 @@ void handle_ep0(struct usbh_bus *bus)
                     }
 
                     musb_write_packet(bus, 0, urb->transfer_buffer, size);
-                    HWREGB(USB_TXCSRL_BASE(ep_idx)) = USB_CSRL0_TXRDY;
+                    HWREGH(USB_TXCSRL_BASE(ep_idx)) = JL82_CSR0_DISPING | USB_CSRL0_TXRDY;
 
                     urb->transfer_buffer += size;
                     urb->transfer_buffer_length -= size;
@@ -1119,7 +1170,7 @@ void handle_ep0(struct usbh_bus *bus)
                 }
             } else {
                 pipe->ep0_state = USB_EP0_STATE_IN_STATUS;
-                HWREGB(USB_TXCSRL_BASE(ep_idx)) = (USB_CSRL0_REQPKT | USB_CSRL0_STATUS);
+                HWREGH(USB_TXCSRL_BASE(ep_idx)) = JL82_CSR0_DISPING | (USB_CSRL0_REQPKT | USB_CSRL0_STATUS);
             }
             break;
         case USB_EP0_STATE_IN_DATA:
@@ -1133,9 +1184,9 @@ void handle_ep0(struct usbh_bus *bus)
 
                 if ((size < USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize)) || (urb->transfer_buffer_length == 0)) {
                     pipe->ep0_state = USB_EP0_STATE_OUT_STATUS;
-                    HWREGB(USB_TXCSRL_BASE(ep_idx)) = (USB_CSRL0_TXRDY | USB_CSRL0_STATUS);
+                    HWREGH(USB_TXCSRL_BASE(ep_idx)) = JL82_CSR0_DISPING | (USB_CSRL0_TXRDY | USB_CSRL0_STATUS);
                 } else {
-                    HWREGB(USB_TXCSRL_BASE(ep_idx)) = USB_CSRL0_REQPKT;
+                    HWREGH(USB_TXCSRL_BASE(ep_idx)) = JL82_CSR0_DISPING | USB_CSRL0_REQPKT;
                 }
             }
             break;
@@ -1147,14 +1198,14 @@ void handle_ep0(struct usbh_bus *bus)
                 }
 
                 musb_write_packet(bus, 0, urb->transfer_buffer, size);
-                HWREGB(USB_TXCSRL_BASE(ep_idx)) = USB_CSRL0_TXRDY;
+                HWREGH(USB_TXCSRL_BASE(ep_idx)) = JL82_CSR0_DISPING | USB_CSRL0_TXRDY;
 
                 urb->transfer_buffer += size;
                 urb->transfer_buffer_length -= size;
                 urb->actual_length += size;
             } else {
                 pipe->ep0_state = USB_EP0_STATE_IN_STATUS;
-                HWREGB(USB_TXCSRL_BASE(ep_idx)) = (USB_CSRL0_REQPKT | USB_CSRL0_STATUS);
+                HWREGH(USB_TXCSRL_BASE(ep_idx)) = JL82_CSR0_DISPING | (USB_CSRL0_REQPKT | USB_CSRL0_STATUS);
             }
             break;
         case USB_EP0_STATE_OUT_STATUS:

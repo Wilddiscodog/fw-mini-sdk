@@ -293,11 +293,22 @@ static void lcd_test_task(void *p)
 /*============================ USB：按 MINI_USB_MODE 选择角色 ================= */
 #if (MINI_USB_MODE == MINI_USB_MODE_HOST)
 extern void usbh_msc_demo_start(void);
+extern volatile uint32_t g_hc_irq_cnt, g_ep0_irq_cnt, g_ep0_setup_cnt, g_ep0_last_csr0, g_urb_err_cnt;
 static void usb_mode_task(void *p)
 {
     os_time_dly(100);
     usbh_msc_demo_start();      /* usbh 线程由栈内部创建, 本任务只负责启动 */
-    while (1) { os_time_dly(10000); }
+    while (1) {
+        os_time_dly(200);       /* 2s: 主机状态快照(DEVCTL/帧计数/CSR0/TXIE/RXIE/桥接器) */
+        printf("[usbh-mon] irq=%u ep0=%u setup=%u err=%u | DEVCTL=%02x FRAME=%04x CSR0=%04x TXIE=%04x RXIE=%04x BR=%08x\n",
+               g_hc_irq_cnt, g_ep0_irq_cnt, g_ep0_setup_cnt, g_urb_err_cnt,
+               *(volatile unsigned char *)0x16060UL,
+               *(volatile unsigned short *)0x1600CUL,
+               *(volatile unsigned short *)0x16102UL,
+               *(volatile unsigned short *)0x16006UL,
+               *(volatile unsigned short *)0x16008UL,
+               *(volatile unsigned long *)0x16800UL);
+    }
 }
 #else
 static void usb_mode_task(void *p)
