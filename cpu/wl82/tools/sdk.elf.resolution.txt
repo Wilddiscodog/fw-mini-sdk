@@ -10,7 +10,7 @@ objs/app/app_main.c.o
 -r=objs/app/app_main.c.o,dev_write,l
 -r=objs/app/app_main.c.o,request_irq,l
 -r=objs/app/app_main.c.o,usbh_msc_demo_start,l
--r=objs/app/app_main.c.o,USBH_IRQHandler,l
+-r=objs/app/app_main.c.o,usbh_host_poll,l
 -r=objs/app/app_main.c.o,puts,l
 -r=objs/app/app_main.c.o,irq_info_table,pl
 -r=objs/app/app_main.c.o,task_info_table,pl
@@ -276,11 +276,12 @@ objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_osal_sem_give,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,handle_ep0,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,USBH_IRQHandler,pl
--r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usbh_hub_thread_wakeup,l
+-r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usbh_host_poll,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_write_power,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_host_init,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_osal_msleep,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_sie_enable,l
+-r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usbh_hub_thread_wakeup,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_hc_irq_cnt,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_ep0_irq_cnt,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_ep0_setup_cnt,pl

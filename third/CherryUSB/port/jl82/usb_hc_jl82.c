@@ -1272,11 +1272,8 @@ void handle_ep0(struct usbh_bus *bus)
     }
 }
 
-void USBH_IRQHandler(uint8_t busid)
+static void usbh_process_intr(uint8_t busid, uint32_t is, uint32_t txis, uint32_t rxis)
 {
-    uint32_t is;
-    uint32_t txis;
-    uint32_t rxis;
     uint8_t ep_csrl_status;
     // uint8_t ep_csrh_status;
     struct musb_pipe *pipe;
@@ -1294,19 +1291,11 @@ void USBH_IRQHandler(uint8_t busid)
     }
 #endif
 
-#ifdef CONFIG_USB_MUSB_JL82
-    {   /* INT_MODE 窗口读取, 读即清除 */
-        uint32_t _is; uint16_t _tx, _rx;
-        jl_usb_read_intr(&_is, &_tx, &_rx);
-        is = _is; txis = _tx; rxis = _rx;
-    }
-#else
     is = HWREGB(USB_BASE + MUSB_IS_OFFSET);
     txis = HWREGH(USB_BASE + MUSB_TXIS_OFFSET);
     rxis = HWREGH(USB_BASE + MUSB_RXIS_OFFSET);
 
     HWREGB(USB_BASE + MUSB_IS_OFFSET) = is;
-#endif
 
     old_ep_idx = musb_get_active_ep(bus);
 
@@ -1451,4 +1440,25 @@ void USBH_IRQHandler(uint8_t busid)
         }
     }
     musb_set_active_ep(bus, old_ep_idx);
+}
+
+/* ---- JL82: 硬件中断包装 + 轮询入口 ---- */
+void USBH_IRQHandler(uint8_t busid)
+{
+    uint32_t is, txis, rxis;
+
+    jl_usb_read_intr(&is, &txis, &rxis);   /* INT_MODE 窗口读, 读即清除 */
+    usbh_process_intr(busid, is, txis, rxis);
+}
+
+/* 轮询入口: 主机角色下 EP0 完成中断不可用(实测), 由任务周期调用。
+ * 内部走 INT_MODE 窗口读(读即清除), 有挂起才处理。 */
+void usbh_host_poll(void)
+{
+    uint32_t is, txis, rxis;
+
+    jl_usb_read_intr(&is, &txis, &rxis);
+    if ((is & 0xFF) || (txis & 0xFFFF) || (rxis & 0xFFFF)) {
+        usbh_process_intr(0, is, txis, rxis);
+    }
 }
