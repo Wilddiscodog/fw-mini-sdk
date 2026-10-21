@@ -38,6 +38,7 @@ objs/app/cdc_acm_app.c.o
 -r=objs/app/cdc_acm_app.c.o,dtr_enable,pl
 objs/app/usbh_msc_app.c.o
 -r=objs/app/usbh_msc_app.c.o,usbh_msc_run,pl
+-r=objs/app/usbh_msc_app.c.o,usbh_msc_scsi_init,l
 -r=objs/app/usbh_msc_app.c.o,printf,l
 -r=objs/app/usbh_msc_app.c.o,usbh_msc_scsi_read10,l
 -r=objs/app/usbh_msc_app.c.o,usbh_msc_stop,pl
@@ -158,8 +159,8 @@ objs/third/CherryUSB/class/msc/usbh_msc.c.o
 -r=objs/third/CherryUSB/class/msc/usbh_msc.c.o,usbh_msc_run,l
 -r=objs/third/CherryUSB/class/msc/usbh_msc.c.o,usbh_msc_stop,l
 -r=objs/third/CherryUSB/class/msc/usbh_msc.c.o,usbh_submit_urb,l
--r=objs/third/CherryUSB/class/msc/usbh_msc.c.o,snprintf,l
 -r=objs/third/CherryUSB/class/msc/usbh_msc.c.o,usbh_control_transfer,l
+-r=objs/third/CherryUSB/class/msc/usbh_msc.c.o,snprintf,l
 -r=objs/third/CherryUSB/class/msc/usbh_msc.c.o,usbh_kill_urb,l
 -r=objs/third/CherryUSB/class/msc/usbh_msc.c.o,usb_osal_thread_schedule_other,l
 -r=objs/third/CherryUSB/class/msc/usbh_msc.c.o,puts,l
@@ -277,11 +278,13 @@ objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,handle_ep0,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,USBH_IRQHandler,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usbh_host_poll,pl
+-r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_write_ep_cnt,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_write_power,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_host_init,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_osal_msleep,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usb_sie_enable,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,usbh_hub_thread_wakeup,l
+-r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,putchar,l
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_hc_irq_cnt,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_ep0_irq_cnt,pl
 -r=objs/third/CherryUSB/port/jl82/usb_hc_jl82.c.o,g_ep0_setup_cnt,pl

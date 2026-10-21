@@ -131,6 +131,44 @@ static inline int usbh_msc_bulk_out_transfer(struct usbh_msc *msc_class, uint8_t
     return ret;
 }
 
+static int usbh_msc_bulk_only_reset_recovery(struct usbh_msc *msc_class)
+{
+    struct usb_setup_packet *setup = msc_class->hport->setup;
+    int ret;
+
+    setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
+    setup->bRequest = MSC_REQUEST_RESET;
+    setup->wValue = 0;
+    setup->wIndex = msc_class->intf;
+    setup->wLength = 0;
+    ret = usbh_control_transfer(msc_class->hport, setup, NULL);
+    if (ret < 0) {
+        USB_LOG_ERR("Bulk-Only Reset failed: %d\r\n", ret);
+        return ret;
+    }
+
+    setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_STANDARD | USB_REQUEST_RECIPIENT_ENDPOINT;
+    setup->bRequest = USB_REQUEST_CLEAR_FEATURE;
+    setup->wValue = USB_FEATURE_ENDPOINT_HALT;
+    setup->wIndex = msc_class->bulkin->bEndpointAddress;
+    setup->wLength = 0;
+    ret = usbh_control_transfer(msc_class->hport, setup, NULL);
+    if (ret < 0) {
+        USB_LOG_ERR("Clear bulk-in halt failed: %d\r\n", ret);
+        return ret;
+    }
+
+    setup->wIndex = msc_class->bulkout->bEndpointAddress;
+    ret = usbh_control_transfer(msc_class->hport, setup, NULL);
+    if (ret < 0) {
+        USB_LOG_ERR("Clear bulk-out halt failed: %d\r\n", ret);
+        return ret;
+    }
+
+    USB_LOG_WRN("Bulk-Only reset recovery complete\r\n");
+    return 0;
+}
+
 static int usbh_bulk_cbw_csw_xfer(struct usbh_msc *msc_class, struct CBW *cbw, struct CSW *csw, uint8_t *buffer, uint32_t timeout)
 {
     int nbytes;
@@ -185,6 +223,9 @@ static int usbh_bulk_cbw_csw_xfer(struct usbh_msc *msc_class, struct CBW *cbw, s
         return -USB_ERR_INVAL;
     }
 __err_exit:
+    if (nbytes == -USB_ERR_STALL) {
+        usbh_msc_bulk_only_reset_recovery(msc_class);
+    }
     return nbytes < 0 ? (int)nbytes : 0;
 }
 

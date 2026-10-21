@@ -10,8 +10,8 @@
 #define CONFIG_USB_PRINTF_COLOR_ENABLE  1
 #define CONFIG_USB_DBG_LEVEL            2  /* 0=ERR 1=WARN 2=INFO 3=DBG */
 #define CONFIG_USB_ALIGN_SIZE           4
-/* JL sdk.ld 无 .noncacheable 段, 该属性置空 */
-#define USB_NOCACHE_RAM_SECTION
+/* USB 栈与控制器共用缓冲放入 SRAM0, 避免落入 SDRAM */
+#define USB_NOCACHE_RAM_SECTION __attribute__((section(".usb_h_bss")))
 
 /* ================ USB Device Stack ================ */
 #define CONFIG_USBDEV_MAX_BUS           1

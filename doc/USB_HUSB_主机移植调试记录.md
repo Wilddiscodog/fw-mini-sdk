@@ -2,9 +2,10 @@
 
 > 记录 fw-mini-sdk 中 CherryUSB 主机栈(usbh)在杰理 AC791x HUSB 控制器上的
 > 完整调试过程。从首个 `-14` 超时、建链序列还原、速度判定修正，到轮询模式
-> 与文件重复清理，共 12+ 轮迭代。
-> 文档版本对应固件 **V0.3.8**(主机 HS 建链与枚举已全链路打通,
-> 待验证 MSC bulk 512 数据阶段)。
+> 与文件重复清理，共 13+ 轮迭代。
+> 文档版本对应固件 **V0.3.9**(主机 HS 建链与枚举已全链路打通;
+> V0.3.8 的 bulk `-8` 已定性为 app 层 CBW 错误并修复,
+> MSC bulk 512 数据阶段待烧录实测)。
 
 ---
 
@@ -60,6 +61,25 @@
 8. **主机 EP0 CSR0 为 16 位，高字节 bit3 = DISPING(PING 禁用)**。高速设备的
    EP0 不应答 PING，所有 CSR0 写必须带 0x800。闭源 `usb_ctrl_transfer.c`
    每次 `usb_write_csr0` 都带 `CSR0H_DISPING`。
+9. **主机 bulk/intr 通道数据走 RAM DMA 缓冲, 发包必写字节计数**(fw-AC79_AIoT_SDK
+   `cpu.a` 的 `usb.c.o` IR 逆向, V0.3.9~V0.3.10 轮):
+   - 通道 DMA 缓冲地址: TX=`0x16820+8*(n-1)`, RX=`0x16824+8*(n-1)`;
+     地址**不自动递增**, 每包从同一缓冲进出(软件 memcpy)。
+   - 发送字节数: `0x16804+4*n`(ep≥3 有高位 dma size 特殊格式), 置 TXRDY 前
+     必写——不写则发 0 长度包, 设备判无效 CBW 后 HALT 双向管道(V0.3.9 的 -8)。
+   - 屏障: 发送 memcpy 后 `csync`; 接收 memcpy 前 `ssync`。staging 用普通
+     RAM 即可(原厂同款)。
+   - RXCSRL 消费语义: 收到包读走后写 `FLUSH(0x10)`(非读改写, 不再 REQPKT);
+     出错(STALL/NAKTO/ERROR)写 `CLRDT(0x80)`。
+   - 位语义(与 TI 头文件设备模式命名不同): 0x01=RXRDY, 0x40=STALL,
+     0x08=NAKTO/DATAERR, 0x04=ERROR, 0x10=FLUSH, 0x20=REQPKT, 0x80=CLRDT。
+   - TXCSRH.MODE(bit5)原厂主机从不置位(config 写 CSRH=0)。
+   - **EP0 是例外**: `usb_write_ep0` 直接 FIFO0 字节写(无计数无窗口),
+     `usb_read_ep0` 在桥接器 **bit11(0x800)** 拉低窗口内读 FIFO0(bit11 平时
+     为 0, 与本移植 bit12 INT_MODE 窗口互不相干)。
+   - 窗口寄存器(0x16110+0x10*(n-1)): TXMAXP@+0/TXCSR@+2/RXMAXP@+4/RXCSR@+6/
+     RXCOUNT@+8/TXTYPE@+A/TXINTERVAL@+B/RXTYPE@+C/RXINTERVAL@+D; funcaddr:
+     TX=`0x16080+8n`, RX=`0x16084+8n`——与 CherryUSB 移植全部一致(已比对)。
 
 ---
 
@@ -92,6 +112,7 @@
 | V0.3.6 | 轮询后**完全停止枚举**，hub 事件丢失 | V0.3.6 重构残留：处理体内窗口外直接读(`is=HWREGB(IS)` 等)把参数传入的窗口读有效值**覆盖为 0**(窗口外恒 0) | 删除残留读，使用调用方传入的窗口读结果 |
 | V0.3.7 | 枚举恢复 | —(回归修复确认) | — |
 | V0.3.8 | 文件被多轮脚本编辑弄出**整段自我复制**(全部函数双份)+孤儿块 | 多轮 python 行编辑叠加 | 删除重复尾部(保留第一份完整正确副本)，**全部修复首次同时生效**: 枚举全链路打通(两支 U 盘: SanDisk 0781:5567 / Patriot 13fe:6000)，MSC 类加载，卡在 EP2 512B bulk(FIFOSZ 断言，已禁用待实测) |
+| V0.3.9 | MSC 首条命令报 `csw transfer error: -8`, 补 scsi_init 后**依旧**, 且换 U 盘(Patriot 13fe:6000)现象相同: 首条 TUR 的 CBW"发出"后 CSW 被 STALL, 之后所有 CBW 全 STALL(无 CLEAR_FEATURE 恢复, err 计数 22/盘) | 两支不同厂商 U 盘同样失败 → 系统性问题, CBW 在总线上不合法(无效 CBW → 设备 HALT IN+OUT 双管道, 与日志模式吻合)。原厂 `cpu.a` IR 逆向出关键差异: **主机通道发包前必写发送字节数寄存器**(`usb_write_ep_cnt` → `0x16804+4*ep`), 且数据搬运走 RAM DMA 缓冲(`usb_set_dma_taddr/raddr` → `0x16820/24+8*(n-1)`), **从不写 FIFO 端口**; 移植层只写 FIFO+TXRDY, 计数寄存器为 0 → 硬件发出 **0 长度包** → 设备判无效 CBW | `usb_hc_jl82.c` 主机通道(ep≥1)数据通路改原厂同款: 每管道 512B staging 缓冲 + TX memcpy+csync+写计数+TXRDY / RX 硬件落 staging+ssync+memcpy+FLUSH 消费(出错写 CLRDT); 去掉 TXCSRH.MODE(原厂 config 写 CSRH=0); EP0 保持 FIFO 端口(枚举已验证)。版本 V0.3.10 |
 
 ### 关键教训(按代价排序)
 
@@ -149,20 +170,30 @@
 - `FRAME` 不以 1kHz 走 → SOF/帧时钟问题(检查 SOFIE 与 OTG 会话维持)
 - `CSR0` 低字节 `0x10`=ERROR(无应答)、`0x02`=TXRDY 未消费(核心未启动事务)、
   `0x00`=包已上总线等待/完成(轮询模式下由 usbh_host_poll 拾取推进)
+- `[h-bulk] OUT` 行: cnt 回读≠len → 计数寄存器写失败; taddr≠staging 地址 → 地址寄存器写失败
+- `[h-bulk] TXIS` 行: CSRL bit0(TXRDY)仍=1 → 包未被硬件发出(无握手/未启动);
+  bit2=ERROR、bit5=STALLED
+- `[h-bulk] RXIS` 行: CSRL bit6=STALL(设备 HALT)、bit3=NAKTO/DATAERR、bit4=ERROR、
+  bit0=RXRDY(正常收到包)
 
 ---
 
 ## 5. 已知边界与遗留
 
+- [ ] **MSC bulk 数据阶段实测(V0.3.10)**: 主机通道已切原厂 DMA 缓冲通路,
+      CBW 合法性待烧录验证。预期首条 TUR 不再 STALL; 若 CSW 内容异常
+      (`csw signature error`)则说明 RX 缓冲搬运仍有问题, 下一步查
+      0x16824 raddr 时序。
+- [ ] **MSC STALL 恢复未实现**: bulk 管道 STALL 后需 CLEAR_FEATURE(HALT)
+      + 主机侧 CLRDT 才能继续(原厂 `usb_bulk_transfer.c` 有同款处理;
+      主机侧 CLRDT 本轮已随错误路径补上, 设备侧 CLEAR_FEATURE 仍缺)。
+      当前依赖重新插拔/复位恢复; 功能验证阶段可接受。
 - [ ] **诊断设施清理**：固件功能稳定后移除风暴熔断/PRE-POST 探针/setup 打印(保留版本号)。
-- [ ] **MSC bulk 512 数据阶段实测**：`Ep 02 fifo is overflow` 的 FIFOSZ 断言已
-      禁用(寄存器不存在读垃圾值)，EP2 真实 FIFO 容量待实测；若 512 失败，
-      把 MSC IN/OUT 管道都改到 EP1(已验证 512×2 双向)。
 - [ ] **TE 撕裂同步 / 触摸**(LCD)未移植(桩实现)。
 - [ ] **全速主机路径**帧时钟异常未深究(FORCE_FS=1 旧选项，产品无此需求)。
 - [ ] **诊断设施清理**：`[h-ep0]`/`[h-urb]`/`[usbh-mon]` 打印与风暴熔断在功能
       稳定后移除或降级(当前保留便于观察)。
-- [ ] **git 暂缓推送**(本地领先：V0.2.9~V0.3.8 + 本文档，共 8+ 提交)。
+- [ ] **git 暂缓推送**(本地领先：V0.2.9~V0.3.9 + 本文档)。
 
 ## 6. 版本历史
 
@@ -180,3 +211,6 @@
 | V0.3.6 | 重构为 usbh_process_intr + 轮询入口(引入覆盖回归) |
 | V0.3.7 | 修复回归(删窗口外残留读) |
 | V0.3.8 | 清理重复尾部; **枚举全链路打通**, MSC 卡 EP2 512B 待实测 |
+| V0.3.9 | 修复 MSC 首命令 `-8`(STALL): app 补 `usbh_msc_scsi_init`, CBW dDataLength 相位错误消除; bulk CBW/STALL 路径经此轮实测工作正常 |
+| V0.3.10 | 主机通道(ep≥1)数据通路改原厂同款 RAM DMA 缓冲: 补 0x16804 发送计数(根因: 不写发 0 长度包→设备判无效 CBW→STALL), staging memcpy+csync/ssync, RX FLUSH/CLRDT 消费语义, 去 TXCSRH.MODE |
+| V0.3.11 | DMA 通路后**现象与 V0.3.9 完全相同**(首条 TUR CSW 被STALL)→ 缺因在两轮共享路径。补 TX 发起前 `TXCSR=CLRDT\|FLUSH`(0x48, 原厂 config 同款): 通道 toggle 未复位时首包被设备静默丢弃(无握手→TXRDY 不清→被误判发送成功), 设备对"无 CBW 的 IN"回 STALL。另: maxp 对齐原厂写 1023; 加 `[h-bulk]` 诊断(发起时 cnt/taddr 回读, TXIS/RXIS 时 CSRL 快照) |

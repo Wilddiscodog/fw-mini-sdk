@@ -32,14 +32,24 @@ static void usbh_event(struct usbh_bus *busid_port, uint8_t event)
     }
 }
 
-/* MSC 类连接完成(scsi_init 之后)由栈回调, 在 usbh 线程上下文 */
+/* MSC 类连接完成(枚举+set_config 之后)由栈回调, 在 usbh 线程上下文。
+ * 必须先跑 usbh_msc_scsi_init(TUR/INQUIRY/READ CAPACITY): 它填 blocksize,
+ * read10 的 CBW dDataLength = blocksize*nsectors 依赖此值——跳过它时
+ * dDataLength=0, 设备按 MSC BOT 规范判相位错误, 在 CSW 阶段 STALL bulk-in
+ * (即 V0.3.8 的 err=-8)。 */
 void usbh_msc_run(struct usbh_msc *msc_class)
 {
+    int ret = usbh_msc_scsi_init(msc_class);
+    if (ret < 0) {
+        printf("[usbh-msc] scsi_init fail %d\n", ret);
+        return;
+    }
+
     printf("[usbh-msc] U-disk online: blocknum=%u blocksize=%u (%u MB)\n",
            msc_class->blocknum, msc_class->blocksize,
            (unsigned)((uint64_t)msc_class->blocknum * msc_class->blocksize / 1024 / 1024));
 
-    int ret = usbh_msc_scsi_read10(msc_class, 0, sector_buf, 1);
+    ret = usbh_msc_scsi_read10(msc_class, 0, sector_buf, 1);
     if (ret < 0) {
         printf("[usbh-msc] read sector0 fail %d\n", ret);
         return;

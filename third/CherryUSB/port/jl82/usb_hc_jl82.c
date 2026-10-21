@@ -14,6 +14,8 @@
 #include "usbh_hub.h"
 #include "usb_musb_reg.h"
 
+extern void usb_write_ep_cnt(uint8_t usb_id, uint32_t ep, uint32_t len);
+
 #define HWREG(x) \
     (*((volatile uint32_t *)(x)))
 #define HWREGH(x) \
@@ -55,6 +57,32 @@ static inline void jl_usb_read_intr(uint32_t *is, uint32_t *txis, uint32_t *rxis
     *txis = HWREGH(JL82_SIE_BASE + 0x02); /* TXIS */
     *rxis = HWREGH(JL82_SIE_BASE + 0x04); /* RXIS */
     jl_usb_int_mode(1);
+}
+
+/* ---- 主机通道(ep>=1)数据通路: RAM DMA 缓冲, 不走 FIFO 端口 ----
+ * 原厂 usb.c IR 逆向(V0.3.10, fw-AC79_AIoT_SDK cpu.a):
+ *  - 通道 DMA 缓冲地址: TX=0x16820+8*(n-1), RX=0x16824+8*(n-1),
+ *    地址不自动递增, 每包进出同一缓冲(软件 memcpy 搬运)
+ *  - 发送字节数: 0x16804+4*n, 置 TXRDY 前必写(不写按 0 长度发包,
+ *    设备判无效 CBW → STALL 双向管道 = V0.3.9 的 -8 现象)
+ *  - 屏障: 发送 memcpy 后 csync; 接收 memcpy 前 ssync(原厂同款)
+ *  - RXCSRL 消费: 读走数据后写 FLUSH(0x10); 出错写 CLRDT(0x80)
+ * EP0 为例外: 保持 FIFO0 端口读写(枚举全链路已验证)。 */
+#define JL82_TADDR(ep)  (*(volatile uint32_t *)(0x16820UL + 0x8 * ((ep) - 1)))
+#define JL82_RADDR(ep)  (*(volatile uint32_t *)(0x16824UL + 0x8 * ((ep) - 1)))
+
+/* JL: HUSB DMA 只能访问内部 RAM0(0x1C00000), 不能访问 SDRAM——缓冲必须
+ * 放 .usb_h_dma 段(sdk.ld 已收集进 ram0, 原厂同款)。放 SDRAM 时硬件
+ * 取到垃圾 → 设备判无效 CBW → STALL(V0.3.9~V0.3.11 轮根因) */
+static uint8_t g_jl82_pipe_stage[CONFIG_USB_MUSB_PIPE_NUM][512]
+    __attribute__((section(".usb_h_dma"), aligned(32)));
+
+static void jl82_tx_launch(uint8_t chidx, const uint8_t *buf, uint16_t len)
+{
+    memcpy(g_jl82_pipe_stage[chidx], buf, len);
+    __asm__ volatile("csync");
+    usb_write_ep_cnt(1, chidx, len);
+    __asm__ volatile("csync");
 }
 #endif
 
@@ -197,6 +225,18 @@ static inline void jl_usb_read_intr(uint32_t *is, uint32_t *txis, uint32_t *rxis
 #endif
 
 #define USB_FIFO_BASE(ep_idx) (USB_BASE + MUSB_FIFO_OFFSET + 0x4 * ep_idx)
+
+static inline void jl82_write_txcsr(struct usbh_bus *bus, uint8_t ep_idx, uint16_t value)
+{
+    HWREGH(USB_TXCSRL_BASE(ep_idx)) = value;
+    __asm__ volatile("csync");
+}
+
+static inline void jl82_write_rxcsr(struct usbh_bus *bus, uint8_t ep_idx, uint16_t value)
+{
+    HWREGH(USB_RXCSRL_BASE(ep_idx)) = value;
+    __asm__ volatile("csync");
+}
 
 typedef enum {
     USB_EP0_STATE_SETUP = 0x0, /**< SETUP DATA */
@@ -452,18 +492,23 @@ int musb_bulk_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
 #ifdef CONFIG_USB_MUSB_WITHOUT_MULTIPOINT
         HWREGB(USB_BASE + MUSB_FADDR_OFFSET) = (urb->hport->dev_addr & 0x7F);
         HWREGB(USB_RXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_BULK;
-        HWREGH(USB_RXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
+        HWREGH(USB_RXMAP_BASE(chidx)) = 1023; /* JL: 原厂 bulk config 写 1023(非 mps) */
         HWREGB(USB_RXINTERVAL_BASE(chidx)) = 0;
 #else
         HWREGB(USB_RXADDR_BASE(chidx)) = urb->hport->dev_addr;
         HWREGB(USB_RXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_BULK;
-        HWREGH(USB_RXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
+        HWREGH(USB_RXMAP_BASE(chidx)) = 1023; /* JL: 原厂 bulk config 写 1023(非 mps) */
         HWREGB(USB_RXINTERVAL_BASE(chidx)) = 0;
         HWREGB(USB_RXHUBADDR_BASE(chidx)) = 0;
         HWREGB(USB_RXHUBPORT_BASE(chidx)) = 0;
 #endif
+        /* JL: IN 数据由硬件 DMA 到通道缓冲(地址不自动递增), 每 urb 重指 */
+        JL82_RADDR(chidx) = (uint32_t)g_jl82_pipe_stage[chidx];
+        __asm__ volatile("csync");
         HWREGB(USB_TXCSRH_BASE(chidx)) &= ~USB_TXCSRH1_MODE;
-        HWREGB(USB_RXCSRL_BASE(chidx)) = USB_RXCSRL1_REQPKT;
+        /* 原厂 config 同款: CLRDT|FLUSH 复位 toggle/FIFO, 再 REQPKT 发起 */
+        jl82_write_rxcsr(bus, chidx, USB_RXCSRL1_CLRDT | USB_RXCSRL1_FLUSH);
+        jl82_write_rxcsr(bus, chidx, USB_RXCSRL1_REQPKT);
 
         HWREGH(USB_BASE + MUSB_RXIE_OFFSET) |= (1 << chidx);
     } else {
@@ -472,12 +517,12 @@ int musb_bulk_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
 #ifdef CONFIG_USB_MUSB_WITHOUT_MULTIPOINT
         HWREGB(USB_BASE + MUSB_FADDR_OFFSET) = (urb->hport->dev_addr & 0x7F);
         HWREGB(USB_TXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_BULK;
-        HWREGH(USB_TXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
+        HWREGH(USB_TXMAP_BASE(chidx)) = 1023; /* JL: 原厂 bulk config 写 1023(非 mps) */
         HWREGB(USB_TXINTERVAL_BASE(chidx)) = 0;
 #else
         HWREGB(USB_TXADDR_BASE(chidx)) = urb->hport->dev_addr;
         HWREGB(USB_TXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_BULK;
-        HWREGH(USB_TXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
+        HWREGH(USB_TXMAP_BASE(chidx)) = 1023; /* JL: 原厂 bulk config 写 1023(非 mps) */
         HWREGB(USB_TXINTERVAL_BASE(chidx)) = 0;
         HWREGB(USB_TXHUBADDR_BASE(chidx)) = 0;
         HWREGB(USB_TXHUBPORT_BASE(chidx)) = 0;
@@ -487,9 +532,31 @@ int musb_bulk_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
             buflen = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
         }
 
-        musb_write_packet(bus, chidx, buffer, buflen);
-        HWREGB(USB_TXCSRH_BASE(chidx)) |= USB_TXCSRH1_MODE;
-        HWREGB(USB_TXCSRL_BASE(chidx)) = USB_TXCSRL1_TXRDY;
+        /* JL: TXCSRH.MODE 原厂主机从不置位(config 写 CSRH=0), 不碰。
+         * CLRDT|FLUSH(0x48)与原厂 config 同款: 复位通道 toggle 到 DATA0——
+         * 否则首包 toggle 不匹配会被设备静默丢弃(无握手, TXRDY 不清),
+         * 设备对"无 CBW 的 IN"回 STALL, V0.3.9/V0.3.10 同象失败的共同缺因 */
+        JL82_TADDR(chidx) = (uint32_t)g_jl82_pipe_stage[chidx];
+        __asm__ volatile("csync");
+        jl82_write_txcsr(bus, chidx, USB_TXCSRL1_CLRDT | USB_TXCSRL1_FLUSH);
+        jl82_tx_launch(chidx, buffer, (uint16_t)buflen);
+        {
+            static uint8_t dbg_cnt = 0;
+            if (dbg_cnt < 2) {
+                  printf("[h-bulk] OUT ch=%u len=%u ep=%02x type=%02x maxp=%u count=%u stage=%08x taddr=%08x data=",
+                       chidx, (unsigned)buflen, urb->ep->bEndpointAddress,
+                       (unsigned)HWREGB(USB_TXTYPE_BASE(chidx)),
+                       (unsigned)HWREGH(USB_TXMAP_BASE(chidx)),
+                      (unsigned)buflen, (unsigned)g_jl82_pipe_stage[chidx],
+                      (unsigned)JL82_TADDR(chidx));
+                for (uint16_t index = 0; index < buflen; index++) {
+                    printf("%02x", g_jl82_pipe_stage[chidx][index]);
+                }
+                printf("\n");
+                dbg_cnt++;
+            }
+        }
+        jl82_write_txcsr(bus, chidx, USB_TXCSRL1_TXRDY);
 
         HWREGH(USB_BASE + MUSB_TXIE_OFFSET) |= (1 << chidx);
     }
@@ -519,18 +586,21 @@ int musb_intr_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
 #ifdef CONFIG_USB_MUSB_WITHOUT_MULTIPOINT
         HWREGB(USB_BASE + MUSB_FADDR_OFFSET) = (urb->hport->dev_addr & 0x7F);
         HWREGB(USB_RXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_INT;
-        HWREGH(USB_RXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
+        HWREGH(USB_RXMAP_BASE(chidx)) = 1023; /* JL: 原厂 bulk config 写 1023(非 mps) */
         HWREGB(USB_RXINTERVAL_BASE(chidx)) = urb->ep->bInterval;
 #else
         HWREGB(USB_RXADDR_BASE(chidx)) = urb->hport->dev_addr;
         HWREGB(USB_RXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_INT;
-        HWREGH(USB_RXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
+        HWREGH(USB_RXMAP_BASE(chidx)) = 1023; /* JL: 原厂 bulk config 写 1023(非 mps) */
         HWREGB(USB_RXINTERVAL_BASE(chidx)) = urb->ep->bInterval;
         HWREGB(USB_RXHUBADDR_BASE(chidx)) = 0;
         HWREGB(USB_RXHUBPORT_BASE(chidx)) = 0;
 #endif
+        JL82_RADDR(chidx) = (uint32_t)g_jl82_pipe_stage[chidx];
+        __asm__ volatile("csync");
         HWREGB(USB_TXCSRH_BASE(chidx)) &= ~USB_TXCSRH1_MODE;
-        HWREGB(USB_RXCSRL_BASE(chidx)) = USB_RXCSRL1_REQPKT;
+        jl82_write_rxcsr(bus, chidx, USB_RXCSRL1_CLRDT | USB_RXCSRL1_FLUSH);
+        jl82_write_rxcsr(bus, chidx, USB_RXCSRL1_REQPKT);
 
         HWREGH(USB_BASE + MUSB_RXIE_OFFSET) |= (1 << chidx);
     } else {
@@ -539,12 +609,12 @@ int musb_intr_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
 #ifdef CONFIG_USB_MUSB_WITHOUT_MULTIPOINT
         HWREGB(USB_BASE + MUSB_FADDR_OFFSET) = (urb->hport->dev_addr & 0x7F);
         HWREGB(USB_TXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_INT;
-        HWREGH(USB_TXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
+        HWREGH(USB_TXMAP_BASE(chidx)) = 1023; /* JL: 原厂 bulk config 写 1023(非 mps) */
         HWREGB(USB_TXINTERVAL_BASE(chidx)) = urb->ep->bInterval;
 #else
         HWREGB(USB_TXADDR_BASE(chidx)) = urb->hport->dev_addr;
         HWREGB(USB_TXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_INT;
-        HWREGH(USB_TXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
+        HWREGH(USB_TXMAP_BASE(chidx)) = 1023; /* JL: 原厂 bulk config 写 1023(非 mps) */
         HWREGB(USB_TXINTERVAL_BASE(chidx)) = urb->ep->bInterval;
         HWREGB(USB_TXHUBADDR_BASE(chidx)) = 0;
         HWREGB(USB_TXHUBPORT_BASE(chidx)) = 0;
@@ -554,9 +624,11 @@ int musb_intr_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
             buflen = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
         }
 
-        musb_write_packet(bus, chidx, buffer, buflen);
-        HWREGB(USB_TXCSRH_BASE(chidx)) |= USB_TXCSRH1_MODE;
-        HWREGB(USB_TXCSRL_BASE(chidx)) = USB_TXCSRL1_TXRDY;
+        JL82_TADDR(chidx) = (uint32_t)g_jl82_pipe_stage[chidx];
+        __asm__ volatile("csync");
+        jl82_write_txcsr(bus, chidx, USB_TXCSRL1_CLRDT | USB_TXCSRL1_FLUSH);
+        jl82_tx_launch(chidx, buffer, (uint16_t)buflen);
+        jl82_write_txcsr(bus, chidx, USB_TXCSRL1_TXRDY);
 
         HWREGH(USB_BASE + MUSB_TXIE_OFFSET) |= (1 << chidx);
     }
@@ -1337,16 +1409,25 @@ static void usbh_process_intr(uint8_t busid, uint32_t is, uint32_t txis, uint32_
 
             ep_csrl_status = HWREGB(USB_TXCSRL_BASE(ep_idx));
 
+            {
+                static uint8_t txdbg_cnt = 0;
+                if (txdbg_cnt < 6) {
+                    printf("[h-bulk] TXIS ch=%d CSRL=%02x urb_len=%u\n",
+                           ep_idx, ep_csrl_status, urb->transfer_buffer_length);
+                    txdbg_cnt++;
+                }
+            }
+
             if (ep_csrl_status & USB_TXCSRL1_ERROR) {
-                HWREGB(USB_TXCSRL_BASE(ep_idx)) &= ~USB_TXCSRL1_ERROR;
+                jl82_write_txcsr(bus, ep_idx, HWREGH(USB_TXCSRL_BASE(ep_idx)) & ~USB_TXCSRL1_ERROR);
                 urb->errorcode = -USB_ERR_IO;
                 musb_urb_waitup(urb);
             } else if (ep_csrl_status & USB_TXCSRL1_NAKTO) {
-                HWREGB(USB_TXCSRL_BASE(ep_idx)) &= ~USB_TXCSRL1_NAKTO;
+                jl82_write_txcsr(bus, ep_idx, HWREGH(USB_TXCSRL_BASE(ep_idx)) & ~USB_TXCSRL1_NAKTO);
                 urb->errorcode = -USB_ERR_NAK;
                 musb_urb_waitup(urb);
             } else if (ep_csrl_status & USB_TXCSRL1_STALLED) {
-                HWREGB(USB_TXCSRL_BASE(ep_idx)) &= ~USB_TXCSRL1_STALLED;
+                jl82_write_txcsr(bus, ep_idx, HWREGH(USB_TXCSRL_BASE(ep_idx)) & ~USB_TXCSRL1_STALLED);
                 urb->errorcode = -USB_ERR_STALL;
                 musb_urb_waitup(urb);
             } else {
@@ -1366,8 +1447,9 @@ static void usbh_process_intr(uint8_t busid, uint32_t is, uint32_t txis, uint32_
                         urb->errorcode = 0;
                         musb_urb_waitup(urb);
                     } else {
-                        musb_write_packet(bus, ep_idx, urb->transfer_buffer, MIN(urb->transfer_buffer_length, USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize)));
-                        HWREGB(USB_TXCSRL_BASE(ep_idx)) = USB_TXCSRL1_TXRDY;
+                        /* JL: 下一包从通道缓冲发出(计数寄存器必写) */
+                        jl82_tx_launch(ep_idx, urb->transfer_buffer, (uint16_t)MIN(urb->transfer_buffer_length, USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize)));
+                        jl82_write_txcsr(bus, ep_idx, USB_TXCSRL1_TXRDY);
                     }
                 }
             }
@@ -1387,25 +1469,36 @@ static void usbh_process_intr(uint8_t busid, uint32_t is, uint32_t txis, uint32_
             ep_csrl_status = HWREGB(USB_RXCSRL_BASE(ep_idx));
             //ep_csrh_status = HWREGB(USB_BASE + USB_RXCSRH_BASE(ep_idx)); // todo:for iso transfer
 
+            {
+                static uint8_t rxdbg_cnt = 0;
+                if (rxdbg_cnt < 6) {
+                    printf("[h-bulk] RXIS ch=%d CSRL=%02x urb_len=%u\n",
+                           ep_idx, ep_csrl_status, urb->transfer_buffer_length);
+                    rxdbg_cnt++;
+                }
+            }
+
             if (ep_csrl_status & USB_RXCSRL1_ERROR) {
-                HWREGB(USB_RXCSRL_BASE(ep_idx)) &= ~USB_RXCSRL1_ERROR;
+                jl82_write_rxcsr(bus, ep_idx, USB_RXCSRL1_CLRDT);
                 urb->errorcode = -USB_ERR_IO;
                 musb_urb_waitup(urb);
             } else if (ep_csrl_status & USB_RXCSRL1_NAKTO) {
-                HWREGB(USB_RXCSRL_BASE(ep_idx)) &= ~USB_RXCSRL1_NAKTO;
+                jl82_write_rxcsr(bus, ep_idx, USB_RXCSRL1_CLRDT);
                 urb->errorcode = -USB_ERR_NAK;
                 musb_urb_waitup(urb);
             } else if (ep_csrl_status & USB_RXCSRL1_STALLED) {
-                HWREGB(USB_RXCSRL_BASE(ep_idx)) &= ~USB_RXCSRL1_STALLED;
+                jl82_write_rxcsr(bus, ep_idx, USB_RXCSRL1_CLRDT);
                 urb->errorcode = -USB_ERR_STALL;
                 musb_urb_waitup(urb);
             } else if (ep_csrl_status & USB_RXCSRL1_RXRDY) {
                 if (USB_GET_ENDPOINT_TYPE(urb->ep->bmAttributes) != USB_ENDPOINT_TYPE_ISOCHRONOUS) {
                     size = HWREGH(USB_RXCOUNT_BASE(ep_idx));
 
-                    musb_read_packet(bus, ep_idx, urb->transfer_buffer, size);
-
-                    HWREGB(USB_RXCSRL_BASE(ep_idx)) &= ~USB_RXCSRL1_RXRDY;
+                    /* JL: 数据落在通道 DMA 缓冲(固定地址), ssync 后取出 */
+                    __asm__ volatile("ssync");
+                    memcpy(urb->transfer_buffer, g_jl82_pipe_stage[ep_idx], size);
+                    /* 原厂消费动作: 写 FLUSH 清 RXRDY(非读改写), 停止再要包 */
+                    jl82_write_rxcsr(bus, ep_idx, USB_RXCSRL1_FLUSH);
 
                     urb->transfer_buffer += size;
                     urb->transfer_buffer_length -= size;
@@ -1416,7 +1509,7 @@ static void usbh_process_intr(uint8_t busid, uint32_t is, uint32_t txis, uint32_
                         urb->errorcode = 0;
                         musb_urb_waitup(urb);
                     } else {
-                        HWREGB(USB_RXCSRL_BASE(ep_idx)) = USB_RXCSRL1_REQPKT;
+                        jl82_write_rxcsr(bus, ep_idx, USB_RXCSRL1_REQPKT);
                     }
                 }
             }
