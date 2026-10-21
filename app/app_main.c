@@ -293,21 +293,35 @@ static void lcd_test_task(void *p)
 /*============================ USB：按 MINI_USB_MODE 选择角色 ================= */
 #if (MINI_USB_MODE == MINI_USB_MODE_HOST)
 extern void usbh_msc_demo_start(void);
+extern void USBH_IRQHandler(uint8_t busid);
 extern volatile uint32_t g_hc_irq_cnt, g_ep0_irq_cnt, g_ep0_setup_cnt, g_ep0_last_csr0, g_urb_err_cnt;
 static void usb_mode_task(void *p)
 {
+    uint32_t mon = 0;
+
     os_time_dly(100);
     usbh_msc_demo_start();      /* usbh 线程由栈内部创建, 本任务只负责启动 */
+
+    /* 主机传输完成改为轮询模式(与闭源 usb_ctrl_transfer 轮询 CSR0 同款):
+     * 主机角色下 EP0 完成中断不触发(实测), 轮询是可靠路径。 */
     while (1) {
-        os_time_dly(200);       /* 2s: 主机状态快照(DEVCTL/帧计数/CSR0/TXIE/RXIE/桥接器) */
-        printf("[usbh-mon] irq=%u ep0=%u setup=%u err=%u | DEVCTL=%02x FRAME=%04x CSR0=%04x TXIE=%04x RXIE=%04x BR=%08x\n",
-               g_hc_irq_cnt, g_ep0_irq_cnt, g_ep0_setup_cnt, g_urb_err_cnt,
-               *(volatile unsigned char *)0x16060UL,
-               *(volatile unsigned short *)0x1600CUL,
-               *(volatile unsigned short *)0x16102UL,
-               *(volatile unsigned short *)0x16006UL,
-               *(volatile unsigned short *)0x16008UL,
-               *(volatile unsigned long *)0x16800UL);
+        os_time_dly(1);         /* 10ms 轮询周期 */
+        uint16_t pend = ((*(volatile unsigned short *)0x16002UL) & (*(volatile unsigned short *)0x16006UL))
+                      | ((*(volatile unsigned short *)0x16004UL) & (*(volatile unsigned short *)0x16008UL));
+        if (pend) {
+            USBH_IRQHandler(0); /* 内部为窗口读清除, 不会重复处理 */
+        }
+        if (++mon >= 200) {     /* 2s: 状态快照(DEVCTL/帧计数/CSR0/TXIS/TXIE/桥接器) */
+            mon = 0;
+            printf("[usbh-mon] irq=%u ep0=%u setup=%u err=%u | DEVCTL=%02x FRAME=%04x CSR0=%04x TXIS=%04x TXIE=%04x BR=%08x\n",
+                   g_hc_irq_cnt, g_ep0_irq_cnt, g_ep0_setup_cnt, g_urb_err_cnt,
+                   *(volatile unsigned char *)0x16060UL,
+                   *(volatile unsigned short *)0x1600CUL,
+                   *(volatile unsigned short *)0x16102UL,
+                   *(volatile unsigned short *)0x16002UL,
+                   *(volatile unsigned short *)0x16006UL,
+                   *(volatile unsigned long *)0x16800UL);
+        }
     }
 }
 #else

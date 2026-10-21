@@ -10,6 +10,7 @@ objs/app/app_main.c.o
 -r=objs/app/app_main.c.o,dev_write,l
 -r=objs/app/app_main.c.o,request_irq,l
 -r=objs/app/app_main.c.o,usbh_msc_demo_start,l
+-r=objs/app/app_main.c.o,USBH_IRQHandler,l
 -r=objs/app/app_main.c.o,puts,l
 -r=objs/app/app_main.c.o,irq_info_table,pl
 -r=objs/app/app_main.c.o,task_info_table,pl
