@@ -4,6 +4,7 @@ objs/app/app_main.c.o
 -r=objs/app/app_main.c.o,clk_get,l
 -r=objs/app/app_main.c.o,os_task_create,l
 -r=objs/app/app_main.c.o,key_early_init,l
+-r=objs/app/app_main.c.o,periph_demo_start,l
 -r=objs/app/app_main.c.o,dev_open,l
 -r=objs/app/app_main.c.o,os_time_dly,l
 -r=objs/app/app_main.c.o,dev_ioctl,l
@@ -83,6 +84,8 @@ objs/app/cdc_acm_msc_app.c.o
 -r=objs/app/cdc_acm_msc_app.c.o,intf1,pl
 -r=objs/app/cdc_acm_msc_app.c.o,intf2,pl
 -r=objs/app/cdc_acm_msc_app.c.o,intf3,pl
+objs/app/periph_demo.c.o
+-r=objs/app/periph_demo.c.o,periph_demo_start,pl
 objs/app/usbh_msc_app.c.o
 -r=objs/app/usbh_msc_app.c.o,disk_initialize,pl
 -r=objs/app/usbh_msc_app.c.o,disk_status,pl

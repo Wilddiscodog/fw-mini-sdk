@@ -42,8 +42,7 @@ UART1_PLATFORM_DATA_END();
  * W25Qxx 等标准 SPI Flash 接法；CS 由软件控制（见 app_main.c 的 spi 任务） */
 SPI2_PLATFORM_DATA_BEGIN(spi2_data)
 	.clk    = 2000000,
-	.mode   = SPI_STD_MODE,
-	.port   = 'C',
+	.mode   = SPI_STD_MODE,	.port   = 'C',
 	.attr   = SPI_SCLK_L_UPL_SMPH | SPI_BIDIR_MODE,
 SPI2_PLATFORM_DATA_END();
 
@@ -109,11 +108,54 @@ static const struct low_power_param power_param = {
     .vlvd_value		= VLVD_SEL_25V,
 };
 
+/*============================ RTC：内部时钟 (MINI_RTC_SUPPORT) ================== */
+#if (defined MINI_RTC_SUPPORT) && MINI_RTC_SUPPORT
+const struct rtc_init_config rtc_init_data = {
+	.rtc_clk_sel   = RTC_CLK_SEL_INSIDE,
+	.rtc_power_sel = RTCVDD_SUPPLY_OUTSIDE,   /* TODO: 有 RTC 电池时按硬件改 */
+};
+#endif
+
+/*============================ SD0：A 口 1 线 (MINI_SD_SUPPORT) ==================
+ * 引脚组/检卡方式为 DevKitBoard 默认, **必须按实际硬件核对** */
+#if (defined MINI_SD_SUPPORT) && MINI_SD_SUPPORT
+SD0_PLATFORM_DATA_BEGIN(sd0_data)
+	.port       = 'A',              /* TODO: 按硬件改 SD 引脚组 */
+	.priority   = 3,
+	.data_width = 1,                /* 1 线模式 */
+	.speed      = 20000000,         /* 20MHz */
+	.detect_mode = SD_CMD_DECT,     /* CMD 检卡 */
+	.detect_func = NULL,
+SD0_PLATFORM_DATA_END();
+#endif
+
+/*============================ GPCNT：脉冲计数 (MINI_GPCNT_SUPPORT) ============== */
+#if (defined MINI_GPCNT_SUPPORT) && MINI_GPCNT_SUPPORT
+const struct gpcnt_platform_data gpcnt_data = {
+	.gpcnt_gpio    = IO_PORTC_07,   /* TODO: 按硬件改 */
+	.gss_clk_source = GPCNT_PLL_CLK,/* 480M */
+	.ch_source     = GPCNT_INPUT_CHANNEL4,
+	.cycle         = CYCLE_15,
+};
+#endif
+
 REGISTER_DEVICES(device_table) = {
 	{"uart0", &uart_dev_ops, (void *)&uart0_data },
 	{"uart1", &uart_dev_ops, (void *)&uart1_data },
 	{"spi2",  &spi_dev_ops,  (void *)&spi2_data },
 	{"iic0",  &iic_dev_ops,  (void *)&sw_iic0_data },
+#if (defined MINI_PWM_SUPPORT) && MINI_PWM_SUPPORT
+	{"pwm1",  &pwm_dev_ops,  (void *)&pwm_data1 },
+#endif
+#if (defined MINI_RTC_SUPPORT) && MINI_RTC_SUPPORT
+	{"rtc",   &rtc_dev_ops,  NULL },
+#endif
+#if (defined MINI_SD_SUPPORT) && MINI_SD_SUPPORT
+	{"sd0",   &sd_dev_ops,   (void *)&sd0_data },
+#endif
+#if (defined MINI_GPCNT_SUPPORT) && MINI_GPCNT_SUPPORT
+	{"gpcnt", &gpcnt_dev_ops,(void *)&gpcnt_data },
+#endif
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 	{"emi",   &emi_dev_ops,  (void *)&emi_data },
 #endif

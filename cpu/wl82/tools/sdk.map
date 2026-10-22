@@ -909,6 +909,7 @@ Discarded input sections
  .text          0x00000000        0x0 objs/app/bt_wifi_app.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/app/bt_profile_config.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/app/cdc_acm_msc_app.c.o (symbol from plugin)
+ .text          0x00000000        0x0 objs/app/periph_demo.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/app/usbh_msc_app.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/app/usbh_cdc_hid_app.c.o (symbol from plugin)
  .text          0x00000000        0x0 objs/app/common_ble/le_hogp.c.o (symbol from plugin)
@@ -1354,6 +1355,7 @@ LOAD ../../../cpu/wl82/tools/sdk.elf.o
 LOAD objs/app/bt_wifi_app.c.o
 LOAD objs/app/bt_profile_config.c.o
 LOAD objs/app/cdc_acm_msc_app.c.o
+LOAD objs/app/periph_demo.c.o
 LOAD objs/app/usbh_msc_app.c.o
 LOAD objs/app/usbh_cdc_hid_app.c.o
 LOAD objs/app/common_ble/le_hogp.c.o
@@ -2587,9 +2589,9 @@ LOAD C:/JL/pi32/pi32v2-lib/r3/libcompiler-rt.a
 LOAD ../../../cpu/wl82/liba/lib_usb_syn.a
 OUTPUT(../../../cpu/wl82/tools/sdk.elf elf32-pi32v2)
 
-.debug_str      0x00000000    0x49052
- .debug_str     0x00000000    0x49052 ../../../cpu/wl82/tools/sdk.elf.o
-                              0x4e157 (size before relaxing)
+.debug_str      0x00000000    0x4906d
+ .debug_str     0x00000000    0x4906d ../../../cpu/wl82/tools/sdk.elf.o
+                              0x4e172 (size before relaxing)
 
 .debug_loc      0x00000000    0x1e084
  .debug_loc     0x00000000    0x1e084 ../../../cpu/wl82/tools/sdk.elf.o
@@ -2600,11 +2602,11 @@ OUTPUT(../../../cpu/wl82/tools/sdk.elf elf32-pi32v2)
  .debug_abbrev  0x00000f15       0x28 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
  .debug_abbrev  0x00000f3d       0x28 ../../../cpu/wl82/liba/system.a(movable.S.o)
 
-.debug_info     0x00000000   0x11ddcc
- .debug_info    0x00000000   0x11d9e3 ../../../cpu/wl82/tools/sdk.elf.o
- .debug_info    0x0011d9e3      0x1de ../../../cpu/wl82/liba/cpu.a(startup.S.o)
- .debug_info    0x0011dbc1      0x10d ../../../cpu/wl82/liba/system.a(port_asm.S.o)
- .debug_info    0x0011dcce       0xfe ../../../cpu/wl82/liba/system.a(movable.S.o)
+.debug_info     0x00000000   0x11ddea
+ .debug_info    0x00000000   0x11da01 ../../../cpu/wl82/tools/sdk.elf.o
+ .debug_info    0x0011da01      0x1de ../../../cpu/wl82/liba/cpu.a(startup.S.o)
+ .debug_info    0x0011dbdf      0x10d ../../../cpu/wl82/liba/system.a(port_asm.S.o)
+ .debug_info    0x0011dcec       0xfe ../../../cpu/wl82/liba/system.a(movable.S.o)
 
 .debug_ranges   0x00000000     0x30a8
  .debug_ranges  0x00000000     0x30a8 ../../../cpu/wl82/tools/sdk.elf.o
@@ -2626,45 +2628,45 @@ OUTPUT(../../../cpu/wl82/tools/sdk.elf elf32-pi32v2)
 .debug_frame    0x00000000     0x6624
  .debug_frame   0x00000000     0x6624 ../../../cpu/wl82/tools/sdk.elf.o
 
-.debug_line     0x00000000    0x4d0d8
- .debug_line    0x00000000    0x4c8a0 ../../../cpu/wl82/tools/sdk.elf.o
- .debug_line    0x0004c8a0       0x2c objs/include_lib/btctrler/version.z.S.o
- .debug_line    0x0004c8cc       0x2c objs/include_lib/btstack/version.z.S.o
- .debug_line    0x0004c8f8       0x2c objs/include_lib/driver/version.z.S.o
- .debug_line    0x0004c924       0x2c objs/include_lib/media/version.z.S.o
- .debug_line    0x0004c950       0x2c objs/include_lib/net/version.z.S.o
- .debug_line    0x0004c97c       0x2c objs/include_lib/server/version.z.S.o
- .debug_line    0x0004c9a8       0x2c objs/include_lib/system/version.z.S.o
- .debug_line    0x0004c9d4       0x2c objs/include_lib/update/version.z.S.o
- .debug_line    0x0004ca00       0x2c objs/include_lib/utils/version.z.S.o
- .debug_line    0x0004ca2c       0x2c objs/lib/net/version.z.S.o
- .debug_line    0x0004ca58       0x2c objs/lib/server/version.z.S.o
- .debug_line    0x0004ca84       0x2c objs/lib/utils/version.z.S.o
- .debug_line    0x0004cab0       0xcf ../../../cpu/wl82/liba/cpu.a(startup.S.o)
- .debug_line    0x0004cb7f       0x2c ../../../cpu/wl82/liba/cpu.a(version.z.o)
- .debug_line    0x0004cbab       0x2c ../../../cpu/wl82/liba/event.a(version.z.o)
- .debug_line    0x0004cbd7       0xd2 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
- .debug_line    0x0004cca9       0xbf ../../../cpu/wl82/liba/system.a(movable.S.o)
- .debug_line    0x0004cd68       0x2c ../../../cpu/wl82/liba/system.a(version.z.o)
- .debug_line    0x0004cd94       0x2c ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
- .debug_line    0x0004cdc0       0x2c ../../../cpu/wl82/liba/fs.a(version.z.o)
- .debug_line    0x0004cdec       0x2c ../../../cpu/wl82/liba/common_lib.a(version.z.o)
- .debug_line    0x0004ce18       0x2c ../../../cpu/wl82/liba/update.a(version.z.o)
- .debug_line    0x0004ce44       0x2c ../../../cpu/wl82/liba/wl_rf_common.a(version.z.o)
- .debug_line    0x0004ce70       0x2c ../../../cpu/wl82/liba/btctrler.a(version.z.o)
- .debug_line    0x0004ce9c       0x2c ../../../cpu/wl82/liba/btstack.a(version.z.o)
- .debug_line    0x0004cec8       0x2c ../../../cpu/wl82/liba/crypto_toolbox_Osize.a(version.z.o)
- .debug_line    0x0004cef4       0x2c ../../../cpu/wl82/liba/lib_ccm_aes.a(version.z.o)
- .debug_line    0x0004cf20       0x2c ../../../cpu/wl82/liba/lib_sig_mesh.a(version.z.o)
- .debug_line    0x0004cf4c       0x2c ../../../cpu/wl82/liba/hsm.a(version.z.o)
- .debug_line    0x0004cf78       0x2c ../../../cpu/wl82/liba/wpasupplicant.a(version.z.o)
- .debug_line    0x0004cfa4       0x2c ../../../cpu/wl82/liba/libmbedtls_2_2_1.a(version.z.o)
- .debug_line    0x0004cfd0       0x2c ../../../cpu/wl82/liba/http_cli.a(version.z.o)
- .debug_line    0x0004cffc       0x2c ../../../cpu/wl82/liba/json.a(version.z.o)
- .debug_line    0x0004d028       0x2c ../../../cpu/wl82/liba/iperf.a(version.z.o)
- .debug_line    0x0004d054       0x2c ../../../cpu/wl82/liba/lwip_2_1_3.a(version.z.o)
- .debug_line    0x0004d080       0x2c ../../../cpu/wl82/liba/wl_wifi_sta.a(version.z.o)
- .debug_line    0x0004d0ac       0x2c ../../../cpu/wl82/liba/net_server.a(version.z.o)
+.debug_line     0x00000000    0x4d0f5
+ .debug_line    0x00000000    0x4c8bd ../../../cpu/wl82/tools/sdk.elf.o
+ .debug_line    0x0004c8bd       0x2c objs/include_lib/btctrler/version.z.S.o
+ .debug_line    0x0004c8e9       0x2c objs/include_lib/btstack/version.z.S.o
+ .debug_line    0x0004c915       0x2c objs/include_lib/driver/version.z.S.o
+ .debug_line    0x0004c941       0x2c objs/include_lib/media/version.z.S.o
+ .debug_line    0x0004c96d       0x2c objs/include_lib/net/version.z.S.o
+ .debug_line    0x0004c999       0x2c objs/include_lib/server/version.z.S.o
+ .debug_line    0x0004c9c5       0x2c objs/include_lib/system/version.z.S.o
+ .debug_line    0x0004c9f1       0x2c objs/include_lib/update/version.z.S.o
+ .debug_line    0x0004ca1d       0x2c objs/include_lib/utils/version.z.S.o
+ .debug_line    0x0004ca49       0x2c objs/lib/net/version.z.S.o
+ .debug_line    0x0004ca75       0x2c objs/lib/server/version.z.S.o
+ .debug_line    0x0004caa1       0x2c objs/lib/utils/version.z.S.o
+ .debug_line    0x0004cacd       0xcf ../../../cpu/wl82/liba/cpu.a(startup.S.o)
+ .debug_line    0x0004cb9c       0x2c ../../../cpu/wl82/liba/cpu.a(version.z.o)
+ .debug_line    0x0004cbc8       0x2c ../../../cpu/wl82/liba/event.a(version.z.o)
+ .debug_line    0x0004cbf4       0xd2 ../../../cpu/wl82/liba/system.a(port_asm.S.o)
+ .debug_line    0x0004ccc6       0xbf ../../../cpu/wl82/liba/system.a(movable.S.o)
+ .debug_line    0x0004cd85       0x2c ../../../cpu/wl82/liba/system.a(version.z.o)
+ .debug_line    0x0004cdb1       0x2c ../../../cpu/wl82/liba/cfg_tool.a(version.z.o)
+ .debug_line    0x0004cddd       0x2c ../../../cpu/wl82/liba/fs.a(version.z.o)
+ .debug_line    0x0004ce09       0x2c ../../../cpu/wl82/liba/common_lib.a(version.z.o)
+ .debug_line    0x0004ce35       0x2c ../../../cpu/wl82/liba/update.a(version.z.o)
+ .debug_line    0x0004ce61       0x2c ../../../cpu/wl82/liba/wl_rf_common.a(version.z.o)
+ .debug_line    0x0004ce8d       0x2c ../../../cpu/wl82/liba/btctrler.a(version.z.o)
+ .debug_line    0x0004ceb9       0x2c ../../../cpu/wl82/liba/btstack.a(version.z.o)
+ .debug_line    0x0004cee5       0x2c ../../../cpu/wl82/liba/crypto_toolbox_Osize.a(version.z.o)
+ .debug_line    0x0004cf11       0x2c ../../../cpu/wl82/liba/lib_ccm_aes.a(version.z.o)
+ .debug_line    0x0004cf3d       0x2c ../../../cpu/wl82/liba/lib_sig_mesh.a(version.z.o)
+ .debug_line    0x0004cf69       0x2c ../../../cpu/wl82/liba/hsm.a(version.z.o)
+ .debug_line    0x0004cf95       0x2c ../../../cpu/wl82/liba/wpasupplicant.a(version.z.o)
+ .debug_line    0x0004cfc1       0x2c ../../../cpu/wl82/liba/libmbedtls_2_2_1.a(version.z.o)
+ .debug_line    0x0004cfed       0x2c ../../../cpu/wl82/liba/http_cli.a(version.z.o)
+ .debug_line    0x0004d019       0x2c ../../../cpu/wl82/liba/json.a(version.z.o)
+ .debug_line    0x0004d045       0x2c ../../../cpu/wl82/liba/iperf.a(version.z.o)
+ .debug_line    0x0004d071       0x2c ../../../cpu/wl82/liba/lwip_2_1_3.a(version.z.o)
+ .debug_line    0x0004d09d       0x2c ../../../cpu/wl82/liba/wl_wifi_sta.a(version.z.o)
+ .debug_line    0x0004d0c9       0x2c ../../../cpu/wl82/liba/net_server.a(version.z.o)
 
 .debug_aranges  0x00000000       0x60
  .debug_aranges

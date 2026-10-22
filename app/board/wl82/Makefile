@@ -17,6 +17,16 @@ MINI_LVGL_SUPPORT ?= 0
 #   make clean 后再编译生效; 关闭时为纯 C 固件
 MINI_CXX_SUPPORT ?= 0
 
+# ================ 外设开关(见 doc/外设移植计划.md, 默认全关) ================
+#   启用后 board.c 对应设备表项生效 + periph_demo.c 演示任务运行
+#   引脚/频率在 app/board/wl82/board.c 平台数据中核对
+MINI_PWM_SUPPORT       ?= 0
+MINI_RTC_SUPPORT       ?= 0
+MINI_SD_SUPPORT        ?= 0
+MINI_GPCNT_SUPPORT     ?= 0
+MINI_HW_CRYPTO_SUPPORT ?= 0
+MINI_KEY_EXTRA_SUPPORT ?= 0   # 预留: IR/旋转/CTMU 按键源文件
+
 ifeq ($(OS), Windows_NT)
 # 工具链与构建工具路径已写死, 直接 make / make clean 即可(无需手动设置 PATH)
 TOOL_DIR  := C:/JL/pi32/bin
@@ -135,6 +145,10 @@ ifeq ($(MINI_CXX_SUPPORT),1)
 DEFINES += -DMINI_CXX_SUPPORT=1 -DCONFIG_CXX_SUPPORT
 endif
 DEFINES += -DMINI_LCD_SUPPORT=$(MINI_LCD_SUPPORT) -DMINI_LVGL_SUPPORT=$(MINI_LVGL_SUPPORT)
+DEFINES += -DMINI_PWM_SUPPORT=$(MINI_PWM_SUPPORT) -DMINI_RTC_SUPPORT=$(MINI_RTC_SUPPORT)
+DEFINES += -DMINI_SD_SUPPORT=$(MINI_SD_SUPPORT) -DMINI_GPCNT_SUPPORT=$(MINI_GPCNT_SUPPORT)
+DEFINES += -DMINI_HW_CRYPTO_SUPPORT=$(MINI_HW_CRYPTO_SUPPORT)
+DEFINES += -DMINI_KEY_EXTRA_SUPPORT=$(MINI_KEY_EXTRA_SUPPORT)
 
 # 头文件搜索路径
 INCLUDES := \
@@ -185,6 +199,7 @@ c_SRC_FILES := \
 	../../../app/bt_wifi_app.c \
 	../../../app/bt_profile_config.c \
 	../../../app/cdc_acm_msc_app.c \
+	../../../app/periph_demo.c \
 	../../../app/usbh_msc_app.c \
 	../../../app/usbh_cdc_hid_app.c \
 	../../../app/common_ble/le_hogp.c \
