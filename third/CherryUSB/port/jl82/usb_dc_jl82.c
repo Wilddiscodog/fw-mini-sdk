@@ -42,6 +42,50 @@ static inline void jl_usb_read_intr(uint8_t *is, uint16_t *txis, uint16_t *rxis)
     *rxis = HWREGH(USB_BASE + 0x04); /* MUSB_RXIS_OFFSET */
     jl_usb_int_mode(1);
 }
+
+/* ---- 数据端点(ep>=1)数据通路: RAM DMA 缓冲, 与主机侧(usb_hc_jl82.c)同构 ----
+ * 原厂 usb.c IR 逆向: 设备模式 usb_g_ep_read = RXRDY 后 memcpy(← dma_raddr),
+ * usb_g_ep_write = memcpy(→ dma_taddr) + usb_write_ep_cnt + TXRDY;
+ * FIFO 端口只有 EP0(0x16020) 可用, FIFO1+ 端口读出恒 0(实测 V0.4.0)。
+ * 寄存器: TX 地址 0x16820+8*(n-1), RX 地址 0x16824+8*(n-1), 计数 0x16804+4*n。
+ * 对齐: EP1/2/5/6 需 64B, EP3/4 需 8B(原厂 usb_epbuf_manager 注释) → 统一 64B。 */
+#define JL82_UDC_TXCNT(ep)  (*(volatile uint32_t *)(0x16804UL + 0x4 * (ep)))
+#define JL82_UDC_TADDR(ep)  (*(volatile uint32_t *)(0x16820UL + 0x8 * ((ep) - 1)))
+#define JL82_UDC_RADDR(ep)  (*(volatile uint32_t *)(0x16824UL + 0x8 * ((ep) - 1)))
+
+static uint8_t g_jl82_udc_stage[CONFIG_USB_MUSB_EP_NUM][512]
+    __attribute__((section(".usb_h_dma"), aligned(64)));
+
+/* ---- EP3/4 大缓冲模式(原厂 0x16850/54 + TXCSR/RXCSR bit14 + 打包计数) ----
+ * EP3 = MSC 双向各 4096B; EP4 = 通知(mps)。dma_size=0 表示普通模式。 */
+#define JL82_UDC_BIG_DMA_SIZE   4096u
+#define JL82_UDC_BIGCTL(ep)     (*(volatile uint32_t *)((ep) == 3 ? 0x16850UL : 0x16854UL))
+static uint16_t g_jl82_udc_bigsz[CONFIG_USB_MUSB_EP_NUM];
+/* EP3 大缓冲独立 staging: [0]=TX(IN), [1]=RX(OUT); +64 为硬件越界余量(audio.c 同款) */
+static uint8_t g_jl82_udc_big_stage[2][JL82_UDC_BIG_DMA_SIZE + 64]
+    __attribute__((section(".usb_h_dma"), aligned(64)));
+
+static inline uint8_t *jl82_udc_tx_stage(uint8_t ep_idx)
+{
+    return (ep_idx == 3) ? g_jl82_udc_big_stage[0] : g_jl82_udc_stage[ep_idx];
+}
+static inline uint8_t *jl82_udc_rx_stage(uint8_t ep_idx)
+{
+    return (ep_idx == 3) ? g_jl82_udc_big_stage[1] : g_jl82_udc_stage[ep_idx];
+}
+
+static void jl82_udc_tx_launch(uint8_t ep_idx, const uint8_t *buf, uint16_t len)
+{
+    memcpy(jl82_udc_tx_stage(ep_idx), buf, len);
+    __asm__ volatile("csync");
+    if (g_jl82_udc_bigsz[ep_idx]) {
+        /* 大缓冲打包计数: (dma_size<<16) | len | bit31, 硬件按 MPS 自动切流 */
+        JL82_UDC_TXCNT(ep_idx) = 0x80000000UL | ((uint32_t)g_jl82_udc_bigsz[ep_idx] << 16) | len;
+    } else {
+        JL82_UDC_TXCNT(ep_idx) = len;
+    }
+    __asm__ volatile("csync");
+}
 #else
 #define USB_BASE (g_usbdev_bus[0].reg_base)
 #endif
@@ -196,6 +240,7 @@ struct musb_ep_state {
     uint8_t *xfer_buf;
     uint32_t xfer_len;
     uint32_t actual_xfer_len;
+    uint16_t launch_len; /* JL: 最近一次发射的字节数(TXIS 按此推进) */
 };
 
 /* Driver state */
@@ -487,8 +532,30 @@ int usbd_ep_open(uint8_t busid, const struct usb_endpoint_descriptor *ep)
 
     USB_ASSERT_MSG(ep_idx < CONFIG_USB_MUSB_EP_NUM, "Ep addr %02x overflow", ep->bEndpointAddress);
 
+    /* 端点探针: 组合设备实测通道边界(哪个 EP 打开后工作异常, 边界即通道数) */
+    printf("[ep-open] addr=%02x idx=%u mps=%u attr=%02x\n",
+           ep->bEndpointAddress, ep_idx,
+           USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize), ep->bmAttributes);
+
     old_ep_idx = musb_get_active_ep();
     musb_set_active_ep(ep_idx);
+
+    /* JL: EP3 双向大缓冲(MSC), EP4 TX 小大缓冲(通知), 其余普通模式 */
+    uint16_t bigsz = 0;
+    if (ep_idx == 3) {
+        bigsz = JL82_UDC_BIG_DMA_SIZE;
+    } else if (ep_idx == 4) {
+        bigsz = USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize);
+    }
+    g_jl82_udc_bigsz[ep_idx] = bigsz;
+
+    /* JL: 数据端点走 DMA 缓冲(ep>=1), open 时绑定通道 staging 地址 */
+    if (USB_EP_DIR_IS_OUT(ep->bEndpointAddress)) {
+        JL82_UDC_RADDR(ep_idx) = (uint32_t)jl82_udc_rx_stage(ep_idx);
+    } else {
+        JL82_UDC_TADDR(ep_idx) = (uint32_t)jl82_udc_tx_stage(ep_idx);
+    }
+    __asm__ volatile("csync");
 
     if (USB_EP_DIR_IS_OUT(ep->bEndpointAddress)) {
         g_musb_udc.out_ep[ep_idx].ep_mps = USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize);
@@ -501,7 +568,8 @@ int usbd_ep_open(uint8_t busid, const struct usb_endpoint_descriptor *ep)
                        "Ep %02x fifo is overflow", ep->bEndpointAddress);
 #endif
 
-        HWREGH(USB_RXMAP_BASE(ep_idx)) = USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize);
+        /* JL 大缓冲: MAP 登记缓冲容量(原厂 h/g_ep_config 特殊块写 size 参数) */
+        HWREGH(USB_RXMAP_BASE(ep_idx)) = bigsz ? bigsz : USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize);
 
         //
         // Allow auto clearing of RxPktRdy when packet of size max packet
@@ -533,6 +601,13 @@ int usbd_ep_open(uint8_t busid, const struct usb_endpoint_descriptor *ep)
             ui32Register |= USB_RXCSRH1_ISO;
         }
 
+        /* JL 大缓冲: RXCSR bit14 + 0x16850/54 bit1(RX 模式位) */
+        if (bigsz) {
+            ui32Register |= 0x40;
+            JL82_UDC_BIGCTL(ep_idx) |= (1u << 1);
+            __asm__ volatile("csync");
+        }
+
         HWREGB(USB_RXCSRH_BASE(ep_idx)) = ui32Register;
 
         // Reset the Data toggle to zero.
@@ -552,7 +627,7 @@ int usbd_ep_open(uint8_t busid, const struct usb_endpoint_descriptor *ep)
                        "Ep %02x fifo is overflow", ep->bEndpointAddress);
 #endif
 
-        HWREGH(USB_TXMAP_BASE(ep_idx)) = USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize);
+        HWREGH(USB_TXMAP_BASE(ep_idx)) = bigsz ? bigsz : USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize);
 
         //
         // Allow auto setting of TxPktRdy when max packet size has been loaded
@@ -578,7 +653,21 @@ int usbd_ep_open(uint8_t busid, const struct usb_endpoint_descriptor *ep)
             ui32Register |= USB_TXCSRH1_ISO;
         }
 
-        HWREGB(USB_TXCSRH_BASE(ep_idx)) = ui32Register | USB_TXCSRH1_MODE;
+        /* JL 原厂 usb_g_ep_config: INT 类型端点无条件写 TXCSR bit14(CSRH bit6)——
+         * EP3/EP4 特殊通道的模式门控(配套 0x16850/54 模式位/打包计数)。CherryUSB
+         * 从不设它 → 通知端点 IN 令牌被打回 STALL → 主机 clear-halt 循环。 */
+        uint8_t is_int = (USB_GET_ENDPOINT_TYPE(ep->bmAttributes) == 0x03);
+
+        /* JL 大缓冲: bit14 + 0x16850/54 bit0(TX 模式位) */
+        uint32_t csrh = ui32Register | USB_TXCSRH1_MODE;
+        if (is_int || bigsz) {
+            csrh |= 0x40;
+        }
+        if (bigsz) {
+            JL82_UDC_BIGCTL(ep_idx) |= 1u;
+            __asm__ volatile("csync");
+        }
+        HWREGB(USB_TXCSRH_BASE(ep_idx)) = (uint8_t)csrh;
 
         // Reset the Data toggle to zero.
         if (HWREGB(USB_TXCSRL_BASE(ep_idx)) & USB_TXCSRL1_TXRDY)
@@ -715,18 +804,23 @@ int usbd_ep_start_write(uint8_t busid, const uint8_t ep, const uint8_t *data, ui
             }
             HWREGB(USB_TXCSRL_BASE(ep_idx)) = (USB_CSRL0_TXRDY | USB_CSRL0_DATAEND);
         } else {
+            /* JL: ZLP 也必须写计数 0 再置 TXRDY */
+            g_musb_udc.in_ep[ep_idx].launch_len = 0;
+            jl82_udc_tx_launch(ep_idx, (const uint8_t *)"", 0);
             HWREGB(USB_TXCSRL_BASE(ep_idx)) = USB_TXCSRL1_TXRDY;
             HWREGH(USB_BASE + MUSB_TXIE_OFFSET) |= (1 << ep_idx);
         }
         musb_set_active_ep(old_ep_idx);
         return 0;
     }
-    data_len = MIN(data_len, g_musb_udc.in_ep[ep_idx].ep_mps);
+    /* JL 大缓冲端点一次可交付整段(dma_size), 普通端点按 MPS 分片 */
+    data_len = MIN(data_len, g_jl82_udc_bigsz[ep_idx] ? g_jl82_udc_bigsz[ep_idx]
+                                                      : g_musb_udc.in_ep[ep_idx].ep_mps);
 
-    musb_write_packet(ep_idx, (uint8_t *)data, data_len);
     HWREGH(USB_BASE + MUSB_TXIE_OFFSET) |= (1 << ep_idx);
 
     if (ep_idx == 0x00) {
+        musb_write_packet(ep_idx, (uint8_t *)data, data_len);   /* EP0: FIFO0 端口 */
         usb_ep0_state = USB_EP0_STATE_IN_DATA;
         if (data_len < g_musb_udc.in_ep[ep_idx].ep_mps) {
             HWREGB(USB_TXCSRL_BASE(ep_idx)) = (USB_CSRL0_TXRDY | USB_CSRL0_DATAEND);
@@ -734,6 +828,9 @@ int usbd_ep_start_write(uint8_t busid, const uint8_t ep, const uint8_t *data, ui
             HWREGB(USB_TXCSRL_BASE(ep_idx)) = USB_CSRL0_TXRDY;
         }
     } else {
+        /* JL: 数据端点经 DMA 缓冲发送(memcpy→stage + 计数寄存器) */
+        g_musb_udc.in_ep[ep_idx].launch_len = data_len;
+        jl82_udc_tx_launch(ep_idx, data, (uint16_t)data_len);
         HWREGB(USB_TXCSRL_BASE(ep_idx)) = USB_TXCSRL1_TXRDY;
     }
 
@@ -942,23 +1039,27 @@ void USBD_IRQHandler(uint8_t busid)
                 HWREGB(USB_TXCSRL_BASE(ep_idx)) &= ~USB_TXCSRL1_UNDRN;
             }
 
-            if (g_musb_udc.in_ep[ep_idx].xfer_len > g_musb_udc.in_ep[ep_idx].ep_mps) {
-                g_musb_udc.in_ep[ep_idx].xfer_buf += g_musb_udc.in_ep[ep_idx].ep_mps;
-                g_musb_udc.in_ep[ep_idx].actual_xfer_len += g_musb_udc.in_ep[ep_idx].ep_mps;
-                g_musb_udc.in_ep[ep_idx].xfer_len -= g_musb_udc.in_ep[ep_idx].ep_mps;
-            } else {
-                g_musb_udc.in_ep[ep_idx].xfer_buf += g_musb_udc.in_ep[ep_idx].xfer_len;
-                g_musb_udc.in_ep[ep_idx].actual_xfer_len += g_musb_udc.in_ep[ep_idx].xfer_len;
-                g_musb_udc.in_ep[ep_idx].xfer_len = 0;
+            /* JL: 按最近一次发射的字节数推进(大缓冲一次交付整段) */
+            uint16_t adv = g_musb_udc.in_ep[ep_idx].launch_len;
+            if (adv > g_musb_udc.in_ep[ep_idx].xfer_len) {
+                adv = (uint16_t)g_musb_udc.in_ep[ep_idx].xfer_len;
             }
+
+            g_musb_udc.in_ep[ep_idx].xfer_buf += adv;
+            g_musb_udc.in_ep[ep_idx].actual_xfer_len += adv;
+            g_musb_udc.in_ep[ep_idx].xfer_len -= adv;
 
             if (g_musb_udc.in_ep[ep_idx].xfer_len == 0) {
                 HWREGH(USB_BASE + MUSB_TXIE_OFFSET) &= ~(1 << ep_idx);
                 usbd_event_ep_in_complete_handler(0, ep_idx | 0x80, g_musb_udc.in_ep[ep_idx].actual_xfer_len);
             } else {
-                write_count = MIN(g_musb_udc.in_ep[ep_idx].xfer_len, g_musb_udc.in_ep[ep_idx].ep_mps);
+                write_count = MIN(g_musb_udc.in_ep[ep_idx].xfer_len,
+                                  g_jl82_udc_bigsz[ep_idx] ? g_jl82_udc_bigsz[ep_idx]
+                                                           : g_musb_udc.in_ep[ep_idx].ep_mps);
 
-                musb_write_packet(ep_idx, g_musb_udc.in_ep[ep_idx].xfer_buf, write_count);
+                /* JL: 续段经 DMA 缓冲发送 */
+                g_musb_udc.in_ep[ep_idx].launch_len = write_count;
+                jl82_udc_tx_launch(ep_idx, g_musb_udc.in_ep[ep_idx].xfer_buf, write_count);
                 HWREGB(USB_TXCSRL_BASE(ep_idx)) = USB_TXCSRL1_TXRDY;
             }
 
@@ -977,9 +1078,15 @@ void USBD_IRQHandler(uint8_t busid)
 #endif
             if (HWREGB(USB_RXCSRL_BASE(ep_idx)) & USB_RXCSRL1_RXRDY) {
                 read_count = HWREGH(USB_RXCOUNT_BASE(ep_idx));
+                if (read_count > g_musb_udc.out_ep[ep_idx].xfer_len) {
+                    read_count = (uint16_t)g_musb_udc.out_ep[ep_idx].xfer_len;   /* 安全钳制 */
+                }
 
-                musb_read_packet(ep_idx, g_musb_udc.out_ep[ep_idx].xfer_buf, read_count);
-                HWREGB(USB_RXCSRL_BASE(ep_idx)) &= ~(USB_RXCSRL1_RXRDY);
+                /* JL: 数据落在通道 DMA 缓冲(RXRDY 后 RXCOUNT 才有效), ssync 后取出;
+                 * 消费 = 写 FLUSH(原厂 usb_g_ep_read 同款), 硬件自动收下一包 */
+                __asm__ volatile("ssync");
+                memcpy(g_musb_udc.out_ep[ep_idx].xfer_buf, jl82_udc_rx_stage(ep_idx), read_count);
+                HWREGB(USB_RXCSRL_BASE(ep_idx)) = USB_RXCSRL1_FLUSH;
 
                 g_musb_udc.out_ep[ep_idx].xfer_buf += read_count;
                 g_musb_udc.out_ep[ep_idx].actual_xfer_len += read_count;

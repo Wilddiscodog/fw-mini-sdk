@@ -67,6 +67,43 @@ SECTIONS
         *(.jlsp_code)
         . = ALIGN(4);
         *(.jlsp_const)
+
+
+        . = ALIGN(4);
+        *(.sbc_eng_code)
+
+        . = ALIGN(4);
+        *(.h4_const)
+
+        . = ALIGN(4);
+        crypto_begin = .;
+        *(.crypto_ecdh_code)
+        *(.crypto_ecdh_const)
+
+        *(.crypto_bigint_code)
+        *(.crypto_bigint_const)
+
+        *(.crypto_code)
+        *(.crypto_const)
+
+        *(.ECDH_sample_code)
+        *(.ECDH_sample_const)
+
+        *(.uECC_code)
+        *(.uECC_const)
+
+        *(.hmac_code)
+        *(.hmac_const)
+
+        *(.hash_sample_code)
+        *(.hash_sample_const)
+
+        *(.aes_cmac_sample_code)
+        *(.aes_cmac_sample_const)
+        crypto_end = .;
+        crypto_size = . - crypto_begin;
+
+
         . = ALIGN(4);
         *(.update_const)
         *(.update_code)
@@ -785,18 +822,18 @@ SECTIONS
         acl_tx_pool = .;
         *(.bredr_tx_bulk)
 
+        acl_tx_pool_end = acl_tx_pool + 0;
 
 
-        acl_tx_pool_end = acl_tx_pool;
 
         . = acl_tx_pool_end;
 
         acl_rx_pool = .;
         *(.bredr_rx_bulk)
 
+        acl_rx_pool_end = acl_rx_pool + 0;
 
 
-        acl_rx_pool_end = acl_rx_pool;
 
         . = acl_rx_pool_end;
 

@@ -35,7 +35,7 @@
  * 旧杰理从机栈源码保留在 driver/usb 备查，不参与编译。 */
 #define MINI_USB_MODE_DEVICE   0   /* CDC 从机(主机模式不行, 二选一) */
 #define MINI_USB_MODE_HOST     1   /* MSC 主机(U盘) */
-#define MINI_USB_MODE          MINI_USB_MODE_HOST
+#define MINI_USB_MODE          MINI_USB_MODE_DEVICE
 
 //*********************************************************************************//
 //                                  电源配置                                        //
@@ -60,5 +60,41 @@
 #define LIB_DEBUG    1
 #endif
 #define CONFIG_DEBUG_LIB(x)         (x & LIB_DEBUG)
+
+/* ================ ADC 按键(原厂 key_driver/adkey 框架, PB01 电阻梯) ================
+ * 实测: 空闲 raw=1014(3.13V), 按键1 raw=162(500mV), 按键2 raw=0(0mV)。
+ * 表用中点阈值: ≤0 → 按键2; 81<raw≤588 → 按键1; >588 → 无键 */
+#define TCFG_IOKEY_ENABLE           0
+#define TCFG_ADKEY_ENABLE           1
+#define TCFG_IRKEY_ENABLE           0
+#define TCFG_TOUCH_KEY_ENABLE       0
+#define TCFG_RDEC_KEY_ENABLE        0
+#define TCFG_ADKEY_RTCVDD_ENABLE    0
+#define TCFG_KEY_TONE_EN            0
+#define TCFG_IRSENSOR_ENABLE        0
+#define TCFG_SPI_LCD_ENABLE         0
+#define TCFG_ADKEY_LED_IO_REUSE     0
+#define TCFG_ADKEY_IR_IO_REUSE      0
+#define TCFG_ADKEY_LED_SPI_IO_REUSE 0
+
+/* ================ 蓝牙/WiFi 外设(原厂栈移植) ================ */
+#define MINI_BT_SUPPORT             1   /* 0=关闭; 1=链接 btctrler/btstack 并开机自启 */
+#define MINI_BT_BLE_TRANS_EN        1   /* BLE 透传服务(广播名 WL82-BLE, 透传特征 ae82 notify) */
+#define MINI_WIFI_SUPPORT           0   /* WiFi: 库已入树, 待 RF 校准/网络栈联调后开启 */
+
+#if MINI_BT_SUPPORT
+#ifdef CONFIG_BT_ENABLE
+#define CONFIG_BT_RX_BUFF_SIZE  0
+#define CONFIG_BT_TX_BUFF_SIZE  0
+#define TCFG_USER_BLE_ENABLE        1
+#define TCFG_USER_BT_CLASSIC_ENABLE 0
+#define BT_NET_HID_EN               0
+#define TRANS_DATA_EN               1
+#define BT_NET_CENTRAL_EN           0
+#define TRANS_MULTI_BLE_EN          0
+#define CONFIG_BLE_MESH_ENABLE      0
+#define TCFG_BLE_SECURITY_EN        1
+#endif
+#endif
 
 #endif

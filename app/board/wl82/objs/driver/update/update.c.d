@@ -84,6 +84,6 @@ objs/driver/update/update.c.o: ../../../driver/update/update.c \
   ../../../include_lib/update\uart_update.h \
   ../../../include_lib/update\dual_bank_updata_api.h \
   ../../../include_lib\btstack/avctp_user.h \
-  ../../../include_lib\btstack/btstack_typedef.h \
+  ../../../include_lib/btstack/btstack_typedef.h \
   ../../../include_lib/driver/cpu/wl82\asm/power_interface.h \
   ../../../include_lib\system/debug.h

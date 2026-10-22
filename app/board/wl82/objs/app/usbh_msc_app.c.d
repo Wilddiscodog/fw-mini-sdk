@@ -40,4 +40,7 @@ objs/app/usbh_msc_app.c.o: ../../../app/usbh_msc_app.c \
   ../../../third/CherryUSB/class/msc\usbh_msc.h \
   ../../../third/CherryUSB/class/msc/usb_msc.h \
   ../../../third/CherryUSB/class/msc/usb_scsi.h \
-  ../../../app/include\fw_version.h
+  ../../../app/include\fw_version.h \
+  ../../../third/CherryUSB/third_party/fatfs-0.14/source\ff.h \
+  ../../../third/CherryUSB/third_party/fatfs-0.14/source/ffconf.h \
+  ../../../third/CherryUSB/third_party/fatfs-0.14/source\diskio.h

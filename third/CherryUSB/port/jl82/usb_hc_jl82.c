@@ -15,6 +15,7 @@
 #include "usb_musb_reg.h"
 
 extern void usb_write_ep_cnt(uint8_t usb_id, uint32_t ep, uint32_t len);
+extern void usb_set_dma_rsize(uint8_t usb_id, uint32_t ep, uint32_t size);
 
 #define HWREG(x) \
     (*((volatile uint32_t *)(x)))
@@ -75,7 +76,7 @@ static inline void jl_usb_read_intr(uint32_t *is, uint32_t *txis, uint32_t *rxis
  * 放 .usb_h_dma 段(sdk.ld 已收集进 ram0, 原厂同款)。放 SDRAM 时硬件
  * 取到垃圾 → 设备判无效 CBW → STALL(V0.3.9~V0.3.11 轮根因) */
 static uint8_t g_jl82_pipe_stage[CONFIG_USB_MUSB_PIPE_NUM][512]
-    __attribute__((section(".usb_h_dma"), aligned(32)));
+    __attribute__((section(".usb_h_dma"), aligned(64)));
 
 static void jl82_tx_launch(uint8_t chidx, const uint8_t *buf, uint16_t len)
 {
@@ -249,6 +250,12 @@ typedef enum {
 struct musb_pipe {
     uint8_t chidx;
     bool inuse;
+    bool tx_toggle_valid;
+    bool rx_toggle_valid;
+    uint8_t tx_dev_addr;
+    uint8_t tx_ep_addr;
+    uint8_t rx_dev_addr;
+    uint8_t rx_ep_addr;
     uint32_t xfrd;
     volatile uint8_t ep0_state;
     usb_osal_sem_t waitsem;
@@ -264,6 +271,27 @@ struct musb_hcd {
     uint8_t sifli_ep_map[MUSB_EP_SLOT_NUM]; /* slot layout: 0-3 = IN (ch1..ch4), 4-6 = OUT (ch5..ch7) */
 #endif
 } g_musb_hcd[CONFIG_USBHOST_MAX_BUS];
+
+static bool jl82_prepare_toggle(struct musb_pipe *pipe, const struct usbh_urb *urb, bool in)
+{
+    uint8_t dev_addr = urb->hport->dev_addr;
+    uint8_t ep_addr = urb->ep->bEndpointAddress;
+    bool reset;
+
+    if (in) {
+        reset = !pipe->rx_toggle_valid || pipe->rx_dev_addr != dev_addr || pipe->rx_ep_addr != ep_addr;
+        pipe->rx_dev_addr = dev_addr;
+        pipe->rx_ep_addr = ep_addr;
+        pipe->rx_toggle_valid = true;
+    } else {
+        reset = !pipe->tx_toggle_valid || pipe->tx_dev_addr != dev_addr || pipe->tx_ep_addr != ep_addr;
+        pipe->tx_dev_addr = dev_addr;
+        pipe->tx_ep_addr = ep_addr;
+        pipe->tx_toggle_valid = true;
+    }
+
+    return reset;
+}
 
 /* get current active ep */
 static uint8_t musb_get_active_ep(struct usbh_bus *bus)
@@ -503,11 +531,13 @@ int musb_bulk_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
         HWREGB(USB_RXHUBPORT_BASE(chidx)) = 0;
 #endif
         /* JL: IN 数据由硬件 DMA 到通道缓冲(地址不自动递增), 每 urb 重指 */
+        usb_set_dma_rsize(1, chidx, sizeof(g_jl82_pipe_stage[chidx]));
         JL82_RADDR(chidx) = (uint32_t)g_jl82_pipe_stage[chidx];
         __asm__ volatile("csync");
         HWREGB(USB_TXCSRH_BASE(chidx)) &= ~USB_TXCSRH1_MODE;
-        /* 原厂 config 同款: CLRDT|FLUSH 复位 toggle/FIFO, 再 REQPKT 发起 */
-        jl82_write_rxcsr(bus, chidx, USB_RXCSRL1_CLRDT | USB_RXCSRL1_FLUSH);
+        if (jl82_prepare_toggle(&g_musb_hcd[bus->hcd.hcd_id].pipe_pool[chidx], urb, true)) {
+            jl82_write_rxcsr(bus, chidx, USB_RXCSRL1_CLRDT | USB_RXCSRL1_FLUSH);
+        }
         jl82_write_rxcsr(bus, chidx, USB_RXCSRL1_REQPKT);
 
         HWREGH(USB_BASE + MUSB_RXIE_OFFSET) |= (1 << chidx);
@@ -532,13 +562,12 @@ int musb_bulk_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
             buflen = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
         }
 
-        /* JL: TXCSRH.MODE 原厂主机从不置位(config 写 CSRH=0), 不碰。
-         * CLRDT|FLUSH(0x48)与原厂 config 同款: 复位通道 toggle 到 DATA0——
-         * 否则首包 toggle 不匹配会被设备静默丢弃(无握手, TXRDY 不清),
-         * 设备对"无 CBW 的 IN"回 STALL, V0.3.9/V0.3.10 同象失败的共同缺因 */
+        /* JL: DATA toggle 只在首次绑定或端点变化时复位, 后续 URB 保持递增。 */
         JL82_TADDR(chidx) = (uint32_t)g_jl82_pipe_stage[chidx];
         __asm__ volatile("csync");
-        jl82_write_txcsr(bus, chidx, USB_TXCSRL1_CLRDT | USB_TXCSRL1_FLUSH);
+        if (jl82_prepare_toggle(&g_musb_hcd[bus->hcd.hcd_id].pipe_pool[chidx], urb, false)) {
+            jl82_write_txcsr(bus, chidx, USB_TXCSRL1_CLRDT | USB_TXCSRL1_FLUSH);
+        }
         jl82_tx_launch(chidx, buffer, (uint16_t)buflen);
         {
             static uint8_t dbg_cnt = 0;
@@ -596,10 +625,13 @@ int musb_intr_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
         HWREGB(USB_RXHUBADDR_BASE(chidx)) = 0;
         HWREGB(USB_RXHUBPORT_BASE(chidx)) = 0;
 #endif
+        usb_set_dma_rsize(1, chidx, sizeof(g_jl82_pipe_stage[chidx]));
         JL82_RADDR(chidx) = (uint32_t)g_jl82_pipe_stage[chidx];
         __asm__ volatile("csync");
         HWREGB(USB_TXCSRH_BASE(chidx)) &= ~USB_TXCSRH1_MODE;
-        jl82_write_rxcsr(bus, chidx, USB_RXCSRL1_CLRDT | USB_RXCSRL1_FLUSH);
+        if (jl82_prepare_toggle(&g_musb_hcd[bus->hcd.hcd_id].pipe_pool[chidx], urb, true)) {
+            jl82_write_rxcsr(bus, chidx, USB_RXCSRL1_CLRDT | USB_RXCSRL1_FLUSH);
+        }
         jl82_write_rxcsr(bus, chidx, USB_RXCSRL1_REQPKT);
 
         HWREGH(USB_BASE + MUSB_RXIE_OFFSET) |= (1 << chidx);
@@ -626,7 +658,9 @@ int musb_intr_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
 
         JL82_TADDR(chidx) = (uint32_t)g_jl82_pipe_stage[chidx];
         __asm__ volatile("csync");
-        jl82_write_txcsr(bus, chidx, USB_TXCSRL1_CLRDT | USB_TXCSRL1_FLUSH);
+        if (jl82_prepare_toggle(&g_musb_hcd[bus->hcd.hcd_id].pipe_pool[chidx], urb, false)) {
+            jl82_write_txcsr(bus, chidx, USB_TXCSRL1_CLRDT | USB_TXCSRL1_FLUSH);
+        }
         jl82_tx_launch(chidx, buffer, (uint16_t)buflen);
         jl82_write_txcsr(bus, chidx, USB_TXCSRL1_TXRDY);
 
@@ -644,6 +678,11 @@ static int usbh_reset_port(struct usbh_bus *bus, const uint8_t port)
     extern void musb_sifli_reset_port(struct usbh_bus *bus);
     musb_sifli_reset_port(bus);
 #elif defined(CONFIG_USB_MUSB_JL82)
+    for (uint8_t chidx = 1; chidx < CONFIG_USB_MUSB_PIPE_NUM; chidx++) {
+        g_musb_hcd[bus->hcd.hcd_id].pipe_pool[chidx].tx_toggle_valid = false;
+        g_musb_hcd[bus->hcd.hcd_id].pipe_pool[chidx].rx_toggle_valid = false;
+    }
+
     /* JL 官方主机建链序列(还原 _usb_host_mount): POWER(HSENAB|SOFTCONN) ->
      * 闭源 usb_host_init(完整 chirp+复位+速度协商) -> SIE 使能 -> 稳定等待。
      * 官方流程本身带递增延迟重试(reset_delay += 10), 此处同款重试 3 次。 */
@@ -1164,6 +1203,14 @@ int usbh_kill_urb(struct usbh_urb *urb)
     uint8_t fifo_ep = urb->ep->bEndpointAddress;
 #endif
 
+#ifdef CONFIG_USB_MUSB_JL82
+    if (urb->ep->bEndpointAddress & 0x80) {
+        pipe->rx_toggle_valid = false;
+    } else {
+        pipe->tx_toggle_valid = false;
+    }
+#endif
+
     if (urb->ep->bEndpointAddress & 0x80) {
         HWREGH(USB_BASE + MUSB_RXIE_OFFSET) &= ~(1 << chidx);
         HWREGH(USB_BASE + MUSB_RXIS_OFFSET) = (1 << chidx);
@@ -1419,14 +1466,18 @@ static void usbh_process_intr(uint8_t busid, uint32_t is, uint32_t txis, uint32_
             }
 
             if (ep_csrl_status & USB_TXCSRL1_ERROR) {
+                pipe->tx_toggle_valid = false;
                 jl82_write_txcsr(bus, ep_idx, HWREGH(USB_TXCSRL_BASE(ep_idx)) & ~USB_TXCSRL1_ERROR);
                 urb->errorcode = -USB_ERR_IO;
                 musb_urb_waitup(urb);
             } else if (ep_csrl_status & USB_TXCSRL1_NAKTO) {
+                pipe->tx_toggle_valid = false;
                 jl82_write_txcsr(bus, ep_idx, HWREGH(USB_TXCSRL_BASE(ep_idx)) & ~USB_TXCSRL1_NAKTO);
                 urb->errorcode = -USB_ERR_NAK;
                 musb_urb_waitup(urb);
             } else if (ep_csrl_status & USB_TXCSRL1_STALLED) {
+                pipe->tx_toggle_valid = false;
+                pipe->rx_toggle_valid = false;
                 jl82_write_txcsr(bus, ep_idx, HWREGH(USB_TXCSRL_BASE(ep_idx)) & ~USB_TXCSRL1_STALLED);
                 urb->errorcode = -USB_ERR_STALL;
                 musb_urb_waitup(urb);
@@ -1479,14 +1530,18 @@ static void usbh_process_intr(uint8_t busid, uint32_t is, uint32_t txis, uint32_
             }
 
             if (ep_csrl_status & USB_RXCSRL1_ERROR) {
+                pipe->rx_toggle_valid = false;
                 jl82_write_rxcsr(bus, ep_idx, USB_RXCSRL1_CLRDT);
                 urb->errorcode = -USB_ERR_IO;
                 musb_urb_waitup(urb);
             } else if (ep_csrl_status & USB_RXCSRL1_NAKTO) {
+                pipe->rx_toggle_valid = false;
                 jl82_write_rxcsr(bus, ep_idx, USB_RXCSRL1_CLRDT);
                 urb->errorcode = -USB_ERR_NAK;
                 musb_urb_waitup(urb);
             } else if (ep_csrl_status & USB_RXCSRL1_STALLED) {
+                pipe->rx_toggle_valid = false;
+                pipe->tx_toggle_valid = false;
                 jl82_write_rxcsr(bus, ep_idx, USB_RXCSRL1_CLRDT);
                 urb->errorcode = -USB_ERR_STALL;
                 musb_urb_waitup(urb);

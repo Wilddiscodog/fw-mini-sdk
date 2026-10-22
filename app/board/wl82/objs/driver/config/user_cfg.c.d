@@ -75,4 +75,5 @@ objs/driver/config/user_cfg.c.o: ../../../driver/config/user_cfg.c \
   ../../../include_lib/driver\device/device.h \
   ../../../include_lib/driver\device/ioctl_cmds.h \
   ../../../include_lib\server/audio_dev.h \
+  ../../../include_lib/net\wifi/wifi_connect.h \
   ../../../include_lib/system\debug.h

@@ -125,7 +125,9 @@ const u8 *bt_get_mac_addr(void)
         } while (!bytecmp(mac_addr, 0, 6));
         //此处用户可自行修改为本地生成mac地址的算法
         mac_addr[0] &= ~((1 << 0) | (1 << 1));
-        syscfg_write(CFG_BT_MAC_ADDR, mac_addr, 6);
+        /* mini-sdk: VM 首写暂缓(VM 池未联调, 首写疑似挂死源), 每次上电由 UID 重派生,
+         * 地址在两次上电间可能变化, 仅影响已配对设备回连 */
+        // syscfg_write(CFG_BT_MAC_ADDR, mac_addr, 6);
         return mac_addr;
     }
 }

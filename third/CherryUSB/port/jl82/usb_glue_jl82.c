@@ -61,13 +61,6 @@ static void usb1_cherryusb_isr(void)
                (unsigned)JL_SIE_B(0x1600BUL), (unsigned)JL_SIE_H(0x16006UL),
                (unsigned)(*(volatile uint32_t *)0x16800UL));
     }
-    if (jl_irq_n >= 100000) {
-        printf("[usb-irq] *** STORM, irq disabled. PRE(IS=%02x TX=%04x)\n", pre_is, pre_txis);
-        unrequest_irq(IRQ_USB1_CTRL_IDX, 0);
-        unrequest_irq(IRQ_USB1_CTRL_IDX, 1);
-        return;
-    }
-
     __asm__ volatile("ssync");
     USBD_IRQHandler(0);
     __asm__ volatile("csync");

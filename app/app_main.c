@@ -27,9 +27,8 @@ void lv_port_disp_init(void);
 #endif
 #endif
 
-/* CherryUSB CDC (高速口 USB1) */
-extern void cdc_acm_init(uint8_t busid, uintptr_t reg_base);
-extern void cdc_acm_data_send_with_dtr_test(uint8_t busid);
+/* CherryUSB 组合设备 2×CDC + MSC(RAM 盘) (高速口 USB1) */
+/* 实现在 cdc_acm_msc_app.c, 声明见下方 usb_mode_task 前 */
 
 #define CHERRYUSB_BUSID     0
 #define JL82_HUSB_SIE_BASE  0x16000UL
@@ -48,6 +47,15 @@ const struct irq_info irq_info_table[] = {
     { -1,     -1,   -1    },
 };
 
+static void heartbeat_task(void *p)
+{
+    static u32 n = 0;
+    while (1) {
+        printf("[alive] %u\n", ++n);
+        os_time_dly(100);
+    }
+}
+
 /*============================ 任务列表 ============================
  * 表项供 task_create()（OS 原生接口）查表用；
  * os_task_create() 显式传优先级/栈大小，不依赖此表。 */
@@ -59,6 +67,13 @@ const struct task_info task_info_table[] = {
     {"usb_server",          20,     1024,	  64  },
     {"usb_msd0",             1,     512,	  128 },
     {"usb_msd1",             1,     512,	  128 },
+    /* BT 协议栈任务(demo_ble 同款优先级/栈) */
+    {"btctrler",            19,     512,	  384 },
+    {"btstack",             18,     768,	  384 },
+    {"bt_app",              12,     1024,   0   },
+    {"wifi_app",            12,     1024,   0   },
+    /* WiFi 协议栈任务(demo_wifi 同款) */
+    {"wl_dev",              20,     1024,   512 },
     {0, 0, 0, 0, 0},
 };
 
@@ -198,6 +213,7 @@ static void pwm_breath_task(void *p)
 /*============================ ADC：PB01 电压采样 ============================= */
 static void adc_task(void *p)
 {
+    static int adc_value = 0;
     adc_init();
     gpio_set_die(IO_PORTB_01, 0);       /* 模拟功能 */
     gpio_set_direction(IO_PORTB_01, 1);
@@ -206,8 +222,19 @@ static void adc_task(void *p)
     adc_add_sample_ch(AD_CH_PB01);
 
     while (1) {
+        adc_value = adc_get_value(AD_CH_PB01);
         printf("[adc] PB01 raw=%d %dmv\n",
                (int)adc_get_value(AD_CH_PB01), (int)adc_get_voltage(AD_CH_PB01));
+#if MINI_BT_SUPPORT
+        // if(adc_value < 1000) {
+        //     printf("[adc] PB01 low voltage, reset bt controller\n");
+        //         extern void bt_wifi_start(void);
+        //         printf("[cmd] bt start\n");
+        //         bt_wifi_start();
+        //         printf("[cmd] bt start returned\n");
+        // }
+
+#endif
         os_time_dly(200);   /* 2s */
     }
 }
@@ -292,7 +319,7 @@ static void lcd_test_task(void *p)
 
 /*============================ USB：按 MINI_USB_MODE 选择角色 ================= */
 #if (MINI_USB_MODE == MINI_USB_MODE_HOST)
-extern void usbh_msc_demo_start(void);
+extern void usbh_host_demo_start(void);
 extern void usbh_host_poll(void);
 extern volatile uint32_t g_hc_irq_cnt, g_ep0_irq_cnt, g_ep0_setup_cnt, g_ep0_last_csr0, g_urb_err_cnt;
 static void usb_mode_task(void *p)
@@ -300,7 +327,7 @@ static void usb_mode_task(void *p)
     uint32_t mon = 0;
 
     os_time_dly(100);
-    usbh_msc_demo_start();      /* usbh 线程由栈内部创建, 本任务只负责启动 */
+    usbh_host_demo_start();     /* 单 host bus 上统一启动，自动分流 CDC/HID/MSC */
 
     /* 主机传输完成改为轮询模式(与闭源 usb_ctrl_transfer 轮询 CSR0 同款):
      * 主机角色下 EP0 完成中断不触发(实测), 轮询是可靠路径。 */
@@ -321,14 +348,15 @@ static void usb_mode_task(void *p)
     }
 }
 #else
+extern void msc_only_init(uint8_t busid, uintptr_t reg_base);
 static void usb_mode_task(void *p)
 {
     os_time_dly(100);    /* 等 boot 日志打完 */
-    printf("[usb] CherryUSB CDC init on HUSB(USB1, high-speed)\n");
-    cdc_acm_init(CHERRYUSB_BUSID, JL82_HUSB_SIE_BASE);
+    printf("[usb] CherryUSB MSC-only 4MB SDRAM disk on EP1 OUT/IN\n");
+    msc_only_init(CHERRYUSB_BUSID, JL82_HUSB_SIE_BASE);
 
     while (1) {
-        cdc_acm_data_send_with_dtr_test(CHERRYUSB_BUSID);
+        os_time_dly(10000);
     }
 }
 #endif
@@ -351,6 +379,8 @@ void app_main()
     // os_task_create(led_task,         NULL, 10, 512,  0, "led_task");
     // os_task_create(clock_task,       NULL,  9, 512,  0, "clock_task");
     os_task_create(uart1_echo_task,  NULL,  8, 1024, 0, "uart1_echo");
+    /* WiFi/蓝牙外设(原厂栈移植): 蓝牙开机自启, 与 USB 角色无关。
+     * 放在任务创建末尾: 即使 BT 启动路径挂死也不影响前面任务。 */
     // os_task_create(spi_task,         NULL,  8, 1024, 0, "spi_test");
     // os_task_create(iic_scan_task,    NULL,  8, 1024, 0, "iic_scan");
     // os_task_create(pwm_breath_task,  NULL,  8, 512,  0, "pwm_breath");
@@ -359,5 +389,11 @@ void app_main()
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
     os_task_create(lcd_test_task,    NULL,  8, 2048, 0, "lcd_test");
 #endif
-    os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
+    // os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
+    /* 心跳: 1s 一拍, 判定系统在 BT 启动试验后是否存活 */
+    os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
+    /* ADC 按键框架开机独立初始化(PB01 电阻梯; 与 BT 启动解耦——
+     * 之前埋在 bt_wifi_start 里形成循环依赖, 按键永远没机会触发) */
+    extern void key_early_init(void);
+    key_early_init();
 }

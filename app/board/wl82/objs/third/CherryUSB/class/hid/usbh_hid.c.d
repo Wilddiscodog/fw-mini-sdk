@@ -1,0 +1,42 @@
+objs/third/CherryUSB/class/hid/usbh_hid.c.o: \
+  ../../../third/CherryUSB/class/hid/usbh_hid.c \
+  ../../../app/include\usb_config.h \
+  ../../../third/CherryUSB/core\usbh_core.h \
+  C:/JL/pi32/pi32v2-include\string.h C:/JL/pi32/pi32v2-include/_ansi.h \
+  C:/JL/pi32/pi32v2-include\newlib.h \
+  C:/JL/pi32/pi32v2-include\sys/config.h \
+  C:/JL/pi32/pi32v2-include\machine/ieeefp.h \
+  C:/JL/pi32/pi32v2-include\sys/features.h \
+  C:/JL/pi32/pi32v2-include\sys/reent.h \
+  C:/JL/pi32/pi32v2-include\sys/_types.h \
+  C:/JL/pi32/pi32v2-include\machine/_types.h \
+  C:/JL/pi32/pi32v2-include\machine/_default_types.h \
+  C:/JL/pi32/pi32v2-include\sys/lock.h \
+  C:/JL/pi32/pi32v2-include\sys/cdefs.h \
+  C:/JL/pi32/pi32v2-include\sys/string.h \
+  C:/JL/pi32/pi32v2-include\stdint.h \
+  C:/JL/pi32/pi32v2-include\sys/_intsup.h \
+  C:/JL/pi32/pi32v2-include\sys/_stdint.h \
+  C:/JL/pi32/pi32v2-include\stdlib.h \
+  C:/JL/pi32/pi32v2-include\machine/stdlib.h \
+  C:/JL/pi32/pi32v2-include\alloca.h \
+  ../../../third/CherryUSB/common\usb_util.h \
+  ../../../third/CherryUSB/common\usb_errno.h \
+  ../../../third/CherryUSB/common\usb_def.h \
+  ../../../third/CherryUSB/common\usb_list.h \
+  ../../../third/CherryUSB/common\usb_log.h \
+  C:/JL/pi32/pi32v2-include\stdio.h \
+  C:/JL/pi32/pi32v2-include\sys/types.h \
+  C:/JL/pi32/pi32v2-include\machine/types.h \
+  C:/JL/pi32/pi32v2-include\sys/stdio.h \
+  ../../../third/CherryUSB/common\usb_hc.h \
+  ../../../third/CherryUSB/common\usb_osal.h \
+  ../../../third/CherryUSB/class/hub\usbh_hub.h \
+  ../../../third/CherryUSB/class/hub/usb_hub.h \
+  ../../../third/CherryUSB/common\usb_memcpy.h \
+  ../../../third/CherryUSB/common\usb_ringbuffer.h \
+  ../../../third/CherryUSB/common\usb_mempool.h \
+  ../../../third/CherryUSB/common\usb_dcache.h \
+  ../../../third/CherryUSB/common\usb_version.h \
+  ../../../third/CherryUSB/class/hid/usbh_hid.h \
+  ../../../third/CherryUSB/class/hid/usb_hid.h

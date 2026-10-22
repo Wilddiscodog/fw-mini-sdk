@@ -117,6 +117,7 @@ DEFINES := \
 	-DVM_MAX_PAGE_ALIGN_SIZE_CONFIG=64*1024 \
 	-DVM_MAX_SECTOR_ALIGN_SIZE_CONFIG=64*1024 \
 	-DVM_ITEM_MAX_NUM=256 \
+	-DCONFIG_BT_ENABLE=1 \
 	-DCONFIG_UPDATA_ENABLE \
 	-DCONFIG_OTA_UPDATA_ENABLE \
 	-DCONFIG_ITEM_FORMAT_VM \
@@ -137,6 +138,7 @@ DEFINES += -DMINI_LCD_SUPPORT=$(MINI_LCD_SUPPORT) -DMINI_LVGL_SUPPORT=$(MINI_LVG
 # 头文件搜索路径
 INCLUDES := \
 	-I../../../app/include \
+	-I../../../app/common_ble/include \
 	-I../../../include_lib \
 	-I../../../include_lib/driver \
 	-I../../../include_lib/driver/device \
@@ -149,13 +151,21 @@ INCLUDES := \
 	-I../../../include_lib/utils/event \
 	-I../../../include_lib/btctrler \
 	-I../../../include_lib/btctrler/port/wl82 \
+	-I../../../include_lib/btstack \
+	-I../../../include_lib/btstack/third_party/common \
+	-I../../../include_lib/btstack/third_party/rcsp \
+	-I../../../include_lib/net \
+	-I../../../include_lib/net/wifi \
 	-I../../../include_lib/media \
 	-I../../../include_lib/media/cpu/wl82 \
 	-I../../../driver \
 	-I../../../third/CherryUSB/core \
 	-I../../../third/CherryUSB/common \
 	-I../../../third/CherryUSB/class/cdc \
+	-I../../../third/CherryUSB/class/serial \
+	-I../../../third/CherryUSB/class/hid \
 	-I../../../third/CherryUSB/class/msc \
+	-I../../../third/CherryUSB/third_party/fatfs-0.14/source \
 	-I../../../third/CherryUSB/class/hub \
 	-I../../../third/CherryUSB/osal \
 	-I../../../include_lib/system/os/FreeRTOS \
@@ -167,13 +177,27 @@ INCLUDES := \
 # USB: CherryUSB 设备栈(CDC) —— 旧杰理从机栈 driver/usb 已不再参与编译, 文件保留备查
 c_SRC_FILES := \
 	../../../app/app_main.c \
-	../../../app/cdc_acm_app.c \
+	../../../app/bt_wifi_app.c \
+	../../../app/bt_profile_config.c \
+	../../../app/cdc_acm_msc_app.c \
 	../../../app/usbh_msc_app.c \
+	../../../app/usbh_cdc_hid_app.c \
+	../../../app/common_ble/le_hogp.c \
+	../../../app/common_ble/le_trans_data.c \
+	../../../app/key/key_driver.c \
+	../../../app/key/adkey.c \
+	../../../driver/config/log_config/lib_btctrler_config.c \
+	../../../driver/config/log_config/lib_btstack_config.c \
 	../../../app/board/wl82/board.c \
 	../../../third/CherryUSB/core/usbd_core.c \
 	../../../third/CherryUSB/core/usbh_core.c \
 	../../../third/CherryUSB/class/cdc/usbd_cdc_acm.c \
+	../../../third/CherryUSB/class/msc/usbd_msc.c \
+	../../../third/CherryUSB/class/serial/usbh_serial.c \
+	../../../third/CherryUSB/class/serial/usbh_cdc_acm.c \
+	../../../third/CherryUSB/class/hid/usbh_hid.c \
 	../../../third/CherryUSB/class/msc/usbh_msc.c \
+	../../../third/CherryUSB/third_party/fatfs-0.14/source/ff.c \
 	../../../third/CherryUSB/class/hub/usbh_hub.c \
 	../../../third/CherryUSB/osal/usb_osal_freertos.c \
 	../../../third/CherryUSB/port/jl82/usb_hc_jl82.c \
@@ -252,6 +276,12 @@ LFLAGS := \
 	../../../cpu/wl82/liba/fs.a \
 	../../../cpu/wl82/liba/common_lib.a \
 	../../../cpu/wl82/liba/update.a \
+	../../../cpu/wl82/liba/wl_rf_common.a \
+	../../../cpu/wl82/liba/btctrler.a \
+	../../../cpu/wl82/liba/btstack.a \
+	../../../cpu/wl82/liba/crypto_toolbox_Osize.a \
+	../../../cpu/wl82/liba/lib_ccm_aes.a \
+	../../../cpu/wl82/liba/lib_sig_mesh.a \
 	--end-group \
 	-T../../../cpu/wl82/sdk.ld \
 	-M=../../../cpu/wl82/tools/sdk.map \
@@ -371,6 +401,18 @@ $(BUILD_DIR)/%.c.o : $(ROOT_PREFIX)/%.c
 $(BUILD_DIR)/third/CherryUSB/%.c.o $(BUILD_DIR)/app/cdc_acm_app.c.o : CFLAGS += -include usb_config.h
 $(BUILD_DIR)/app/usbh_msc_app.c.o : CFLAGS += -include usb_config.h
 $(BUILD_DIR)/app/usbh_msc_app.c.o : CFLAGS += -include usb_config.h
+$(BUILD_DIR)/third/CherryUSB/third_party/fatfs-0.14/source/ff.c.o : CFLAGS += \
+	-Df_open=usbh_fatfs_open -Df_close=usbh_fatfs_close -Df_read=usbh_fatfs_read -Df_write=usbh_fatfs_write \
+	-Df_lseek=usbh_fatfs_lseek -Df_truncate=usbh_fatfs_truncate -Df_sync=usbh_fatfs_sync \
+	-Df_opendir=usbh_fatfs_opendir -Df_closedir=usbh_fatfs_closedir -Df_readdir=usbh_fatfs_readdir \
+	-Df_findfirst=usbh_fatfs_findfirst -Df_findnext=usbh_fatfs_findnext -Df_mkdir=usbh_fatfs_mkdir \
+	-Df_unlink=usbh_fatfs_unlink -Df_rename=usbh_fatfs_rename -Df_stat=usbh_fatfs_stat \
+	-Df_chmod=usbh_fatfs_chmod -Df_utime=usbh_fatfs_utime -Df_chdir=usbh_fatfs_chdir \
+	-Df_chdrive=usbh_fatfs_chdrive -Df_getcwd=usbh_fatfs_getcwd -Df_getfree=usbh_fatfs_getfree \
+	-Df_getlabel=usbh_fatfs_getlabel -Df_setlabel=usbh_fatfs_setlabel -Df_forward=usbh_fatfs_forward \
+	-Df_expand=usbh_fatfs_expand -Df_mount=usbh_fatfs_mount -Df_mkfs=usbh_fatfs_mkfs \
+	-Df_fdisk=usbh_fatfs_fdisk -Df_setcp=usbh_fatfs_setcp -Df_putc=usbh_fatfs_putc \
+	-Df_puts=usbh_fatfs_puts -Df_printf=usbh_fatfs_printf -Df_gets=usbh_fatfs_gets
 
 $(BUILD_DIR)/%.S.o : $(ROOT_PREFIX)/%.S
 	$(info +AS $<)
