@@ -80,7 +80,7 @@
 /* ================ 蓝牙/WiFi 外设(原厂栈移植) ================ */
 #define MINI_BT_SUPPORT             1   /* 0=关闭; 1=链接 btctrler/btstack 并开机自启 */
 #define MINI_BT_BLE_TRANS_EN        1   /* BLE 透传服务(广播名 WL82-BLE, 透传特征 ae82 notify) */
-#define MINI_WIFI_SUPPORT           0   /* WiFi: 库已入树, 待 RF 校准/网络栈联调后开启 */
+#define MINI_WIFI_SUPPORT           1   /* WiFi STA: 扫描演示(wifi_on -> scan -> 打印 AP) */
 
 #if MINI_BT_SUPPORT
 #ifdef CONFIG_BT_ENABLE

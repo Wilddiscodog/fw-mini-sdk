@@ -116,6 +116,8 @@ void bt_module_init(void *p)
 
     printf("[bt] register event + btstack_init\n");
     register_sys_event_handler(SYS_BT_EVENT, BT_EVENT_FROM_CON, 1, bt_sys_event_handler);
+    extern void lmp_set_sniff_disable(void);
+    lmp_set_sniff_disable();    /* demo_ble 同款: 纯 BLE 方案关 sniff */
     btstack_init();     /* 创建 btctrler/btstack 任务, 完成后抛 BT_STATUS_INIT_OK */
     printf("[bt] btstack_init done\n");
 

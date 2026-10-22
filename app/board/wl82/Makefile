@@ -118,6 +118,7 @@ DEFINES := \
 	-DVM_MAX_SECTOR_ALIGN_SIZE_CONFIG=64*1024 \
 	-DVM_ITEM_MAX_NUM=256 \
 	-DCONFIG_BT_ENABLE=1 \
+	-DCONFIG_NET_ENABLE=1 \
 	-DCONFIG_UPDATA_ENABLE \
 	-DCONFIG_OTA_UPDATA_ENABLE \
 	-DCONFIG_ITEM_FORMAT_VM \
@@ -156,6 +157,10 @@ INCLUDES := \
 	-I../../../include_lib/btstack/third_party/rcsp \
 	-I../../../include_lib/net \
 	-I../../../include_lib/net/wifi \
+	-I../../../include_lib/net/lwip_2_1_3/lwip/src/include \
+	-I../../../include_lib/net/lwip_2_1_3/lwip/src/include/lwip \
+	-I../../../include_lib/net/lwip_2_1_3/lwip/port \
+	-I../../../include_lib/net/lwip_2_1_3/lwip/app \
 	-I../../../include_lib/media \
 	-I../../../include_lib/media/cpu/wl82 \
 	-I../../../driver \
@@ -282,6 +287,15 @@ LFLAGS := \
 	../../../cpu/wl82/liba/crypto_toolbox_Osize.a \
 	../../../cpu/wl82/liba/lib_ccm_aes.a \
 	../../../cpu/wl82/liba/lib_sig_mesh.a \
+	../../../cpu/wl82/liba/hsm.a \
+	../../../cpu/wl82/liba/wpasupplicant.a \
+	../../../cpu/wl82/liba/libmbedtls_2_2_1.a \
+	../../../cpu/wl82/liba/http_cli.a \
+	../../../cpu/wl82/liba/json.a \
+	../../../cpu/wl82/liba/iperf.a \
+	../../../cpu/wl82/liba/lwip_2_1_3.a \
+	../../../cpu/wl82/liba/wl_wifi_sta.a \
+	../../../cpu/wl82/liba/net_server.a \
 	--end-group \
 	-T../../../cpu/wl82/sdk.ld \
 	-M=../../../cpu/wl82/tools/sdk.map \
