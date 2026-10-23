@@ -73,7 +73,13 @@ const struct task_info task_info_table[] = {
     {"bt_app",              12,     1024,   0   },
     {"wifi_app",            12,     1024,   0   },
     /* WiFi 协议栈任务(demo_wifi 同款) */
-    {"wl_dev",              20,     1024,   512 },
+    /* WiFi 协议栈任务(demo_wifi 同款, 库按名字 task_create, 缺一不可):
+     * tasklet=收发主任务, RtmpMlmeTask=MLME 状态机, RtmpCmdQTask=命令队列,
+     * wl_rx_irq_thread=RX 中断线程 */
+    {"tasklet",             10,     1400,   0   },
+    {"RtmpMlmeTask",        17,     700,    0   },
+    {"RtmpCmdQTask",        17,     300,    0   },
+    {"wl_rx_irq_thread",     5,     256,    0   },
     {0, 0, 0, 0, 0},
 };
 
