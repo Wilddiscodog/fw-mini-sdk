@@ -130,8 +130,15 @@ void bt_module_init(void *p)
 #endif  /* MINI_BT_SUPPORT */
 
 #if MINI_WIFI_SUPPORT
-/* WiFi 最小闭环: 上电 → wifi_on → 扫描 → 打印 AP 列表(10s 一轮) */
+/* WiFi 最小闭环: 上电 → 事件回调注册 → wifi_on → 扫描 → 打印 AP 列表
+ * (回调必须先于 wifi_on 注册: 库经 RPC 线程投递首事件, 空回调 = 跳 0 崩溃) */
 #include "wifi/wifi_connect.h"
+
+static int wifi_event_cb(void *priv, enum WIFI_EVENT event)
+{
+    printf("[wifi] event %d\n", event);
+    return 0;
+}
 
 
 static void wifi_scan_task(void *p)
@@ -139,6 +146,7 @@ static void wifi_scan_task(void *p)
     (void)p;
     os_time_dly(300);
 
+    wifi_set_event_callback(wifi_event_cb);   /* 原厂 wifi_ipc 同款: 先注册回调 */
     if (wifi_on()) {
         printf("[wifi] wifi_on fail\n");
         while (1) { os_time_dly(600); }

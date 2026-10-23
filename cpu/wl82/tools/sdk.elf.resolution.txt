@@ -29,6 +29,7 @@ objs/app/bt_wifi_app.c.o
 -r=objs/app/bt_wifi_app.c.o,adc_init,l
 -r=objs/app/bt_wifi_app.c.o,key_driver_init,l
 -r=objs/app/bt_wifi_app.c.o,bt_ble_init,l
+-r=objs/app/bt_wifi_app.c.o,wifi_set_event_callback,l
 -r=objs/app/bt_wifi_app.c.o,wifi_on,l
 -r=objs/app/bt_wifi_app.c.o,wifi_get_mac,l
 -r=objs/app/bt_wifi_app.c.o,wifi_scan_req,l
