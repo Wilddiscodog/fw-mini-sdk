@@ -17,6 +17,8 @@
 #include "event/bt_event.h"
 #include "device/gpio.h"
 
+extern const u8 *bt_get_mac_addr(void);
+
 /* ================ ADC 按键(PB01 电阻梯, 原厂 adkey 框架) ================ */
 #include "asm/adc_api.h"
 #include "key/key_driver.h"
@@ -89,7 +91,10 @@ static void bt_status_event_handler(struct bt_event *bt)
     }
 }
 
-static void bt_sys_event_handler(struct sys_event *event)
+/* 原厂 app 框架事件路由: sys_event 任务分发给 app_default_event_handler
+ * (库内 weak 符号, 强定义接管; 实测 register_sys_event_handler 路径收不到
+ *  BT_STATUS_INIT_OK, 蓝牙广播未启动即此因) */
+void app_default_event_handler(struct sys_event *event)
 {
     if (event->type == SYS_BT_EVENT && event->from == BT_EVENT_FROM_CON) {
         bt_status_event_handler((struct bt_event *)event->payload);
@@ -117,7 +122,6 @@ void bt_module_init(void *p)
 #endif
 
     printf("[bt] register event + btstack_init\n");
-    register_sys_event_handler(SYS_BT_EVENT, BT_EVENT_FROM_CON, 1, bt_sys_event_handler);
     extern void lmp_set_sniff_disable(void);
     lmp_set_sniff_disable();    /* demo_ble 同款: 纯 BLE 方案关 sniff */
     btstack_init();     /* 创建 btctrler/btstack 任务, 完成后抛 BT_STATUS_INIT_OK */
@@ -133,6 +137,16 @@ void bt_module_init(void *p)
 /* WiFi 最小闭环: 上电 → 事件回调注册 → wifi_on → 扫描 → 打印 AP 列表
  * (回调必须先于 wifi_on 注册: 库经 RPC 线程投递首事件, 空回调 = 跳 0 崩溃) */
 #include "wifi/wifi_connect.h"
+
+/* WiFi MAC 来源: 强定义覆盖库 weak 默认(无人提供该函数时, 库打印
+ * "must defie macadd method" 并用零 MAC)。复用 bt_get_mac_addr:
+ * VM 缺省时 UID 派生 */
+int init_net_device_mac_addr(char *macaddr, char ap_mode)
+{
+    (void)ap_mode;
+    memcpy(macaddr, bt_get_mac_addr(), 6);
+    return 0;
+}
 
 static int wifi_event_cb(void *priv, enum WIFI_EVENT event)
 {
