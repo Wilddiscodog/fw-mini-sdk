@@ -122,6 +122,8 @@ wifi_scan_task:
 | V0.5.5 | key 框架与 BT 触发解耦(修循环依赖);git 首推 |
 | V0.6.0 | WiFi 全栈链接(wl_wifi_sta/wpasupplicant/lwip/mbedtls/hsm/http_cli/json/iperf)+ 扫描任务;MINI_WIFI_SUPPORT=1 |
 | V0.6.1 | 全量系统级对照(本文档);补 lmp_set_sniff_disable;计划文档建立 |
+| V0.6.2 | 外设普查与移植计划(doc/外设移植计划.md);P1 外设宏门控移植(PWM/RTC/SD/GPCNT/加密,默认全关) |
+| V0.6.3 | **找到 BT"无日志"真根因: bt_wifi_app.c 漏 include app_config.h,MINI_BT/WIFI_SUPPORT 在该文件未定义,胶水被整体编译成空**(V0.5.x 起即如此,"挂死"为误判)。修复: 补 include;adkey 阈值表修正(按键1 边界 81→588,原表按键1 永不匹配);移植 wifi_conf.c + wifi_calibration_param RF 校准表(板级);触发保留按键2(用户修改) |
 
 ### 附: ADC 按键框架(V0.5.4~V0.5.5)
 

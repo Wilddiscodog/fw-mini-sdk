@@ -9,6 +9,7 @@
  *
  * 事件: event.a 按 register_sys_event_handler 注册表分发(SYS_BT_EVENT=0x0010)。
  */
+#include "app_config.h"
 #include "typedef.h"
 #include "os/os_api.h"
 #include "event/event.h"
@@ -28,11 +29,11 @@ const struct adkey_platform_data adkey_data = {
     .adkey_pin    = IO_PORTB_01,
     .extern_up_en = 1,              /* 板上外部上拉(空闲 3.13V) */
     .ad_channel   = AD_CH_PB01,     /* = 3 */
-    .ad_value     = {0, 81, 588, 1023, 1023, 1023, 1023, 1023, 1023, 1023},
+    .ad_value     = {0, 588, 1023, 1023, 1023, 1023, 1023, 1023, 1023, 1023},
     .key_value    = {2, 1, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY},
 };
 
-static volatile u8 key_bt_armed = 1;   /* 按键1 每次单击触发一次 BT 启动 */
+static volatile u8 key_bt_armed = 1;   /* 按键2 单击触发一次 BT 启动 */
 void bt_wifi_start(void);               /* 定义在文件尾 */
 
 static void key_sys_event_handler(struct sys_event *event)
@@ -43,9 +44,9 @@ static void key_sys_event_handler(struct sys_event *event)
     struct key_event *e = (struct key_event *)event->payload;
     if (e->action == KEY_EVENT_CLICK || e->action == KEY_EVENT_UP) {
         printf("[key] v=%d action=%d\n", e->value, e->action);
-        if (e->value == 1 && key_bt_armed) {
+        if (e->value == 2 && key_bt_armed) {
             key_bt_armed = 0;
-            printf("[key] key1 -> bt start\n");
+            printf("[key] key2 -> bt start\n");
             bt_wifi_start();
         }
     }
@@ -67,6 +68,7 @@ void key_early_init(void)
 }
 #if MINI_BT_SUPPORT
 #include "btstack/btstack_task.h"
+#include "btstack/avctp_user.h"
 #include "bt_common.h"
 
 #if MINI_BT_BLE_TRANS_EN
@@ -130,6 +132,7 @@ void bt_module_init(void *p)
 #if MINI_WIFI_SUPPORT
 /* WiFi 最小闭环: 上电 → wifi_on → 扫描 → 打印 AP 列表(10s 一轮) */
 #include "wifi/wifi_connect.h"
+
 
 static void wifi_scan_task(void *p)
 {

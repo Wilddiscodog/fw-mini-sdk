@@ -95,6 +95,41 @@ const struct ui_devices_cfg ui_cfg_data = {
 };
 #endif
 
+/*============================ WiFi RF 校准表 (MINI_WIFI_SUPPORT) =================
+ * 原厂 DevKitBoard 同款默认值; 量产设备应换成本板 MP 校准数据 */
+#if (defined MINI_WIFI_SUPPORT) && MINI_WIFI_SUPPORT
+#include "wifi/wifi_connect.h"
+const struct wifi_calibration_param wifi_calibration_param = {
+    .xosc_l     = 0xb,// 调节左晶振电容
+    .xosc_r     = 0xb,// 调节右晶振电容
+    .pa_trim_data  ={1, 7, 4, 7, 11, 1, 7},// 根据MP测试生成PA TRIM值
+	.mcs_dgain     ={
+		45,//11B_1M
+	  	45,//11B_2.2M
+	  	45,//11B_5.5M
+		42,//11B_11M
+
+		60,//11G_6M
+		60,//11G_9M
+		75,//11G_12M
+		70,//11G_18M
+		62,//11G_24M
+		52,//11G_36M
+		50,//11G_48M
+		38,//11G_54M
+
+		62,//11N_MCS0
+		80,//11N_MCS1
+		70,//11N_MCS2
+		62,//11N_MCS3
+		50,//11N_MCS4
+		48,//11N_MCS5
+		40,//11N_MCS6
+		36,//11N_MCS7
+	}
+};
+#endif
+
 /*============================ 电源 ============================ */
 static const struct low_power_param power_param = {
     .config         = TCFG_LOWPOWER_LOWPOWER_SEL,

@@ -206,6 +206,7 @@ c_SRC_FILES := \
 	../../../app/common_ble/le_trans_data.c \
 	../../../app/key/key_driver.c \
 	../../../app/key/adkey.c \
+	../../../app/net/wifi_conf.c \
 	../../../driver/config/log_config/lib_btctrler_config.c \
 	../../../driver/config/log_config/lib_btstack_config.c \
 	../../../app/board/wl82/board.c \

@@ -1,4 +1,5 @@
 objs/app/bt_wifi_app.c.o: ../../../app/bt_wifi_app.c \
+  ../../../app/include\app_config.h \
   ../../../include_lib/system/generic\typedef.h \
   ../../../include_lib/driver/cpu/wl82\asm/cpu.h \
   ../../../include_lib/driver/cpu/wl82\asm/WL82.h \
@@ -52,4 +53,18 @@ objs/app/bt_wifi_app.c.o: ../../../app/bt_wifi_app.c \
   ../../../include_lib/driver/cpu/wl82\asm/gpio.h \
   ../../../include_lib/driver/cpu/wl82\asm/adc_api.h \
   ../../../include_lib/driver/device\key/key_driver.h \
-  ../../../include_lib/driver/device\key/adkey.h
+  ../../../include_lib/driver/device\key/adkey.h \
+  ../../../include_lib\btstack/btstack_task.h \
+  ../../../include_lib\btstack/avctp_user.h \
+  ../../../include_lib/btstack/btstack_typedef.h \
+  ../../../app/include\bt_common.h ../../../app/include/bt_profile_cfg.h \
+  ../../../include_lib/btctrler\btcontroller_modules.h \
+  ../../../include_lib/btctrler/hci_transport.h \
+  ../../../include_lib/btctrler/btcontroller_mode.h \
+  ../../../include_lib/btctrler/ble/hci_ll.h \
+  C:/JL/pi32/pi32v2-include\stdlib.h \
+  C:/JL/pi32/pi32v2-include\machine/stdlib.h \
+  C:/JL/pi32/pi32v2-include\alloca.h \
+  ../../../include_lib/btctrler/classic/hci_lmp.h \
+  ../../../app/common_ble/include\le_trans_data.h \
+  ../../../include_lib/net\wifi/wifi_connect.h

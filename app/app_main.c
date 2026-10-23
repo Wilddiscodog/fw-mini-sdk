@@ -396,7 +396,9 @@ void app_main()
      * 之前埋在 bt_wifi_start 里形成循环依赖, 按键永远没机会触发) */
     extern void key_early_init(void);
     key_early_init();
-    /* 外设演示(PWM/RTC/SD/加密, Makefile MINI_XXX_SUPPORT 开关, 默认全关) */
-    extern void periph_demo_start(void);
-    periph_demo_start();
+    // /* 外设演示(PWM/RTC/SD/加密, Makefile MINI_XXX_SUPPORT 开关, 默认全关) */
+    // extern void periph_demo_start(void);
+    // periph_demo_start();
+    extern void bt_wifi_start(void);
+    void bt_wifi_start(void);
 }
