@@ -380,10 +380,13 @@ uint32_t cdc_write_data(int usb_id, uint8_t *buf, uint32_t len)
  * 写完), 触发时机更稳(Windows 目录项已收敛), flash 写入链路仍走原厂
  * net_fopen/net_fwrite/net_fclose(dual_bank 双备份烧写 + 2s 后自动复位)。
  *
- * 检测: 主机每写 RAM 盘若干扇区, 逐扇区找 JL_FILE_HEAD(szFileName=="update_data",
- * isd_download 生成的 db_update_files_data.bin 即该格式, 32B 头);
- * 触发: 3s 无任何扇区写 + FAT16 根目录出现 *.UFW 目录项且首簇/大小与检测到的
- * 流一致 → 按 512B 流式过 CRC16 校验 → net_fwrite 写入 → 烧 boot info → 复位。 */
+ * 检测(V0.9.3 起): MSC 扇区写钩子在 USB 中断上下文, 只做 write_seq++(纯计数)——
+ *   jl_file_head_valid_check 所在模块依赖 norflash_read/norflash_mutex(update.a
+ *   flash_fs_api.c), 在中断里调用会并发抢 flash → 异常复位(V0.9.2 开 USB 即
+ *   重启循环的根因)。全部检测/校验移到看门任务(任务上下文):
+ *   盘被写过 + 3s 写静默 → 扫 FAT16 根目录 *.UFW 目录项 → 读该文件首扇区跑
+ *   JL_FILE_HEAD 校验(szFileName=="update_data", db_update_data.bin 即该格式)
+ *   → 512B 流式 CRC16 校验 → net_fwrite 写入 → 烧 boot info → 复位。 */
 #if TCFG_VIR_UPDATE_ENABLE
 /* JL 升级文件头(update.a 内部同款布局, 共 32B) */
 typedef struct stJL_FILE_HEAD {
@@ -397,11 +400,10 @@ typedef struct stJL_FILE_HEAD {
     char     szFileName[16];
 } JL_FILE_HEAD;
 
-extern int jl_file_head_valid_check(void *head);             /* update.a */
+extern int jl_file_head_valid_check(void *head);             /* update.a(会读 flash, 仅任务上下文调用) */
 extern uint16_t calc_crc16_with_init_val(uint16_t init_crc, uint8_t *ptr, uint16_t len);
 
 static struct {
-    uint8_t  detected;                   /* 已在扇区流中看到升级文件头 */
     uint8_t  busy;                       /* 升级进行中(不再响应新检测) */
     uint16_t data_crc;                   /* 头内数据 CRC16 */
     uint32_t file_size;                  /* 含 32B 头 */
@@ -409,32 +411,17 @@ static struct {
     volatile uint32_t write_seq;         /* MSC 扇区写计数(静默判定) */
 } msc_ota;
 
+/* USB 中断上下文调用: 只计数, 不做任何校验(flash/printf 都不许碰) */
 static void msc_update_on_write(uint32_t sector, const uint8_t *buffer, uint32_t length)
 {
+    (void)sector;
+    (void)buffer;
+    (void)length;
     msc_ota.write_seq++;
-    if (msc_ota.busy || msc_ota.detected) {
-        return;
-    }
-    /* 主机一次可写多扇区(EP 大缓冲), 逐 512B 找升级文件头 */
-    for (uint32_t off = 0; off + 512U <= length; off += 512U) {
-        JL_FILE_HEAD h;
-        memcpy(&h, buffer + off, sizeof(h));
-        if (jl_file_head_valid_check(&h) == 0 &&
-            strncmp(h.szFileName, "update_data", 11) == 0) {
-            msc_ota.detected     = 1;
-            msc_ota.data_crc     = h.u16DataCrc;
-            msc_ota.file_size    = h.u32Length;
-            msc_ota.first_sector = sector + off / 512U;
-            printf("[msc-ota] head @sec %u size %u crc %04x\n",
-                   (unsigned)msc_ota.first_sector, (unsigned)msc_ota.file_size,
-                   msc_ota.data_crc);
-            break;
-        }
-    }
 }
 
-/* FAT16 固定根目录里找 *.UFW 目录项, 首簇/大小须与扇区流检测一致 */
-static int msc_ota_root_entry_ok(void)
+/* FAT16 固定根目录里找第一个有效 *.UFW 目录项(8.3), 返回首簇/大小 */
+static int msc_ota_find_ufw(uint32_t *first_sector, uint32_t *size)
 {
     for (uint32_t e = 0; e < MSC_ROOT_ENTRIES; e++) {
         const uint8_t *p = &msc_ram_disk[MSC_ROOT_START_SECTOR * 512U + e * 32U];
@@ -448,9 +435,10 @@ static int msc_ota_root_entry_ok(void)
             continue;
         }
         uint32_t clu  = p[26] | ((uint32_t)p[27] << 8);
-        uint32_t size = p[28] | ((uint32_t)p[29] << 8) | ((uint32_t)p[30] << 16) | ((uint32_t)p[31] << 24);
-        if (clu >= 2 && MSC_DATA_START_SECTOR + (clu - 2U) == msc_ota.first_sector &&
-            size == msc_ota.file_size) {
+        *size = p[28] | ((uint32_t)p[29] << 8) | ((uint32_t)p[30] << 16) | ((uint32_t)p[31] << 24);
+        if (clu >= 2 && *size >= 64U &&
+            MSC_DATA_START_SECTOR + (clu - 2U) < MSC_RAM_SECTORS) {
+            *first_sector = MSC_DATA_START_SECTOR + (clu - 2U);
             return 1;
         }
     }
@@ -469,14 +457,13 @@ static void msc_ota_do_upgrade(void)
         goto out;
     }
 
+    uint16_t crc = 0;
     uint32_t total_sec = (msc_ota.file_size + 511U) / 512U;
     if (msc_ota.file_size < 64U || msc_ota.first_sector + total_sec > MSC_RAM_SECTORS) {
         printf("[msc-ota] bad size/range, drop\n");
         net_fclose(fd, 1);
         goto out;
     }
-
-    uint16_t crc = 0;
     for (uint32_t i = 0; i < total_sec; i++) {
         uint8_t *sec = &msc_ram_disk[(msc_ota.first_sector + i) * 512U];
         uint32_t n = (i == total_sec - 1U) ?
@@ -507,42 +494,60 @@ static void msc_ota_do_upgrade(void)
     }
 
 out:
-    msc_ota.detected = 0;                /* 允许用户重新拖入 */
-    msc_ota.busy = 0;
+    msc_ota.busy = 0;                    /* 允许用户重新拖入(写盘会触发重扫) */
 }
 
 static void msc_ota_watch_task(void *arg)
 {
     uint32_t quiet_ms = 0;
     uint32_t last_seq = msc_ota.write_seq;
+    uint8_t  dirty = 0;                  /* 盘被写过(静默后需要扫描) */
 
     while (1) {
         os_time_dly(50);                 /* 500ms 周期 */
-        if (!msc_ota.detected || msc_ota.busy) {
-            quiet_ms = 0;
-            last_seq = msc_ota.write_seq;
+        if (msc_ota.busy) {
             continue;
         }
-        if (msc_ota.write_seq != last_seq) {  /* 拷贝仍在进行 */
+        if (msc_ota.write_seq != last_seq) {  /* 有新写入: 重新计时 */
             last_seq = msc_ota.write_seq;
             quiet_ms = 0;
+            dirty = 1;
             continue;
+        }
+        if (!dirty) {
+            continue;                    /* 盘没被写过, 不扫 */
         }
         quiet_ms += 500;
         if (quiet_ms < 3000U) {          /* 3s 静默判据 */
             continue;
         }
-        if (!msc_ota_root_entry_ok()) {  /* 目录项未收敛(拷贝未真正结束) */
-            if (quiet_ms >= 60000U) {    /* 60s 仍未就绪: 放弃本次, 需重新拖入 */
-                printf("[msc-ota] dir entry never settled, drop\n");
-                msc_ota.detected = 0;
-                quiet_ms = 0;
-            }
+        dirty = 0;
+        quiet_ms = 0;
+
+        /* 盘被写过且已静默: 扫 FAT 根目录找升级文件(任务上下文) */
+        uint32_t first_sector, size;
+        if (!msc_ota_find_ufw(&first_sector, &size)) {
+            continue;                    /* 无升级文件(普通拷贝), 等下次写盘 */
+        }
+        JL_FILE_HEAD h;
+        memcpy(&h, &msc_ram_disk[first_sector * 512U], sizeof(h));
+        if (jl_file_head_valid_check(&h) != 0 ||
+            strncmp(h.szFileName, "update_data", 11) != 0) {
+            printf("[msc-ota] .UFW head invalid, ignore\n");
             continue;
         }
+        if (h.u32Length > size) {        /* 头声明长度不能超过目录项大小 */
+            printf("[msc-ota] head len %u > file %u, ignore\n",
+                   (unsigned)h.u32Length, (unsigned)size);
+            continue;
+        }
+        msc_ota.data_crc     = h.u16DataCrc;
+        msc_ota.file_size    = h.u32Length;
+        msc_ota.first_sector = first_sector;
+        printf("[msc-ota] update file @sec %u size %u crc %04x\n",
+               (unsigned)first_sector, (unsigned)msc_ota.file_size, msc_ota.data_crc);
         msc_ota.busy = 1;
         msc_ota_do_upgrade();            /* 成功路径不再返回(等复位) */
-        quiet_ms = 0;
     }
 }
 #endif  /* TCFG_VIR_UPDATE_ENABLE */
