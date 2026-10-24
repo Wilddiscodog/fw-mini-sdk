@@ -1,5 +1,5 @@
 /*
- * LCD 驱动 —— JD9853 8bit 8080 并口 (xiaolu-R2 手表屏, 360x360 AMOLED 圆屏)
+ * LCD 驱动 —— JD9853 8bit 8080 并口 (xiaolu-R2 设备屏, 方形 240x320 QVGA TFT)
  *
  * 来源与限制(重要):
  *  - 型号与流程来自 xiaolu-R2 原机串口日志: "LCD_JD9853 init_start, touch id[0xB6],
@@ -21,8 +21,8 @@
 
 #if TCFG_LCD_JD9853_ENABLE
 
-#define LCD_W   360
-#define LCD_H   360
+#define LCD_W   240    /* 竖屏宽; 横屏对调并改 MADCTL */
+#define LCD_H   320
 
 #define ROTATE_DEGREE_0    0
 #define ROTATE_DEGREE_90   1
@@ -126,7 +126,7 @@ static void JD9853_SetRange(u16 xs, u16 xe, u16 ys, u16 ye)
 
 void JD9853_set_direction(u8 dir)
 {
-    WriteCOM(0x36);
+    WriteCOM(0x36);            /* 240x320 竖屏 */
     if (dir == ROTATE_DEGREE_0) {
         WriteDAT_8(0x00);
     } else if (dir == ROTATE_DEGREE_90) {

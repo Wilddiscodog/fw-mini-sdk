@@ -6917,7 +6917,7 @@ SYMBOL TABLE:
 00007748         .debug_ranges		 00000000 
 0200bcda         .text		 00000000 
 0200bcda         .text		 00000000 
-0200bcfc         .text		 00000000 
+0200bcf8         .text		 00000000 
 00007728         .debug_ranges		 00000000 
 0200bd2a         .text		 00000000 
 0200bd2a         .text		 00000000 
