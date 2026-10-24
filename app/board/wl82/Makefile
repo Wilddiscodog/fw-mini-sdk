@@ -310,7 +310,7 @@ LFLAGS := \
 	../../../cpu/wl82/liba/json.a \
 	../../../cpu/wl82/liba/iperf.a \
 	../../../cpu/wl82/liba/lwip_2_1_3.a \
-	../../../cpu/wl82/liba/wl_wifi_sta.a \
+	../../../cpu/wl82/liba/wl_wifi.a \
 	../../../cpu/wl82/liba/net_server.a \
 	--end-group \
 	-T../../../cpu/wl82/sdk.ld \
