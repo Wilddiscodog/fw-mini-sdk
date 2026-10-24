@@ -66,6 +66,9 @@
 #define SYSVDD_VOL_SEL_LEVEL                    SYSVDD_VOL_SEL_126V
 
 #define CONFIG_DEBUG_ENABLE
+/* 日志镜像到 USB CDC 口(组合设备的串口, 打开串口即实时输出; UART0 仍保留)。
+ * 链路: debug_user.c putbyte→UART0+lg_buf → usb_log_task → cdc_write_data */
+#define CONFIG_USB_DEBUG_ENABLE
 
 #if !defined CONFIG_DEBUG_ENABLE || defined CONFIG_LIB_DEBUG_DISABLE
 #define LIB_DEBUG    0

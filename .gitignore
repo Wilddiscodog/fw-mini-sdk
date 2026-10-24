@@ -1,0 +1,27 @@
+# ================= 编译中间产物(不入库) =================
+# 最终固件保留: cpu/wl82/tools/jl_isd.ufw(整烧镜像) + update-ota.ufw(U盘升级文件)
+
+# 目标文件/依赖表/LTO 中间件
+app/board/wl82/objs/
+
+# 链接产物与打包中间件
+cpu/wl82/tools/sdk.elf*
+cpu/wl82/tools/sdk.map
+cpu/wl82/tools/symbol_tbl.txt
+
+# isd_download 输入/输出中间件(由构建重新生成)
+cpu/wl82/tools/app.bin
+cpu/wl82/tools/db_update_data.bin
+cpu/wl82/tools/jl_isd.bin
+cpu/wl82/tools/jl_isd.fw
+cpu/wl82/tools/jl_isd_expend.bin
+cpu/wl82/tools/jl_isd_extend.bin
+cpu/wl82/tools/update.ufw
+cpu/wl82/tools/isd_config.ini
+cpu/wl82/tools/text.bin
+cpu/wl82/tools/data.bin
+cpu/wl82/tools/ram0_data.bin
+cpu/wl82/tools/cache_ram_data.bin
+
+# 历史构建事故残留(download.bat 被误复制到 board 目录)
+app/board/wl82/*cpuwl82toolsdownload.bat

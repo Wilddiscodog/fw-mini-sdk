@@ -5,7 +5,11 @@
 //#define CONFIG_USER_DEBUG_ENABLE  //开启user_printf
 //#define CONFIG_SDCARD_DEBUG_ENABLE  //开关SD卡记录打印信息
 //#define CONFIG_NETWORK_DEBUG_ENABLE //可以触发打印信息上传到服务器端
-//#define CONFIG_USB_DEBUG_ENABLE     //开关USB虚拟串口打印信息
+/* CONFIG_USB_DEBUG_ENABLE 移至 app_config.h(fw-mini-sdk: 日志镜像 USB CDC 口) */
+#if (defined CONFIG_DEBUG_ENABLE && defined CONFIG_USB_DEBUG_ENABLE)
+#include "asm/cpu.h"     /* __asm_csync */
+#include "asm/WL82.h"    /* JL_UART0: putbyte 的 UART0 镜像(查询发送) */
+#endif
 
 
 #if (defined CONFIG_DEBUG_ENABLE && defined CONFIG_NETWORK_DEBUG_ENABLE)
@@ -290,6 +294,9 @@ extern u32 cdc_write_data(int usb_id, u8 *buf, u32 len);
 static u32 lg_cnt, last_cnt;
 static char lg_buf[DATA_BUF_SIZE]; //打印信息缓存值
 
+/* fw-mini-sdk 差异: 原厂 cdc_write_data 是其 USB 栈接口, 本工程实现于
+ * cdc_acm_msc_app.c(CherryUSB CDC IN); 单 USB 口, 无需原厂的双口(0/1)各发一份 */
+
 static void usb_log_task(void *priv)
 {
     os_time_dly(300);
@@ -298,12 +305,9 @@ static void usb_log_task(void *priv)
         if (lg_cnt > last_cnt && last_cnt != lg_cnt) {
             if (lg_cnt / sizeof(lg_buf) > last_cnt / sizeof(lg_buf)) {
                 cdc_write_data(0, (u8 *)lg_buf + (last_cnt % sizeof(lg_buf)), sizeof(lg_buf) - last_cnt % sizeof(lg_buf));
-                cdc_write_data(1, (u8 *)lg_buf + (last_cnt % sizeof(lg_buf)), sizeof(lg_buf) - last_cnt % sizeof(lg_buf));
                 cdc_write_data(0, (u8 *)lg_buf, lg_cnt - last_cnt - (sizeof(lg_buf) - last_cnt % sizeof(lg_buf)));
-                cdc_write_data(1, (u8 *)lg_buf, lg_cnt - last_cnt - (sizeof(lg_buf) - last_cnt % sizeof(lg_buf)));
             } else {
                 cdc_write_data(0, (u8 *)lg_buf + (last_cnt % sizeof(lg_buf)), lg_cnt - last_cnt);
-                cdc_write_data(1, (u8 *)lg_buf + (last_cnt % sizeof(lg_buf)), lg_cnt - last_cnt);
             }
         }
         last_cnt = lg_cnt;
@@ -325,6 +329,21 @@ module_initcall(usb_log_task_create);
 //////////////////////////////////////////
 
 #if (defined CONFIG_NETWORK_DEBUG_ENABLE || defined CONFIG_SDCARD_DEBUG_ENABLE || defined CONFIG_USB_DEBUG_ENABLE)
+#if defined CONFIG_USB_DEBUG_ENABLE
+/* fw-mini-sdk: 日志镜像 UART0(查询发送, 1M 波特下单字节 ~1us)。
+ * 本强定义覆盖了 cpu.a 的弱 putbyte(其行为=写日志串口), 故 UART 输出由这里接管;
+ * CON0: bit0=使能, bit13=启动发送, bit15=发送完成(与 cpu/wl82/debug.c 异常路径同款) */
+static void uart0_log_putc(char c)
+{
+    if (JL_UART0->CON0 & BIT(0)) {
+        JL_UART0->CON0 |= BIT(13);
+        JL_UART0->BUF = c;
+        __asm_csync();
+        while ((JL_UART0->CON0 & BIT(15)) == 0);
+    }
+}
+#endif
+
 void putbyte(char c)
 {
 #if defined CONFIG_NETWORK_DEBUG_ENABLE
@@ -346,6 +365,7 @@ void putbyte(char c)
     first_write = 0;
 #endif
 #if defined CONFIG_USB_DEBUG_ENABLE
+    uart0_log_putc(c);             /* fw-mini-sdk: 镜像到 UART0, 串口 CDC 双通道 */
     if (c == '\r') {
         return;
     }
