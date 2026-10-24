@@ -63,9 +63,17 @@ PWM_PLATFORM_DATA_BEGIN(pwm_data1)
 	.point_bit = 0,
 PWM_PLATFORM_DATA_END();
 
-/*============================ LCD：EMI 8080-8bit 并口 (ili9341 参考驱动) ========
- * 数据线 D0~D7 为 EMI 专用引脚映射（见芯片手册 EMI 章节/参考原理图），
- * RS/BL/TE 为普通 GPIO，可按硬件调整。 */
+/*============================ LCD：EMI 8080-8bit 并口 (JD9853, xiaolu-R2) =======
+ * 引脚表来自设备原理图 zc-p25136_c0682-v2-3-1210.pdf 第2页(原始路径
+ * J:\xiaolu-r2\新建文件夹\, 详见 doc/屏幕触摸移植记录.md):
+ *   PC1~PC8  = LCD_D0~D7   芯片 LCD 复用脚, dev_open("emi") 时由 EMI 控制器配置
+ *   PC10     = LCD_WR      同上(EMI 硬件)
+ *   PC9      = LCD_CS      同上(EMI 硬件选通) → cs_pin 保持 -1, 勿当 GPIO 用
+ *   PB5      = LCD_RS      GPIO, 命令/数据切换(lcd_rs_pinstate)
+ *   PB6      = LCD_RD      GPIO 拉高(芯片无 LCD_RD 复用, EMI 只写; 见 lcd_jd9853.c)
+ *   PB7      = LCD_RESET   GPIO
+ *   PC0      = LCD_TE      GPIO 输入(撕裂同步)
+ *   PA6      = LED_PWM     背光使能(原理图网络名 PA6_LED_PWM, 可改 PWM 调光) */
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 static const struct emi_platform_data emi_data = {
 	.bits_mode      = EMI_8BITS_MODE,       /* 8 位 8080 并口 */
@@ -79,13 +87,13 @@ static const struct emi_platform_data emi_data = {
 };
 
 static const struct ui_lcd_platform_data lcd_pdata = {
-	.rst_pin        = -1,            /* 复位脚: -1=由硬件上电复位 */
-	.cs_pin         = -1,            /* 8080 常驻选通 */
-	.rs_pin         = IO_PORTC_09,   /* 命令/数据切换 */
-	.bl_pin         = IO_PORTB_08,   /* 背光使能 */
-	.te_pin         = IO_PORTC_00,   /* 撕裂同步(未用可 -1) */
-	.touch_int_pin  = -1,
-	.touch_reset_pin= -1,
+	.rst_pin        = IO_PORTB_07,   /* LCD_RESET: PB7 */
+	.cs_pin         = -1,            /* CS=PC9 为 EMI 硬件脚, 软件不动 */
+	.rs_pin         = IO_PORTB_05,   /* LCD_RS: PB5 */
+	.bl_pin         = IO_PORTA_06,   /* 背光 LED_PWM: PA6 */
+	.te_pin         = IO_PORTC_00,   /* LCD_TE: PC0 */
+	.touch_int_pin  = -1,            /* 触摸在 PH3, 由 touch_cst816.c 自管 */
+	.touch_reset_pin= -1,            /* 触摸 RST 在 PH4, 同上 */
 	.lcd_if         = LCD_EMI,       /* 接口类型: EMI(8080) / PAP / SPI */
 };
 

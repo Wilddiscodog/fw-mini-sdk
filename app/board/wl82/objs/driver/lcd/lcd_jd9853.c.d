@@ -68,6 +68,7 @@ objs/driver/lcd/lcd_jd9853.c.o: ../../../driver/lcd/lcd_jd9853.c \
   ../../../include_lib/system/app_msg.h \
   ../../../include_lib/system/bank_switch.h \
   ../../../app/include\app_config.h \
+  ../../../include_lib/driver/cpu/wl82\asm/gpio.h \
   ../../../driver/lcd/include\lcd_drive.h \
   ../../../include_lib/driver/cpu/wl82\asm/spi.h \
   ../../../include_lib/driver/cpu/wl82\asm/port_waked_up.h \

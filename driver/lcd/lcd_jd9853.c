@@ -10,11 +10,16 @@
  *    标准, JD9853 全兼容; 【面板调优段】采用 JD9853 公开参考序列, 若点亮后出现
  *    色偏/亮度异常/首行错位, 替换 PANEL_TUNING 区(需抓原机 RAM 或厂商规格书)。
  *
- * 接口: EMI 8080-8bit(复用 board.c emi/lcd_pdata, RS/BL 引脚在 board 配置)。
+ * 接口: EMI 8080-8bit, 引脚固定于 zc-p25136 原理图(见 board.c LCD 段注释):
+ *   PC1~PC8=D0~D7, PC10=WR, PC9=CS(以上 EMI 硬件复用);
+ *   PB5=RS, PB7=RESET, PC0=TE, PA6=背光(GPIO, 网络名 LED_PWM);
+ *   PB6=RD —— 芯片无 LCD_RD 复用功能(EMI 只写), 必须软件输出高,
+ *   否则 RD 悬空可能被干扰导致面板误读、数据错乱。
  */
 #include "system/includes.h"
 #include "typedef.h"
 #include "app_config.h"
+#include "asm/gpio.h"
 #include "lcd_drive.h"
 #include "lcd_te_driver.h"
 #include "lcd_config.h"
@@ -59,8 +64,9 @@ static void WriteDAT_DMA(u8 *dat, u32 len)
 
 static void JD9853_io_init(void)
 {
+    gpio_direction_output(IO_PORTB_06, 1);  /* LCD_RD=PB6 拉高(只写接口) */
     lcd_rs_pinstate(0);
-    lcd_cs_pinstate(1);
+    lcd_cs_pinstate(1);   /* cs_pin=-1 时为空操作(CS 由 EMI 硬件选通) */
 }
 
 /* ================= 面板调优段(公开参考, 异常时替换) =================

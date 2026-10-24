@@ -138,4 +138,6 @@ objs/app/board/wl82/board.c.o: ../../../app/board/wl82/board.c \
   ../../../include_lib/driver/cpu/wl82\asm/pwm_led.h \
   ../../../include_lib/driver/cpu/wl82\asm/wdt.h \
   ../../../include_lib/driver/cpu/wl82\asm/jpeg_decoder.h \
+  ../../../driver/lcd/include\ui_api.h \
+  ../../../driver/lcd/include/lcd_drive.h \
   ../../../include_lib/net\wifi/wifi_connect.h

@@ -82,7 +82,9 @@ const struct task_info task_info_table[] = {
     {0, 0, 0, 0, 0},
 };
 
-/*============================ GPIO：LED 闪烁 ============================ */
+/*============================ GPIO：LED 闪烁 ============================
+ * 注意: PA6 在 xiaolu-R2 硬件上是 LCD 背光(LED_PWM), 若启用 LCD 请勿再
+ * 启用本任务; 需要闪烁指示灯时换到空闲 IO。 */
 static void led_task(void *p)
 {
     gpio_direction_output(IO_PORTA_06, 1);
