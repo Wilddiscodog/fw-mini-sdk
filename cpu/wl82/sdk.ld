@@ -350,6 +350,9 @@ SECTIONS
     .data ALIGN(32):
     {
         . = ALIGN(4);
+        *(.ui_ram)
+
+        . = ALIGN(4);
 
 
     _vfs_ops_begin = .;
@@ -822,18 +825,18 @@ SECTIONS
         acl_tx_pool = .;
         *(.bredr_tx_bulk)
 
+        acl_tx_pool_end = acl_tx_pool + (6 * 1024);
 
 
-        acl_tx_pool_end = acl_tx_pool;
 
         . = acl_tx_pool_end;
 
         acl_rx_pool = .;
         *(.bredr_rx_bulk)
 
+        acl_rx_pool_end = acl_rx_pool + (12 * 1024);
 
 
-        acl_rx_pool_end = acl_rx_pool;
 
         . = acl_rx_pool_end;
 

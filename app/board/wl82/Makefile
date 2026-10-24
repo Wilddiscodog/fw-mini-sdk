@@ -206,6 +206,7 @@ c_SRC_FILES := \
 	../../../app/common_ble/le_trans_data.c \
 	../../../app/key/key_driver.c \
 	../../../app/key/adkey.c \
+	../../../driver/lcd/touch_cst816.c \
 	../../../app/net/wifi_conf.c \
 	../../../driver/config/log_config/lib_btctrler_config.c \
 	../../../driver/config/log_config/lib_btstack_config.c \
@@ -346,6 +347,7 @@ endif
 ifeq ($(MINI_LCD_SUPPORT),1)
 c_SRC_FILES += ../../../driver/lcd/lcd_drive.c
 c_SRC_FILES += ../../../driver/lcd/lcd_ili9341.c
+c_SRC_FILES += ../../../driver/lcd/lcd_jd9853.c
 c_SRC_FILES += ../../../driver/lcd/lcd_te_stub.c
 INCLUDES    += -I../../../driver/lcd/include
 endif

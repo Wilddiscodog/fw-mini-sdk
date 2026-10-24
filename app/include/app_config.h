@@ -61,6 +61,11 @@
 #endif
 #define CONFIG_DEBUG_LIB(x)         (x & LIB_DEBUG)
 
+/* ================ xiaolu-R2 手表屏/触摸(JD9853 8bit并口 + CST816 IIC) =================
+ * 触摸引脚: PH0/PH1(iic0), PH3=TP_INT, PH4=TP_RST; 屏走 EMI 8080-8bit(board.c) */
+#define TCFG_LCD_JD9853_ENABLE      1
+#define TCFG_TOUCH_CST816_ENABLE    1
+
 /* ================ ADC 按键(原厂 key_driver/adkey 框架, PB01 电阻梯) ================
  * 实测: 空闲 raw=1014(3.13V), 按键1 raw=162(500mV), 按键2 raw=0(0mV)。
  * 表用中点阈值: ≤0 → 按键2; 81<raw≤588 → 按键1; >588 → 无键 */
@@ -78,9 +83,9 @@
 #define TCFG_ADKEY_LED_SPI_IO_REUSE 0
 
 /* ================ 蓝牙/WiFi 外设(原厂栈移植) ================ */
-#define MINI_BT_SUPPORT             0   /* 0=关闭; 1=链接 btctrler/btstack 并开机自启 */
-#define MINI_BT_BLE_TRANS_EN        0   /* BLE 透传服务(广播名 WL82-BLE, 透传特征 ae82 notify) */
-#define CONFIG_BT_ENABLE            0   
+#define MINI_BT_SUPPORT             1   /* 0=关闭; 1=链接 btctrler/btstack 并开机自启 */
+#define MINI_BT_BLE_TRANS_EN        1   /* BLE 透传服务(广播名 WL82-BLE, 透传特征 ae82 notify) */
+#define CONFIG_BT_ENABLE            1   
 #define MINI_WIFI_SUPPORT           1   /* WiFi STA: 扫描演示(wifi_on -> scan -> 打印 AP) */
 
 #if MINI_BT_SUPPORT
