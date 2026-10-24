@@ -272,7 +272,10 @@ static void hw_timer_task(void *p)
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 static void lcd_test_task(void *p)
 {
-    os_time_dly(150);
+    /* 延迟到 USB 枚举完成之后才点亮/刷屏: V0.9.6 实测开机即高频刷 EMI 会
+     * 干扰 USB 枚举(待隔离确认)。此延时也是 emi/panel 初始化与 USB 启动的
+     * 时序解耦点。 */
+    os_time_dly(800);
     user_lcd_init();   /* dev_open("emi") + 屏初始化 + 背光 */
 
     struct lcd_interface *lcd = lcd_get_hdl();
@@ -311,7 +314,7 @@ static void lcd_test_task(void *p)
                  * (lcd->draw 走 ui_send_data_ready —— te_stub 里是空函数, 画不上) */
                 lcd->draw_lvgl(0, w - 1, y, y + 39, (char *)fb);
             }
-            os_time_dly(100);
+            os_time_dly(200);            /* 2s 换色: 降低 EMI 总线占用 */
         }
     }
 #endif
