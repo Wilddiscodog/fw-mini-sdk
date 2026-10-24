@@ -343,12 +343,16 @@ static void usb_mode_task(void *p)
     }
 }
 #else
-extern void cdc_msc_init(uint8_t busid, uintptr_t reg_base);
+extern void msc_only_init(uint8_t busid, uintptr_t reg_base);
 static void usb_mode_task(void *p)
 {
     os_time_dly(100);    /* 等 boot 日志打完 */
+#if MINI_USB_CDC_ENABLE
     printf("[usb] CherryUSB CDC(log) + MSC 4MB RAM disk composite\n");
-    cdc_msc_init(CHERRYUSB_BUSID, JL82_HUSB_SIE_BASE);
+#else
+    printf("[usb] CherryUSB MSC-only 4MB RAM disk on EP1\n");
+#endif
+    msc_only_init(CHERRYUSB_BUSID, JL82_HUSB_SIE_BASE);
 
     while (1) {
         os_time_dly(10000);

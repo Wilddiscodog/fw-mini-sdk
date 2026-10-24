@@ -67,8 +67,13 @@
 
 #define CONFIG_DEBUG_ENABLE
 /* 日志镜像到 USB CDC 口(组合设备的串口, 打开串口即实时输出; UART0 仍保留)。
- * 链路: debug_user.c putbyte→UART0+lg_buf → usb_log_task → cdc_write_data */
-#define CONFIG_USB_DEBUG_ENABLE
+ * ⚠ USB 枚举异常排查期(V0.9.x)暂时关闭: 关闭后 putbyte 不再被覆盖,
+ * 日志完全走原厂 lib→UART0 路径。重开需同时 MINI_USB_CDC_ENABLE=1。 */
+/* #define CONFIG_USB_DEBUG_ENABLE */
+
+/* USB 设备形态开关: 1=CDC(日志)+MSC 组合设备; 0=MSC-only(EP1, V0.8 验证配置)。
+ * ⚠ 同上排查期暂时 0。CDC 代码在 cdc_acm_msc_app.c 内保留, 宏开即回。 */
+#define MINI_USB_CDC_ENABLE    0
 
 #if !defined CONFIG_DEBUG_ENABLE || defined CONFIG_LIB_DEBUG_DISABLE
 #define LIB_DEBUG    0

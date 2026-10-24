@@ -1,13 +1,12 @@
 /*
- * CherryUSB 组合设备 —— CDC ACM(系统日志口) + MSC(4MB RAM 盘, 虚拟U盘自动升级)
+ * CherryUSB 设备 —— MSC(4MB RAM 盘, 虚拟U盘自动升级) [+ CDC 日志口, 宏控]
  *
- * 端点规划(V0.9.2 起按用户要求重排):
- *   EP1(0x81 IN / 0x01 OUT) bulk 512 —— MSC(普通 DMA 模式, 64B 对齐组)
- *   EP2(0x82 IN / 0x02 OUT) bulk 512 —— CDC 数据(日志口)
- *   EP3(0x83 IN)            int 64  —— CDC 通知(已注册, DTR 变化发 SERIAL_STATE)
+ * 端点规划:
+ *   EP1(0x81 IN / 0x01 OUT) bulk 512 —— MSC(普通 DMA 模式, V0.8 验证配置)
+ *   [MINI_USB_CDC_ENABLE=1 时] EP2(0x82/0x02) CDC 数据 + EP3(0x83) INT 通知
  *
- * 日志链路(原厂 debug_user.c 机制): lib 逐字符回调 putbyte() → 镜像 UART0 +
- * 写 200K 环形 lg_buf → usb_log_task 100ms 增量 cdc_write_data() → 本口 CDC IN。
+ * USB 枚举异常排查期(V0.9.x): CDC 与 CDC 日志暂时关闭(app_config.h),
+ * 只保留 MSC 升级路径(msc_ota, V0.9.3 起钩子中断内仅计数, 检测全在任务)。
  */
 #include "app_config.h"
 
@@ -32,19 +31,22 @@ static void msc_update_on_write(uint32_t sector, const uint8_t *buffer, uint32_t
 static void msc_ota_watch_task(void *arg);
 #endif
 
-/*!< 端点地址: MSC 数据 EP1; CDC 数据 EP2 + 通知 EP3(仅描述符) */
+/*!< 端点地址: MSC 数据 EP1(V0.8 验证); CDC 组合时数据 EP2 + 通知 EP3 */
 #define MSC_IN_EP    0x81
 #define MSC_OUT_EP   0x01
 
+#if MINI_USB_CDC_ENABLE
 #define CDC1_IN_EP   0x82
 #define CDC1_OUT_EP  0x02
 #define CDC1_INT_EP  0x83
+#endif
 
 #define USBD_VID           0xFFFF
 #define USBD_PID           0x0003
 #define USBD_MAX_POWER     100
 #define USBD_LANGID_STRING 1033
 
+#if MINI_USB_CDC_ENABLE
 /*!< 3 个接口: CDC(0 comm + 1 data) + MSC(2); IAD 复合设备类 */
 #define USB_CONFIG_SIZE (9 + CDC_ACM_DESCRIPTOR_LEN + MSC_DESCRIPTOR_LEN)
 
@@ -86,6 +88,45 @@ static const char *string_descriptors[] = {
     "WL82 CDC-LOG + MSC 4MB",     /* Product */
     "WL82-0001",                  /* Serial Number */
 };
+#else
+/*!< MSC-only(单接口, V0.8 验证配置) */
+#define USB_CONFIG_SIZE (9 + MSC_DESCRIPTOR_LEN)
+
+static const uint8_t device_descriptor[] = {
+    USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0x00, 0x00, 0x00, USBD_VID, USBD_PID, 0x0100, 0x01)
+};
+
+static const uint8_t config_descriptor_hs[] = {
+    USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x01, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
+    MSC_DESCRIPTOR_INIT(0x00, MSC_OUT_EP, MSC_IN_EP, USB_BULK_EP_MPS_HS, 0x00)
+};
+
+static const uint8_t config_descriptor_fs[] = {
+    USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x01, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
+    MSC_DESCRIPTOR_INIT(0x00, MSC_OUT_EP, MSC_IN_EP, USB_BULK_EP_MPS_FS, 0x00)
+};
+
+static const uint8_t device_quality_descriptor[] = {
+    USB_DEVICE_QUALIFIER_DESCRIPTOR_INIT(USB_2_0, 0x00, 0x00, 0x00, 0x01),
+};
+
+static const uint8_t other_speed_config_descriptor_hs[] = {
+    USB_OTHER_SPEED_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x01, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
+    MSC_DESCRIPTOR_INIT(0x00, MSC_OUT_EP, MSC_IN_EP, USB_BULK_EP_MPS_FS, 0x00)
+};
+
+static const uint8_t other_speed_config_descriptor_fs[] = {
+    USB_OTHER_SPEED_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x01, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
+    MSC_DESCRIPTOR_INIT(0x00, MSC_OUT_EP, MSC_IN_EP, USB_BULK_EP_MPS_HS, 0x00)
+};
+
+static const char *string_descriptors[] = {
+    (const char[]){ 0x09, 0x04 }, /* Langid */
+    "fw-mini-sdk",                /* Manufacturer */
+    "WL82 MSC-only 4MB",          /* Product */
+    "WL82-0001",                  /* Serial Number */
+};
+#endif
 
 static const uint8_t *device_descriptor_callback(uint8_t speed)
 {
@@ -128,7 +169,7 @@ static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
     return string_descriptors[index];
 }
 
-const struct usb_descriptor cdc_msc_descriptor = {
+const struct usb_descriptor usb_descriptor_msc = {
     .device_descriptor_callback = device_descriptor_callback,
     .config_descriptor_callback = config_descriptor_callback,
     .device_quality_descriptor_callback = device_quality_descriptor_callback,
@@ -136,6 +177,7 @@ const struct usb_descriptor cdc_msc_descriptor = {
     .string_descriptor_callback = string_descriptor_callback
 };
 
+#if MINI_USB_CDC_ENABLE
 /* ---- CDC 数据缓冲(RAM0 .usb_h_bss; 设备栈为 CPU 搬运, 位置不敏感, 跟随工程约定) ---- */
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc1_read_buffer[2048];
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc1_write_buffer[2048];
@@ -160,7 +202,7 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
     }
 }
 
-/* ---- CDC(EP1): 日志输出口。主机发来的数据只接收丢弃(日志口无命令处理) ---- */
+/* ---- CDC: 日志输出口。主机发来的数据只接收丢弃(日志口无命令处理) ---- */
 void usbd_cdc1_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
     (void)ep;
@@ -212,6 +254,14 @@ struct usbd_endpoint cdc_notify_ep = { .ep_addr = CDC1_INT_EP, .ep_cb = usbd_cdc
 
 struct usbd_interface intf0; /* CDC comm */
 struct usbd_interface intf1; /* CDC data */
+#else
+static void usbd_event_handler(uint8_t busid, uint8_t event)
+{
+    (void)busid;
+    (void)event;                      /* MSC-only: MSC 类自行管理数据端点 */
+}
+#endif
+
 struct usbd_interface intf_msc;
 
 /* ---- 4MB RAM 盘(8192 扇区 × 512B)。放 SDRAM .bss: RAM0(.usb_h_bss) 容量不足,
@@ -322,28 +372,31 @@ int usbd_msc_sector_write(uint8_t busid, uint8_t lun, uint32_t sector, uint8_t *
     return 0;
 }
 
-void cdc_msc_init(uint8_t busid, uintptr_t reg_base)
+void msc_only_init(uint8_t busid, uintptr_t reg_base)
 {
     /* Prepare a valid FAT16 superfloppy image before exposing the LUN. */
     msc_ram_mkfs16();
 
-    usbd_desc_register(busid, &cdc_msc_descriptor);
+    usbd_desc_register(busid, &usb_descriptor_msc);
 
+#if MINI_USB_CDC_ENABLE
     usbd_add_interface(busid, usbd_cdc_acm_init_intf(busid, &intf0));
     usbd_add_interface(busid, usbd_cdc_acm_init_intf(busid, &intf1));
     usbd_add_endpoint(busid, &cdc1_out_ep);
     usbd_add_endpoint(busid, &cdc1_in_ep);
     usbd_add_endpoint(busid, &cdc_notify_ep);   /* EP3 INT: ep_open 硬件配置 + SERIAL_STATE */
+#endif
     usbd_add_interface(busid, usbd_msc_init_intf(busid, &intf_msc, MSC_OUT_EP, MSC_IN_EP));
 
     usbd_initialize(busid, reg_base, usbd_event_handler);
 
 #if TCFG_VIR_UPDATE_ENABLE
-    /* 虚拟U盘升级看门: 500ms 轮询, 文件静默 3s + FAT 目录项就绪后触发升级 */
+    /* 虚拟U盘升级看门: 500ms 轮询, 盘被写过且静默 3s 后扫 FAT 根目录触发升级 */
     os_task_create(msc_ota_watch_task, NULL, 9, 1024, 0, "msc_ota");
 #endif
 }
 
+#if MINI_USB_CDC_ENABLE
 /* ---- CDC 日志输出口: 原厂 debug_user.c usb_log_task 调用(usb_id 忽略, 单口)
  *     512B 分块 + 完成等待; 串口未打开(DTR=0)/未配置/写超时 → 丢弃返回 len */
 uint32_t cdc_write_data(int usb_id, uint8_t *buf, uint32_t len)
@@ -373,6 +426,7 @@ uint32_t cdc_write_data(int usb_id, uint8_t *buf, uint32_t len)
     }
     return sent;
 }
+#endif  /* MINI_USB_CDC_ENABLE */
 
 /*============================ 虚拟U盘自动升级(双备份) ============================
  * 原厂对应: apps/common/usb/device/ram_disk_update.c(扇区流拦截) —— 本工程把
@@ -552,6 +606,7 @@ static void msc_ota_watch_task(void *arg)
 }
 #endif  /* TCFG_VIR_UPDATE_ENABLE */
 
+#if MINI_USB_CDC_ENABLE
 /* ---- 弱回调覆盖: DTR 状态(主机打开/关闭串口), intf0=CDC comm 接口 ---- */
 void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
 {
@@ -562,4 +617,5 @@ void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
         printf("[cdc] DTR=%d\n", dtr);
     }
 }
+#endif
 
