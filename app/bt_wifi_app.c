@@ -16,8 +16,23 @@
 #include "event/key_event.h"
 #include "event/bt_event.h"
 #include "device/gpio.h"
+#include "event/net_event.h"
+#include "lwip.h"
+#include "wifi/wifi_connect.h"
 
 extern const u8 *bt_get_mac_addr(void);
+static char save_ssid_flag, request_connect_flag;
+
+
+#define AP_SSID "AC79_WIFI_DEMO_"      //配置 AP模式的SSID前缀
+#define AP_PWD  "12345678"                //配置 AP模式的密码
+#define STA_SSID  "1705"           //配置 STA模式的SSID
+#define STA_PWD  "dlk123996"      //配置 STA模式的密码
+
+//#define STA_MODE_TEST  
+#define AP_MODE_TEST   
+
+#define FORCE_DEFAULT_MODE 1 //AP 测试强制使用当前 AP 配置,不加载历史 STA 模式
 
 /* ================ ADC 按键(PB01 电阻梯, 原厂 adkey 框架) ================ */
 #include "asm/adc_api.h"
@@ -35,8 +50,10 @@ const struct adkey_platform_data adkey_data = {
     .key_value    = {2, 1, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY},
 };
 
-static volatile u8 key_bt_armed = 1;   /* 按键2 单击触发一次 BT 启动 */
-void bt_wifi_start(void);               /* 定义在文件尾 */
+static volatile u8 key_bt_armed = 1;   /* 按键1 单击触发一次 BT 启动 */
+static volatile u8 key_wifi_armed = 1; /* 按键2 单击触发一次 WiFi 启动 */
+void bt_start(void);                   /* 定义在文件尾 */
+void wifi_start(void);                 /* 定义在文件尾 */
 
 static void key_sys_event_handler(struct sys_event *event)
 {
@@ -46,10 +63,16 @@ static void key_sys_event_handler(struct sys_event *event)
     struct key_event *e = (struct key_event *)event->payload;
     if (e->action == KEY_EVENT_CLICK || e->action == KEY_EVENT_UP) {
         printf("[key] v=%d action=%d\n", e->value, e->action);
-        if (e->value == 2 && key_bt_armed) {
+        /* 阈值表修正后两键均可用: 按键1=仅蓝牙, 按键2=仅WiFi(单变量隔离共存因素) */
+        if (e->value == 1 && key_bt_armed) {
             key_bt_armed = 0;
-            printf("[key] key2 -> bt start\n");
-            bt_wifi_start();
+            printf("[key] key1 -> bt start\n");
+            bt_start();
+        }
+        if (e->value == 2 && key_wifi_armed) {
+            key_wifi_armed = 0;
+            printf("[key] key2 -> wifi start\n");
+            wifi_start();
         }
     }
 }
@@ -68,6 +91,56 @@ void key_early_init(void)
 {
     key_framework_init();
 }
+
+static void wifi_set_lan_setting_info(void)
+{
+    struct lan_setting lan_setting_info = {
+
+        .WIRELESS_IP_ADDR0  = 192,
+        .WIRELESS_IP_ADDR1  = 168,
+        .WIRELESS_IP_ADDR2  = 1,
+        .WIRELESS_IP_ADDR3  = 1,
+
+        .WIRELESS_NETMASK0  = 255,
+        .WIRELESS_NETMASK1  = 255,
+        .WIRELESS_NETMASK2  = 255,
+        .WIRELESS_NETMASK3  = 0,
+
+        .WIRELESS_GATEWAY0  = 192,
+        .WIRELESS_GATEWAY1  = 168,
+        .WIRELESS_GATEWAY2  = 1,
+        .WIRELESS_GATEWAY3  = 1,
+
+        .SERVER_IPADDR1  = 192,
+        .SERVER_IPADDR2  = 168,
+        .SERVER_IPADDR3  = 1,
+        .SERVER_IPADDR4  = 1,
+
+        .CLIENT_IPADDR1  = 192,
+        .CLIENT_IPADDR2  = 168,
+        .CLIENT_IPADDR3  = 1,
+        .CLIENT_IPADDR4  = 2,
+
+        .SUB_NET_MASK1   = 255,
+        .SUB_NET_MASK2   = 255,
+        .SUB_NET_MASK3   = 255,
+        .SUB_NET_MASK4   = 0,
+    };
+    net_set_lan_info(&lan_setting_info);
+}
+
+static void wifi_sta_save_ssid(void)
+{
+    if (save_ssid_flag) {
+        save_ssid_flag = 0;
+
+        struct wifi_mode_info info;
+        info.mode = STA_MODE;
+        wifi_get_mode_cur_info(&info);
+        wifi_store_mode_info(STA_MODE, info.ssid, info.pwd);
+    }
+}
+
 #if MINI_BT_SUPPORT
 #include "btstack/btstack_task.h"
 #include "btstack/avctp_user.h"
@@ -136,7 +209,6 @@ void bt_module_init(void *p)
 #if MINI_WIFI_SUPPORT
 /* WiFi 最小闭环: 上电 → 事件回调注册 → wifi_on → 扫描 → 打印 AP 列表
  * (回调必须先于 wifi_on 注册: 库经 RPC 线程投递首事件, 空回调 = 跳 0 崩溃) */
-#include "wifi/wifi_connect.h"
 
 /* WiFi MAC 来源: 强定义覆盖库 weak 默认(无人提供该函数时, 库打印
  * "must defie macadd method" 并用零 MAC)。复用 bt_get_mac_addr:
@@ -148,56 +220,352 @@ int init_net_device_mac_addr(char *macaddr, char ap_mode)
     return 0;
 }
 
-static int wifi_event_cb(void *priv, enum WIFI_EVENT event)
+static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 {
-    printf("[wifi] event %d\n", event);
-    return 0;
+    // printf("[wifi] event %d\n", event);
+    // return 0;
+    struct net_event net = {0};
+    net.arg = "net";
+    int ret = 0;
+
+    switch (event) {
+
+    case WIFI_EVENT_MODULE_INIT:
+
+#if defined(STA_MODE_TEST)
+        wifi_set_sta_connect_timeout(30);   //配置STA模式连接超时后事件回调通知时间
+#endif
+        wifi_set_smp_cfg_timeout(30);       //配置MONITOR模式超时后事件回调通知时间
+
+//    u8 airkiss_aes_key[16] = {0x65, 0x31, 0x63, 0x33, 0x36, 0x31, 0x63, 0x63,0x32, 0x39, 0x65, 0x34, 0x33, 0x66, 0x62, 0x38};
+//    wifi_set_airkiss_key(airkiss_aes_key);        //配置 airkiss_aes_key
+
+        struct wifi_store_info wifi_default_mode_parm;
+        memset(&wifi_default_mode_parm, 0, sizeof(struct wifi_store_info));
+
+#if (defined AP_MODE_TEST)
+        wifi_set_lan_setting_info();    //AP模式配置IP地址信息和DHCP池起始分配地址
+
+        u8 mac_addr[6];
+        char ssid[64];
+        int init_net_device_mac_addr(char *macaddr, char ap_mode); //如果AP模式需要配置SSID和MAC地址相关,需要在这里先产生MAC地址
+        init_net_device_mac_addr((char *)mac_addr, 1);
+        sprintf((char *)ssid, AP_SSID"%02x%02x%02x%02x%02x%02x", mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+        wifi_default_mode_parm.mode = AP_MODE;
+        strncpy((char *)wifi_default_mode_parm.ssid[wifi_default_mode_parm.mode - STA_MODE], (const char *)ssid, sizeof(wifi_default_mode_parm.ssid[wifi_default_mode_parm.mode - STA_MODE]) - 1);
+        strncpy((char *)wifi_default_mode_parm.pwd[wifi_default_mode_parm.mode - STA_MODE], (const char *)AP_PWD, sizeof(wifi_default_mode_parm.pwd[wifi_default_mode_parm.mode - STA_MODE]) - 1);
+#elif (defined STA_MODE_TEST)
+        wifi_default_mode_parm.mode = STA_MODE;
+        strncpy((char *)wifi_default_mode_parm.ssid[wifi_default_mode_parm.mode - STA_MODE], (const char *)STA_SSID, sizeof(wifi_default_mode_parm.ssid[wifi_default_mode_parm.mode - STA_MODE]) - 1);
+        strncpy((char *)wifi_default_mode_parm.pwd[wifi_default_mode_parm.mode - STA_MODE], (const char *)STA_PWD, sizeof(wifi_default_mode_parm.pwd[wifi_default_mode_parm.mode - STA_MODE]) - 1);
+        wifi_default_mode_parm.connect_best_network = 0;
+#endif
+        wifi_set_default_mode(&wifi_default_mode_parm, FORCE_DEFAULT_MODE, wifi_default_mode_parm.mode == STA_MODE); //配置STA模式情况下,把默认配置SSID也存储起来,以后即使保存过其他SSID,也不会覆盖丢失,使用连接最优信号SSID策略的情况下可以匹配连接
+        break;
+
+    case WIFI_EVENT_MODULE_START:
+        puts("|network_user_callback->WIFI_EVENT_MODULE_START\n");
+
+        struct wifi_mode_info info;
+        info.mode = NONE_MODE;
+        wifi_get_mode_cur_info(&info);
+        if (info.mode == SMP_CFG_MODE) {
+            net.arg = "net";
+            net.event = NET_EVENT_SMP_CFG_FIRST;
+            net_event_notify(NET_EVENT_FROM_USER, &net);
+        }
+
+        u32  tx_rate_control_tab = // 不需要哪个速率就删除掉,可以动态设定
+            0
+            | BIT(0) //0:CCK 1M
+            | BIT(1) //1:CCK 2M
+            | BIT(2) //2:CCK 5.5M
+            | BIT(3) //3:OFDM 6M
+            | BIT(4) //4:MCS0/7.2M
+            | BIT(5) //5:OFDM 9M
+            | BIT(6) //6:CCK 11M
+            | BIT(7) //7:OFDM 12M
+            | BIT(8) //8:MCS1/14.4M
+            | BIT(9) //9:OFDM 18M
+            | BIT(10) //10:MCS2/21.7M
+            | BIT(11) //11:OFDM 24M
+            | BIT(12) //12:MCS3/28.9M
+            | BIT(13) //13:OFDM 36M
+            | BIT(14) //14:MCS4/43.3M
+            | BIT(15) //15:OFDM 48M
+            | BIT(16) //16:OFDM 54M
+            | BIT(17) //17:MCS5/57.8M
+            | BIT(18) //18:MCS6/65.0M
+            | BIT(19) //19:MCS7/72.2M
+            ;
+        wifi_set_tx_rate_control_tab(tx_rate_control_tab);
+#if 0
+        wifi_set_pwr(0); //把WIFI模拟功率调整到最低档位节电
+#endif
+
+        break;
+    case WIFI_EVENT_MODULE_STOP:
+        puts("|network_user_callback->WIFI_EVENT_MODULE_STOP\n");
+        break;
+
+    case WIFI_EVENT_AP_START:
+        wifi_set_sta_connect_best_ssid(0);
+        wifi_set_store_ssid_cnt(0);
+        printf("[wifi] AP active: STA reconnect policy disabled\n");
+        printf("|network_user_callback->WIFI_EVENT_AP_START,CH=%d\n", wifi_get_channel());
+        //wifi_rxfilter_cfg(7);    //过滤广播+多播+not_my_bssid
+#ifdef USE_FTP_UPGRADE_DEMO
+        extern void ftp_update_test(void);
+        ftp_update_test();
+#endif //USE_FTP_UPGRADE_DEMO
+        break;
+    case WIFI_EVENT_AP_STOP:
+        puts("|network_user_callback->WIFI_EVENT_AP_STOP\n");
+        break;
+
+    case WIFI_EVENT_STA_START:
+        puts("|network_user_callback->WIFI_EVENT_STA_START\n");
+        break;
+    case WIFI_EVENT_MODULE_START_ERR:
+        puts("|network_user_callback->WIFI_EVENT_MODULE_START_ERR\n");
+        break;
+    case WIFI_EVENT_STA_STOP:
+        puts("|network_user_callback->WIFI_EVENT_STA_STOP\n");
+        break;
+    case WIFI_EVENT_STA_DISCONNECT:
+        puts("|network_user_callback->WIFI_STA_DISCONNECT\n");
+        /*wifi_rxfilter_cfg(0);*/
+
+#ifdef CONFIG_ASSIGN_MACADDR_ENABLE
+        if (!mac_addr_succ_flag) {
+            break;
+        }
+#endif
+
+        net.event = NET_EVENT_DISCONNECTED;
+        net_event_notify(NET_EVENT_FROM_USER, &net);
+
+#ifndef WIFI_MODE_CYCLE_TEST
+        if (!request_connect_flag) { //如果是应用程序主动请求连接导致断线就不需要发送重连事件, 否则像信号不好导致断线的原因就发送重连事件
+            net.event = NET_EVENT_DISCONNECTED_AND_REQ_CONNECT;
+            net_event_notify(NET_EVENT_FROM_USER, &net);
+        }
+#endif
+        break;
+    case WIFI_EVENT_STA_SCAN_COMPLETED:
+        puts("|network_user_callback->WIFI_STA_SCAN_COMPLETED\n");
+#ifdef CONFIG_AIRKISS_NET_CFG
+        extern void airkiss_ssid_check(void);
+        airkiss_ssid_check();
+#endif
+        break;
+    case WIFI_EVENT_STA_CONNECT_SUCC:
+        printf("|network_user_callback->WIFI_STA_CONNECT_SUCC,CH=%d\r\n", wifi_get_channel());
+        /*wifi_rxfilter_cfg(3);    //过滤not_my_bssid,如果需要使用扫描空中SSID就不要过滤*/
+#ifdef CONFIG_STATIC_IPADDR_ENABLE
+        if (0 == compare_dhcp_ipaddr()) {
+            wifi_set_sta_ip_info();
+            ret = 1;
+        }
+#endif
+        break;
+
+    case WIFI_EVENT_MP_TEST_START:
+        puts("|network_user_callback->WIFI_EVENT_MP_TEST_START\n");
+        break;
+    case WIFI_EVENT_MP_TEST_STOP:
+        puts("|network_user_callback->WIFI_EVENT_MP_TEST_STOP\n");
+        break;
+
+    case WIFI_EVENT_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID:
+        puts("|network_user_callback->WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID\n");
+        net.event = NET_CONNECT_TIMEOUT_NOT_FOUND_SSID;
+        net_event_notify(NET_EVENT_FROM_USER, &net);
+        break;
+
+    case WIFI_EVENT_STA_CONNECT_ASSOCIAT_FAIL:
+        puts("|network_user_callback->WIFI_STA_CONNECT_ASSOCIAT_FAIL .....\n");
+        net.event = NET_CONNECT_ASSOCIAT_FAIL;
+        net_event_notify(NET_EVENT_FROM_USER, &net);
+        break;
+
+    case WIFI_EVENT_STA_CONNECT_ASSOCIAT_TIMEOUT:
+        puts("|network_user_callback->WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT .....\n");
+        break;
+
+    case WIFI_EVENT_STA_NETWORK_STACK_DHCP_SUCC:
+        puts("|network_user_callback->WIFI_EVENT_STA_NETWPRK_STACK_DHCP_SUCC\n");
+
+#ifdef USE_DevKitBoard_TEST_DEMO
+        os_taskq_post("ui_main_task", 1, UI_MSG_WIFI_STA_CONNT_OK);
+#endif
+        wifi_sta_save_ssid(); //确认获取IP成功再真正去考虑要不要保存配置, 否则如果配置有误就保存的情况下导致下次连不上WIFI
+
+#ifdef CONFIG_ASSIGN_MACADDR_ENABLE
+
+        if (!is_server_assign_macaddr_ok()) { //如果使用服务器分配MAC地址的情况,需要确认MAC地址有效才发送连接成功事件到APP层,否则先访问服务器分配mac地址
+            server_assign_macaddr(wifi_return_sta_mode);
+            break;
+        }
+        mac_addr_succ_flag = 1;
+#endif
+#ifdef CONFIG_STATIC_IPADDR_ENABLE
+        store_dhcp_ipaddr();
+#endif
+        request_connect_flag = 0;
+        net.event = NET_EVENT_CONNECTED;
+        net_event_notify(NET_EVENT_FROM_USER, &net);
+        break;
+    case WIFI_EVENT_STA_NETWORK_STACK_DHCP_TIMEOUT:
+        puts("|network_user_callback->WIFI_EVENT_STA_NETWPRK_STACK_DHCP_TIMEOUT\n");
+        break;
+
+    case WIFI_EVENT_P2P_START:
+        puts("|network_user_callback->WIFI_EVENT_P2P_START\n");
+        break;
+    case WIFI_EVENT_P2P_STOP:
+        puts("|network_user_callback->WIFI_EVENT_P2P_STOP\n");
+        break;
+    case WIFI_EVENT_P2P_GC_DISCONNECTED:
+        puts("|network_user_callback->WIFI_EVENT_P2P_GC_DISCONNECTED\n");
+        break;
+    case WIFI_EVENT_P2P_GC_NETWORK_STACK_DHCP_SUCC:
+        puts("|network_user_callback->WIFI_EVENT_P2P_GC_NETWORK_STACK_DHCP_SUCC\n");
+        break;
+    case WIFI_EVENT_P2P_GC_NETWORK_STACK_DHCP_TIMEOUT:
+        puts("|network_user_callback->WIFI_EVENT_P2P_GC_NETWORK_STACK_DHCP_TIMEOUT\n");
+        break;
+
+    case WIFI_EVENT_SMP_CFG_START:
+        puts("|network_user_callback->WIFI_EVENT_SMP_CFG_START\n");
+        break;
+    case WIFI_EVENT_SMP_CFG_STOP:
+        puts("|network_user_callback->WIFI_EVENT_SMP_CFG_STOP\n");
+        break;
+    case WIFI_EVENT_SMP_CFG_TIMEOUT:
+        puts("|network_user_callback->WIFI_EVENT_SMP_CFG_TIMEOUT\n");
+        net.event = NET_EVENT_SMP_CFG_TIMEOUT;
+        net_event_notify(NET_EVENT_FROM_USER, &net);
+        break;
+    case WIFI_EVENT_SMP_CFG_COMPLETED:
+        puts("|network_user_callback->WIFI_EVENT_SMP_CFG_COMPLETED\n");
+        net.event = NET_SMP_CFG_COMPLETED;
+        net_event_notify(NET_EVENT_FROM_USER, &net);
+        break;
+
+    case WIFI_EVENT_PM_SUSPEND:
+        puts("|network_user_callback->WIFI_EVENT_PM_SUSPEND\n");
+        break;
+    case WIFI_EVENT_PM_RESUME:
+        puts("|network_user_callback->WIFI_EVENT_PM_RESUME\n");
+        break;
+    case WIFI_EVENT_AP_ON_ASSOC:
+        ;
+        struct eth_addr *hwaddr = (struct eth_addr *)network_ctx;
+        printf("WIFI_EVENT_AP_ON_ASSOC hwaddr = %02x:%02x:%02x:%02x:%02x:%02x \r\n\r\n",
+               hwaddr->addr[0], hwaddr->addr[1], hwaddr->addr[2], hwaddr->addr[3], hwaddr->addr[4], hwaddr->addr[5]);
+        break;
+    case WIFI_EVENT_AP_ON_DISCONNECTED:
+        struct ip4_addr ipaddr;
+        hwaddr = (struct eth_addr *)network_ctx;
+        dhcps_get_ipaddr(hwaddr->addr, &ipaddr);
+        printf("WIFI_EVENT_AP_ON_DISCONNECTED hwaddr = %02x:%02x:%02x:%02x:%02x:%02x, ipaddr = [%d.%d.%d.%d] \r\n\r\n",
+               hwaddr->addr[0], hwaddr->addr[1], hwaddr->addr[2], hwaddr->addr[3], hwaddr->addr[4], hwaddr->addr[5],
+               ip4_addr1(&ipaddr), ip4_addr2(&ipaddr), ip4_addr3(&ipaddr), ip4_addr4(&ipaddr));
+        break;
+    default:
+        break;
+    }
+
+    return ret;    
 }
 
+static void wifi_status(void *p)
+{
+    if (wifi_is_on()) {
+        stats_display(); //LWIP stats
+        printf("WIFI U= %d KB/s, D= %d KB/s\r\n", wifi_get_upload_rate() / 1024, wifi_get_download_rate() / 1024);
+
+        struct wifi_mode_info info;
+        info.mode = NONE_MODE;
+        wifi_get_mode_cur_info(&info);
+        if (info.mode == AP_MODE) {
+            for (int i = 0; i < 8; i++) {
+                char *rssi;
+                u8 *evm, *mac;
+                if (wifi_get_sta_entry_rssi(i, &rssi, &evm, &mac)) {
+                    break;
+                }
+                if (*rssi) { //侦测连接到AP端的设备信号质量
+                    printf("MAC[%x:%x:%x:%x:%x:%x],RSSI=%d,EVM=%d \r\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], *rssi, *evm);
+                }
+            }
+        } else if (info.mode == STA_MODE) {
+            printf("Router_RSSI=%d,Quality=%d \r\n", wifi_get_rssi(), wifi_get_cqi()); //侦测路由器端信号质量
+        }
+    }
+}
 
 static void wifi_scan_task(void *p)
 {
     (void)p;
     os_time_dly(300);
-
-    wifi_set_event_callback(wifi_event_cb);   /* 原厂 wifi_ipc 同款: 先注册回调 */
+#if defined(STA_MODE_TEST)
+    wifi_set_store_ssid_cnt(5);
+#else
+    wifi_set_sta_connect_best_ssid(0);
+    wifi_set_store_ssid_cnt(0);
+    printf("[wifi] AP-only: STA saved-SSID auto-connect disabled\n");
+#endif
+    wifi_set_event_callback(wifi_event_callback);   /* 原厂 wifi_ipc 同款: 先注册回调 */
     if (wifi_on()) {
         printf("[wifi] wifi_on fail\n");
         while (1) { os_time_dly(600); }
     }
+    // iperf_test();
     u8 wmac[6];
     wifi_get_mac(wmac);
     printf("[wifi] on, mac %02x:%02x:%02x:%02x:%02x:%02x\n",
            wmac[0], wmac[1], wmac[2], wmac[3], wmac[4], wmac[5]);
-
+    // sys_timer_add_to_task("app_core", NULL, wifi_status, 5 * 1000); //打印一下WIFI一些信息
     while (1) {
-        printf("[wifi] scan...\n");
-        wifi_scan_req();
-        os_time_dly(300);
-        u32 cnt = 0;
-        struct wifi_scan_ssid_info *r = wifi_get_scan_result(&cnt);
-        printf("[wifi] ap count %u\n", cnt);
-        for (u32 i = 0; i < cnt && i < 20; i++) {
-            printf("  [%u] %s ch=%u rssi=%d\n", i, r[i].ssid,
-                   r[i].channel_number, r[i].rssi);
-        }
-        wifi_clear_scan_result();
+        // printf("[wifi] scan...\n");
+        // wifi_scan_req();
+        // os_time_dly(300);
+        // u32 cnt = 0;
+        // struct wifi_scan_ssid_info *r = wifi_get_scan_result(&cnt);
+        // printf("[wifi] ap count %u\n", cnt);
+        // for (u32 i = 0; i < cnt && i < 20; i++) {
+        //     printf("  [%u] %s ch=%u rssi=%d\n", i, r[i].ssid,
+        //            r[i].channel_number, r[i].rssi);
+        // }
+        // wifi_clear_scan_result();
         os_time_dly(600);
     }
 }
 #endif
 
-/* BT 启动入口: 由按键1单击或串口 'b' 触发(key 框架已在开机时独立初始化) */
-void bt_wifi_start(void)
+/* 外设启动入口: 按键1=蓝牙, 按键2=WiFi, 串口 'b'=双开(单变量隔离共存因素) */
+void bt_start(void)
 {
 #if MINI_BT_SUPPORT
     printf("[bt] creating bt_app task...\n");
     os_task_create(bt_module_init, NULL, 12, 1024, 0, "bt_app");
     printf("[bt] bt_app task created\n");
 #endif
+}
+
+void wifi_start(void)
+{
 #if MINI_WIFI_SUPPORT
     printf("[wifi] creating wifi_app task...\n");
     os_task_create(wifi_scan_task, NULL, 12, 1024, 0, "wifi_app");
     printf("[wifi] wifi_app task created\n");
 #endif
+}
+
+void bt_wifi_start(void)
+{
+    //bt_start();
+    wifi_start();
 }

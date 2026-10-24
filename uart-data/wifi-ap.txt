@@ -1,0 +1,299 @@
+▒
+[00:00:00.100]========= system reset reason: SOFT =========
+
+[00:00:00.100]~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[00:00:00.100]   WL82(AC791N) CHIP_ID: 0x6f01  setup_arch Oct 23 2026 14:35:34
+[00:00:00.100]sys_clk = 240000000,sdram_clk = 240000000,hsb_clk = 120000000,lsb_clk = 40000000, sfc_clk = 60000000
+[00:00:00.100]CODE+CONST SIZE = 487776
+[00:00:00.100]SDRAM_SIZE = 8388608, DATA_SIZE = 5512,BSS_SIZE = 292344,REMAIN_SIZE = 8090752
+[00:00:00.100]RAM_SIZE = 523596,DATA_SIZE = 36588,BSS_SIZE = 152404,REMAIN_SIZE = 334604
+[00:00:00.100]CACHE_RAM_SIZE = 0,DATA_SIZE = 0, BSS_SIZE = 0,REMAIN_SIZE = 0
+[00:00:00.100]HEAP_SIZE = 8090688
+[00:00:00.100]~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[00:00:00.100]cpu 0 usp limit 0  ffffffff
+[00:00:00.100]cpu 0 ssp limit 1c0941c  1c0a41c
+[00:00:00.100]task_create: app_core, 0x20094de
+[00:00:00.100]init tick  timer
+[00:00:00.100]pc0 :2000120---2077280
+[00:00:00.100]pc1 :1c00000---1c08cdc
+[00:00:00.101]cpu 1 usp limit 0  ffffffff
+[00:00:00.101]cpu 1 ssp limit 1c0a71c  1c0b71c
+[00:00:00.102]task_create: systimer, 0x200f5a6
+[00:00:00.103]task_create: sys_timer, 0x200f904
+[00:00:00.103]================= SDK Version    AC79NN SDK on branch [release/AC79NN_SDK_V1.1.0] tag [AC79NN_SDK_V1.1.9_2023-08-01]      ===============
+[00:00:00.105]INCLUDE_BTCTRLER-$941bdff
+[00:00:00.105]INCLUDE_BTCTRLER-$941bdff
+[00:00:00.106]INCLUDE_DRIVER-$d07aad0
+[00:00:00.106]INCLUDE_MEDIA-$5698b4d
+[00:00:00.107]INCLUDE_NET-$decd1f4
+[00:00:00.107]INCLUDE_SERVER-$e1c1baa
+[00:00:00.108]INCLUDE_SYSTEM-$cefa42a
+[00:00:00.108]INCLUDE_UPDATE-$b3bf36b
+[00:00:00.109]INCLUDE_UTILS-$1e8b1e8
+[00:00:00.109]NET-$7e2034e
+[00:00:00.109]SERVER-$37ddff6
+[00:00:00.110]UTILS-$ff70aec
+[00:00:00.110]DRIVER-$8355de0
+[00:00:00.110]SYSTEM-$1d3c7b5
+[00:00:00.111]UPDATE-$2374938
+[00:00:00.111]BTCTRLER-$6a66a1f
+[00:00:00.111]BTSTACK-$04de815
+[00:00:00.112]=======================================
+[00:00:00.113]task_create: sys_event, 0x200ee8e
+[00:00:00.113][Info]: [SDFILE]VM size: 0xf77000 @ 0x86000
+[00:00:00.114][Info]: [SDFILE]disk capacity 16384 KB
+[00:00:00.115]last file_addr:4000 81873
+[00:00:00.115]end_addr:86000
+
+49 53 44 55 04 02 33 FF 0E 26 E8 55 F5 55 FF FF
+[00:00:00.116][Debug]: [SDFILE]sdfile mount succ
+[00:00:00.117][Info]: [VM]vm_info:addr:0x86000, len:0x10000, mode:0x0, max_items: 256
+[00:00:00.118][Info]: [VM]--func = vm_init--
+
+[00:00:00.119][Info]: [VM]--vm_adr = 0x86000--
+
+[00:00:00.119][Info]: [VM]--vm_len = 0x10000--
+
+[00:00:00.120][Info]: [VM]--vm_mode = 0x0--
+
+[00:00:00.120][Info]: [VM]--vm_adr_ali = 0x86000--
+
+[00:00:00.121][Info]: [VM]--vm_len_ali = 0x10000--
+
+[00:00:00.122][Info]: [VM]--vm_mode = 0x0--
+
+[00:00:00.122][Info]: [VM]vm_area_a adr = 0x86000
+
+[00:00:00.123][Info]: [VM]vm_area_a len = 0x8000
+
+[00:00:00.123][Info]: [VM]vm_area_b adr = 0x8e000
+
+[00:00:00.124][Info]: [VM]vm_area_b len = 0x8000
+
+[00:00:00.125][Info]: [VM]vm_area_a magic = 0xffffffff
+
+[00:00:00.125][Info]: [VM]vm_area_b magic = 0xffffffff
+
+[00:00:00.126][Info]: [VM]---vm_area_all_unused---
+vm_eraser
+
+[00:00:00.127][Info]: [VM]--func = vm_reset--
+
+[00:00:00.130][Info]: [VM]---VM_AREA_USING  = 0---
+
+[00:00:00.134][Info]: [VM]vm_find_all_index_last_updated_addr CRC_ERROR, maybe power down cause.
+
+[00:00:00.135][Info]: [VM]vm_crc = 0xff
+
+[00:00:00.135][Info]: [VM]crc_c = 0x1f
+
+[00:00:00.138][Info]: [VM]---VM_LAST_ADR= 0x86004---
+
+[00:00:00.139][Info]: [VM]VM_LAST_ADR = 0x86004
+[00:00:00.139][Info]: [VM]VM_AREA_ADR(VM_AREA_USING)= 0x86000
+[00:00:00.140][Info]: [VM]warning_adr = 0x4ccc
+
+[00:00:00.141][Info]: [VM]VM 0 % full
+
+[00:00:00.142][Info]: [UPDATE]update module init ok
+
+
+
+[00:00:00.143] ===== fw-mini-sdk V0.6.7 build 14:35:23 =====
+[00:00:00.143][clk] sys=240MHz sdram=240MHz hsb=120MHz
+[00:00:00.144]task_create: uart1_echo, 0x2001aca
+[00:00:00.145]task_create: hw_timer, 0x2001cc2
+[00:00:00.145]task_create: heartbeat, 0x2001d30
+[00:00:00.147][uart1] echo ready @PB3(TX)/PB4(RX) 115200
+[00:00:00.152]vbat_adc_value = 360
+[00:00:00.156]vbg_adc_value = 257
+[00:00:00.156]add sample ch 3
+[00:00:00.157][key] adkey ready (PB01)
+[00:00:06.847][key] v=2 action=0
+[00:00:06.848][key] key2 -> wifi start
+[00:00:06.848][wifi] creating wifi_app task...
+[00:00:06.849]task_create: wifi_app, 0x2002ba0
+[00:00:06.849][wifi] wifi_app task created
+[00:00:09.850][wifi] AP-only: STA saved-SSID auto-connect disabled
+[00:00:09.850]put_ncmsg 15
+[00:00:09.851]threat_create:_rpc_wifi_app_827d5e08,pid:0x0
+
+[00:00:09.852](error): <Error>: [SYSCFG]get_bt_mac_addr key_mac crc_err
+
+
+
+
+
+[00:00:09.853]cur_wifi_vm_info:had_stored[0],store[0],force[1]
+[00:00:09.854]cur_wifi_vm_info AP_MODE, ssid=AC79_WIFI_DEMO_70cc3b7e30be,pwd=12345678
+[00:00:09.855]threat_create:tasklet,pid:0x40176f8
+[00:00:09.855]wl ap_mode
+[00:00:09.860][Info]: [VM]VM_LAST_ADR = 0x86004
+[00:00:09.861][Info]: [VM]VM_AREA_ADR(VM_AREA_USING)= 0x86000
+[00:00:09.862][Info]: [VM]warning_adr = 0x4ccc
+
+[00:00:09.862][Info]: [VM]VM 0 % full
+
+[00:00:09.863][Info]: [VM]vm_write idx:106, idx_adr:0x4, idx_len:0x6
+
+[00:00:09.864]wifi_get_xosc xosc_l : 11 xosc_r : 11, OSC_24M
+
+[00:00:09.866] 2394 bank: 37
+[00:00:09.867]bak: 3f 0
+[00:00:09.867]bak: 3e 1
+[00:00:09.868]bak: 3d 2
+[00:00:09.869]bak: 3c 3
+[00:00:09.871]bak: 3b 4
+[00:00:09.874]bak: 3a 5
+[00:00:09.877]bak: 39 6
+[00:00:09.879]bak: 38 7
+[00:00:09.882]bak: 37 8
+[00:00:09.886]bak: 36 9
+[00:00:09.889]bak: 35 10
+[00:00:09.892]bak: 34 11
+[00:00:09.895]bak: 33 12
+[00:00:09.898]bak: 32 13
+[00:00:09.901]bak: 31 14
+[00:00:09.904]bak: 30 15
+[00:00:09.908]bak: 2f 16
+[00:00:09.908]bak: 2e 17
+[00:00:09.908]bak: 2d 18
+[00:00:09.909]bak: 2c 19
+[00:00:09.909]bak: 2b 20
+[00:00:09.910]bak: 2a 21
+[00:00:09.910]bak: 29 22
+[00:00:09.911]bak: 28 23
+[00:00:09.912]bak: 27 24
+[00:00:09.914]bak: 26 25
+[00:00:09.916]bak: 25 26
+[00:00:09.918]bak: 24 27
+[00:00:09.919]bak: 23 28
+[00:00:09.919]bak: 22 29
+[00:00:09.920]bak: 21 30
+[00:00:09.920]bak: 20 31
+[00:00:09.921]bak: 1f 32
+[00:00:09.921]bak: 1e 33
+[00:00:09.922]bak: 1d 34
+[00:00:09.922]bak: 1c 35
+[00:00:09.922]bak: 1b 36
+[00:00:09.923]bak: 1a 37
+[00:00:09.923]bak: 19 38
+[00:00:09.924]bak: 18 39
+[00:00:09.924]bak: 17 40
+[00:00:09.925]bak: 16 41
+[00:00:09.925]bak: 15 42
+[00:00:09.926]bak: 14 43
+[00:00:09.926]bak: 13 44
+[00:00:09.926]bak: 12 45
+[00:00:09.927]bak: 11 46
+[00:00:09.927]setbak:36
+[00:00:10.457][Info]: [VM]VM_LAST_ADR = 0x8600a
+[00:00:10.457][Info]: [VM]VM_AREA_ADR(VM_AREA_USING)= 0x86000
+[00:00:10.458][Info]: [VM]warning_adr = 0x4ccc
+
+[00:00:10.459][Info]: [VM]VM 0 % full
+
+[00:00:10.460][Info]: [VM]vm_write idx:107, idx_adr:0xa, idx_len:0xb
+
+
+[00:00:10.460] PA_C_I: 1,7,4,7,11,1,7
+[00:00:10.461]  wf_rf init  end ....
+[00:00:10.471][Info]: [VM]VM_LAST_ADR = 0x86015
+[00:00:10.472][Info]: [VM]VM_AREA_ADR(VM_AREA_USING)= 0x86000
+[00:00:10.473][Info]: [VM]warning_adr = 0x4ccc
+
+[00:00:10.474][Info]: [VM]VM 0 % full
+
+[00:00:10.474][Info]: [VM]vm_write idx:108, idx_adr:0x15, idx_len:0x18
+
+
+[00:00:10.475] ..... wfhw_init finish !!! ......
+[00:00:10.477]threat_create:RtmpMlmeTask,pid:0x40176fc
+[00:00:10.478]threat_create:RtmpCmdQTask,pid:0x4017700
+
+[00:00:10.483](error): <Error>: [SYSCFG]get_bt_mac_addr key_mac crc_err
+
+[00:00:10.484]wifi_module_get_mode = 2
+[00:00:10.492]Key1Str is Invalid key length(0) or Type(0)
+[00:00:10.493]Key2Str is Invalid key length(0) or Type(0)
+[00:00:10.494]Key3Str is Invalid key length(0) or Type(0)
+[00:00:10.495]Key4Str is Invalid key length(0) or Type(0)
+LA
+[00:00:10.505]Current MAC: =64:b7:ff:49:77:a1
+[00:00:10.506]RTMPSetPhyMode : PhyMode=9, channel=1
+[00:00:10.507]MCS Set = ff 00 00 00 00
+
+
+
+
+[00:00:10.518]  skip do auto reconnect...
+
+
+[00:00:10.519]threat_create:wl_rx_irq_thread,pid:0x40175cc
+[00:00:10.519]netdev_set_mac_addr = 64:b7:ff:49:77:a1
+[00:00:10.520]|Init_LwIP [1]
+[00:00:10.521]threat_create:tcpip_thread,pid:0x0
+[00:00:10.521]netif: netmask of interface  set to 255.255.255.0
+[00:00:10.522]netif: GW address of interface  set to 192.168.1.1
+[00:00:10.523]netif_set_ipaddr: netif address being changed
+[00:00:10.524]Default network interface: wl
+[00:00:10.524]ip4 address: 192.168.1.1
+[00:00:10.525]gw address: 192.168.1.1
+[00:00:10.525]net mask  : 255.255.255.0
+
+[00:00:10.526]|network_user_callback->WIFI_EVENT_MODULE_START
+[00:00:10.526]wl_set_fallback_tx_rate:
+[00:00:10.527]HT_FBK_CFG0=0x65432100
+[00:00:10.527]LG_FBK_CFG0=0xedcba988
+[00:00:10.528]LG_FBK_CFG1=0x2100
+[00:00:10.528]wifi_module_enter_ap_mode->AC79_WIFI_DEMO_70cc3b7e30be, 12345678
+[00:00:10.529]|network_user_callback->WIFI_EVENT_AP_START,CH=1
+[00:00:10.530]|lwip_renew [1][0].
+[00:00:10.531]Default network interface: wl
+[00:00:10.531]ip4 address: 192.168.1.1
+[00:00:10.532]udp_bind: bound to
+[00:00:10.532]gw address: 192.168.1.1
+[00:00:10.532]net mask  : 255.255.255.0
+
+[00:00:10.533]192.168.1.1
+[00:00:10.533], port 67)
+[00:00:10.534][wifi] on, mac 64:b7:ff:49:77:a1
+
+[00:00:10.534]kill for:_rpc_wifi_app_827d5e08 succ
+[00:00:11.462][Info]: [VM]VM_LAST_ADR = 0x8602d
+[00:00:11.462][Info]: [VM]VM_AREA_ADR(VM_AREA_USING)= 0x86000
+[00:00:11.463][Info]: [VM]warning_adr = 0x4ccc
+
+[00:00:11.464][Info]: [VM]VM 0 % full
+
+[00:00:11.465][Info]: [VM]vm_write idx:187, idx_adr:0x2d, idx_len:0x48
+
+[00:00:13.476]add sample ch 3000f
+[00:00:14.130]netlink not startup
+[00:00:14.130]put_ncmsg 13
+[00:00:14.131]threat_create:_rpc_RtmpMlmeTask_874cbcb7,pid:0x0
+
+[00:00:14.132]kill for:_rpc_RtmpMlmeTask_874cbcb7 succ
+[00:00:14.563]Driver auto reconnect to last OID_802_11_SSID setting - , len - 0
+[00:00:14.564]CntlOidSsidProc():CNTL - No matching BSS, start a new scan
+[00:00:17.200]netlink not startup
+[00:00:17.200]put_ncmsg 13
+[00:00:17.201]threat_create:_rpc_RtmpMlmeTask_ff07fc51,pid:0x0
+
+[00:00:17.202]kill for:_rpc_RtmpMlmeTask_ff07fc51 succ
+[00:00:17.620]Driver auto reconnect to last OID_802_11_SSID setting - , len - 0
+[00:00:17.621]CntlOidSsidProc():CNTL - No matching BSS, start a new scan
+[00:00:20.280]netlink not startup
+[00:00:20.280]put_ncmsg 13
+[00:00:20.281]threat_create:_rpc_RtmpMlmeTask_70796c92,pid:0x0
+
+[00:00:20.282]kill for:_rpc_RtmpMlmeTask_70796c92 succ
+[00:00:20.710]Driver auto reconnect to last OID_802_11_SSID setting - , len - 0
+[00:00:20.711]CntlOidSsidProc():CNTL - No matching BSS, start a new scan
+[00:00:23.380]netlink not startup
+[00:00:23.380]put_ncmsg 13
+[00:00:23.381]threat_create:_rpc_RtmpMlmeTask_220ddf22,pid:0x0
+
+[00:00:23.382]kill for:_rpc_RtmpMlmeTask_220ddf22 succ
+[00:00:23.780]Driver auto reconnect to last OID_802_11_SSID setting - , len - 0
+[00:00:23.781]CntlOidSsidProc():CNTL - No matching BSS, start a new scan

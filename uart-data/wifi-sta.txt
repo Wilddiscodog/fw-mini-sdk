@@ -1,0 +1,1018 @@
+[00:00:00.100]========= system reset reason: POWER ON =========
+
+[00:00:00.100]~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[00:00:00.100]   WL82(AC791N) CHIP_ID: 0x6f01  setup_arch Oct 23 2026 10:50:43
+[00:00:00.100]sys_clk = 240000000,sdram_clk = 240000000,hsb_clk = 120000000,lsb_clk = 40000000, sfc_clk = 60000000
+[00:00:00.100]CODE+CONST SIZE = 593216
+[00:00:00.100]SDRAM_SIZE = 8388608, DATA_SIZE = 5636,BSS_SIZE = 294624,REMAIN_SIZE = 8088348
+[00:00:00.100]RAM_SIZE = 523596,DATA_SIZE = 38028,BSS_SIZE = 175348,REMAIN_SIZE = 310220
+[00:00:00.100]CACHE_RAM_SIZE = 0,DATA_SIZE = 0, BSS_SIZE = 0,REMAIN_SIZE = 0
+[00:00:00.100]HEAP_SIZE = 8088288
+[00:00:00.100]~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[00:00:00.100]cpu 0 usp limit 0  ffffffff
+[00:00:00.100]cpu 0 ssp limit 1c0f370  1c10370
+[00:00:00.100]task_create: app_core, 0x200a19c
+[00:00:00.100]init tick  timer
+[00:00:00.100]pc0 :2000120---2090e60
+[00:00:00.100]pc1 :1c00000---1c08ce4
+[00:00:00.101]cpu 1 usp limit 0  ffffffff
+[00:00:00.101]cpu 1 ssp limit 1c10670  1c11670
+[00:00:00.102]task_create: systimer, 0x201035c
+[00:00:00.103]task_create: sys_timer, 0x20106d2
+[00:00:00.103]================= SDK Version    AC79NN SDK on branch [release/AC79NN_SDK_V1.1.0] tag [AC79NN_SDK_V1.1.9_2023-08-01]      ===============
+[00:00:00.105]INCLUDE_BTCTRLER-$941bdff
+[00:00:00.105]INCLUDE_BTCTRLER-$941bdff
+[00:00:00.106]INCLUDE_DRIVER-$d07aad0
+[00:00:00.106]INCLUDE_MEDIA-$5698b4d
+[00:00:00.107]INCLUDE_NET-$decd1f4
+[00:00:00.107]INCLUDE_SERVER-$e1c1baa
+[00:00:00.108]INCLUDE_SYSTEM-$cefa42a
+[00:00:00.108]INCLUDE_UPDATE-$b3bf36b
+[00:00:00.109]INCLUDE_UTILS-$1e8b1e8
+[00:00:00.109]NET-$7e2034e
+[00:00:00.109]SERVER-$37ddff6
+[00:00:00.110]UTILS-$ff70aec
+[00:00:00.110]DRIVER-$8355de0
+[00:00:00.110]SYSTEM-$1d3c7b5
+[00:00:00.111]UPDATE-$2374938
+[00:00:00.111]BTCTRLER-$6a66a1f
+[00:00:00.111]BTSTACK-$04de815
+[00:00:00.112]=======================================
+[00:00:00.113]task_create: sys_event, 0x200fb5c
+[00:00:00.113][Info]: [SDFILE]VM size: 0xf5d000 @ 0xa0000
+[00:00:00.114][Info]: [SDFILE]disk capacity 16384 KB
+[00:00:00.115]last file_addr:4000 9ba6f
+[00:00:00.115]end_addr:a0000
+
+49 53 44 55 04 02 33 FF 42 FD D1 4E 57 BE FF FF
+[00:00:00.116][Debug]: [SDFILE]sdfile mount succ
+[00:00:00.117][Info]: [VM]vm_info:addr:0xa0000, len:0x10000, mode:0x0, max_items: 256
+[00:00:00.118][Info]: [VM]--func = vm_init--
+
+[00:00:00.119][Info]: [VM]--vm_adr = 0xa0000--
+
+[00:00:00.119][Info]: [VM]--vm_len = 0x10000--
+
+[00:00:00.120][Info]: [VM]--vm_mode = 0x0--
+
+[00:00:00.120][Info]: [VM]--vm_adr_ali = 0xa0000--
+
+[00:00:00.121][Info]: [VM]--vm_len_ali = 0x10000--
+
+[00:00:00.122][Info]: [VM]--vm_mode = 0x0--
+
+[00:00:00.122][Info]: [VM]vm_area_a adr = 0xa0000
+
+[00:00:00.123][Info]: [VM]vm_area_a len = 0x8000
+
+[00:00:00.124][Info]: [VM]vm_area_b adr = 0xa8000
+
+[00:00:00.124][Info]: [VM]vm_area_b len = 0x8000
+
+[00:00:00.125][Info]: [VM]vm_area_a magic = 0x55aaaa55
+
+[00:00:00.125][Info]: [VM]vm_area_b magic = 0xffffffff
+
+[00:00:00.126][Info]: [VM]---VM_AREA_USING  = 0---
+
+[00:00:00.130][Info]: [VM]vm_find_all_index_last_updated_addr CRC_ERROR, maybe power down cause.
+
+[00:00:00.131][Info]: [VM]vm_crc = 0xff
+
+[00:00:00.131][Info]: [VM]crc_c = 0x1f
+
+[00:00:00.134][Info]: [VM]---VM_LAST_ADR= 0xa020a---
+
+[00:00:00.135][Info]: [VM]VM_LAST_ADR = 0xa020a
+[00:00:00.135][Info]: [VM]VM_AREA_ADR(VM_AREA_USING)= 0xa0000
+[00:00:00.136][Info]: [VM]warning_adr = 0x4ccc
+
+[00:00:00.137][Info]: [VM]VM 1 % full
+
+[00:00:00.138][Info]: [UPDATE]update module init ok
+
+
+
+[00:00:00.138] ===== fw-mini-sdk V0.6.6 build 10:50:32 =====
+[00:00:00.139][clk] sys=240MHz sdram=240MHz hsb=120MHz
+[00:00:00.140]task_create: uart1_echo, 0x2001a46
+[00:00:00.140]task_create: hw_timer, 0x2001c3e
+[00:00:00.141]task_create: heartbeat, 0x2001cb8
+[00:00:00.143][uart1] echo ready @PB3(TX)/PB4(RX) 115200
+[00:00:00.148]vbat_adc_value = 360
+[00:00:00.152]vbg_adc_value = 257
+[00:00:00.152]add sample ch 3
+[00:00:00.153][key] adkey ready (PB01)
+[00:00:16.194][key] v=2 action=0
+[00:00:16.195][key] key2 -> bt start
+[00:00:16.195][bt] creating bt_app task...
+[00:00:16.196]task_create: bt_app, 0x20020fc
+[00:00:16.196][bt] bt_app task created
+[00:00:16.197][wifi] creating wifi_app task...
+[00:00:16.197]task_create: wifi_app, 0x200303a
+[00:00:16.198][wifi] wifi_app task created
+[00:00:16.198][bt] task start
+[00:00:18.190][bt] read mac...
+[00:00:18.190](error): <Error>: [SYSCFG]get_bt_mac_addr key_mac crc_err
+
+[00:00:18.191][bt] set controller mac
+[00:00:18.191][bt] ble addr 72:a4:ce:b3:3d:68
+[00:00:18.192][bt] register event + btstack_init
+[00:00:18.193]le_support:2 1
+[00:00:18.193]le_config:1 1 1 1
+[00:00:18.193][Info]: [LMP]>>>btctrler_task_init<<<
+[00:00:18.194]task_create: btctrler, 0x207de3c
+[00:00:18.198]wifi_get_xosc xosc_l : 11 xosc_r : 11, OSC_24M
+
+[00:00:18.201] 2394 bank: 37
+[00:00:18.201]bak: 3f 0
+[00:00:18.201]bak: 3e 1
+[00:00:18.202]bak: 3d 2
+[00:00:18.203]bak: 3c 3
+[00:00:18.205]bak: 3b 4
+[00:00:18.208]bak: 3a 5
+[00:00:18.211]bak: 39 6
+[00:00:18.214]bak: 38 7
+[00:00:18.217]bak: 37 8
+[00:00:18.220]bak: 36 9
+[00:00:18.223]bak: 35 10
+[00:00:18.226]bak: 34 11
+[00:00:18.229]bak: 33 12
+[00:00:18.232]bak: 32 13
+[00:00:18.235]bak: 31 14
+[00:00:18.238]bak: 30 15
+[00:00:18.241]bak: 2f 16
+[00:00:18.242]bak: 2e 17
+[00:00:18.242]bak: 2d 18
+[00:00:18.243]bak: 2c 19
+[00:00:18.243]bak: 2b 20
+[00:00:18.244]bak: 2a 21
+[00:00:18.244]bak: 29 22
+[00:00:18.245]bak: 28 23
+[00:00:18.246]bak: 27 24
+[00:00:18.248]bak: 26 25
+[00:00:18.250]bak: 25 26
+[00:00:18.252]bak: 24 27
+[00:00:18.253]bak: 23 28
+[00:00:18.253]bak: 22 29
+[00:00:18.253]bak: 21 30
+[00:00:18.254]bak: 20 31
+[00:00:18.254]bak: 1f 32
+[00:00:18.255]bak: 1e 33
+[00:00:18.255]bak: 1d 34
+[00:00:18.256]bak: 1c 35
+[00:00:18.256]bak: 1b 36
+[00:00:18.257]bak: 1a 37
+[00:00:18.257]bak: 19 38
+[00:00:18.257]bak: 18 39
+[00:00:18.258]bak: 17 40
+[00:00:18.258]bak: 16 41
+[00:00:18.259]bak: 15 42
+[00:00:18.259]bak: 14 43
+[00:00:18.260]bak: 13 44
+[00:00:18.260]bak: 12 45
+[00:00:18.260]bak: 11 46
+[00:00:18.261]setbak:36
+[00:00:18.262] wifi quick_start_trim ok.
+[00:00:18.262] PA_C_I: 1,7,4,7,11,1,7
+[00:00:18.263]  wf_rf init  end ....
+[00:00:18.273] ..... wfhw_init finish !!! ......
+
+[00:00:18.274] WL82 analog init ok  ......
+
+
+[00:00:18.274] BT_TX_IQ: 126  127 0
+[00:00:18.275] BT_OF: 0  -2
+[00:00:18.275][Info]: [HCI_LMP]init
+[00:00:18.276][Info]: [HCI_LMP]open
+[00:00:18.276][Debug]: [LBUF]lbuf misalgin : 0x1c34a08 / 0x5da
+[00:00:18.277]task_create: btstack, 0x208a2ca
+[00:00:18.278]btstack_mem_init 80
+[00:00:18.278]ble profile init
+[00:00:18.279][bt] btstack_init done
+[00:00:18.279][bt] controller init ok
+[00:00:18.280]***** ble_init******
+[00:00:18.280](error): <Error>: [SYSCFG]get_bt_mac_addr key_mac crc_err
+
+[00:00:18.281]ble name(19): JL-AC79XX-41EC(BLE)
+[00:00:18.282]ble_work_st:0->1
+[00:00:18.282]mode_en:1
+[00:00:18.282]adv_en:1
+[00:00:18.283]ble_work_st:1->20
+[00:00:18.283]adv_data(7):
+02 01 06 03 03 30 AF
+[00:00:18.284]rsp_data(21):
+14 09 4A 4C 2D 41 43 37 39 58 58 2D 34 31 45 43
+28 42 4C 45 29
+[00:00:19.190]put_ncmsg 15
+[00:00:19.190]threat_create:_rpc_wifi_app_ffe1439e,pid:0x0
+
+
+
+
+[00:00:19.191]cur_wifi_vm_info:had_stored[1],store[1],force[0]
+[00:00:19.192]cur_wifi_vm_info STA_MODE, ssid=1705,pwd=dlk123996,best=0
+[00:00:19.193]threat_create:tasklet,pid:0x4017c24
+[00:00:19.193]wl sta_mode
+[00:00:19.195]threat_create:RtmpMlmeTask,pid:0x4017c28
+[00:00:19.196]threat_create:RtmpCmdQTask,pid:0x4017c2c
+
+[00:00:19.200](error): <Error>: [SYSCFG]get_bt_mac_addr key_mac crc_err
+
+[00:00:19.202]wifi_module_get_sta_ssid = 1705
+[00:00:19.209]Key1Str is Invalid key length(0) or Type(0)
+[00:00:19.210]Key2Str is Invalid key length(0) or Type(0)
+[00:00:19.212]Key3Str is Invalid key length(0) or Type(0)
+[00:00:19.213]Key4Str is Invalid key length(0) or Type(0)
+LA
+[00:00:19.223]Current MAC: =cc:09:09:36:23:9f
+[00:00:19.223]RTMPSetPhyMode : PhyMode=9, channel=1
+[00:00:19.224]MCS Set = ff 00 00 00 00
+
+
+
+
+[00:00:19.236]  skip do auto reconnect...
+
+
+[00:00:19.236]threat_create:wl_rx_irq_thread,pid:0x4017ad0
+[00:00:19.237]netdev_set_mac_addr = cc:09:09:36:23:9f
+[00:00:19.238]|Init_LwIP [1]
+[00:00:19.238]threat_create:tcpip_thread,pid:0x0
+[00:00:19.239]netif: netmask of interface  set to 255.255.255.0
+[00:00:19.240]netif: GW address of interface  set to 192.168.0.1
+[00:00:19.241]netif_set_ipaddr: netif address being changed
+[00:00:19.241]Default network interface: wl
+[00:00:19.242]ip4 address: 192.168.0.1
+[00:00:19.242]gw address: 192.168.0.1
+[00:00:19.243]net mask  : 255.255.255.0
+
+[00:00:19.243]|network_user_callback->WIFI_EVENT_MODULE_START
+[00:00:19.244]wl_set_fallback_tx_rate:
+[00:00:19.245]HT_FBK_CFG0=0x65432100
+[00:00:19.245]LG_FBK_CFG0=0xedcba988
+[00:00:19.246]LG_FBK_CFG1=0x2100
+[00:00:19.246]wifi_module_enter_sta_mode->1705, dlk123996
+[00:00:19.247]stored pmk_info match[1705] [dlk123996],,,
+[00:00:19.248]netlink not startup
+[00:00:19.249]|network_user_callback->WIFI_EVENT_STA_START
+[00:00:19.250][wifi] on, mac cc:09:09:36:23:9f
+
+[00:00:19.251]kill for:_rpc_wifi_app_ffe1439e succ
+[00:00:21.273]add sample ch 3000f
+[00:00:22.820]StaCfg.WepStatus=1, while pInBss->WepStatus=6
+[00:00:22.821]put_ncmsg 13
+[00:00:22.821]threat_create:_rpc_RtmpMlmeTask_a7806fe9,pid:0x0
+[00:00:22.822]|network_user_callback->WIFI_STA_SCAN_COMPLETED
+[00:00:22.823]===>rt_ioctl_giwscan. 1(1) BSS returned, data->length = 162
+[00:00:22.824]******************ssid: 1705
+[00:00:22.825]wpas_dbus_signal_scan_done = 1
+
+[00:00:22.826]kill for:_rpc_RtmpMlmeTask_a7806fe9 succ
+[00:00:22.840]wpas_dbus_signal_prop_changed = 5, time=49
+[00:00:22.841]==>rt_ioctl_siwfreq::SIOCSIWFREQ(Channel=6)
+[00:00:22.842]RtmpIoctl_siwessid = 1705
+[00:00:22.842]Set_SSID_Proc[1705] skip, avoid break assoic.r
+[00:00:22.843]wpas_dbus_signal_prop_changed = 5, time=49
+
+[00:00:22.899]CNTL - joining 58:41:20:81:d6:da ...
+[00:00:23.807]PeerAssocReqSanity - IE_EXT_CAPABILITY!
+[00:00:23.808]!!! LINK UP !!! (BssType=1, AID=18, ssid=1705, Channel=6, CentralChannel = 4)
+[00:00:23.811]wpas_dbus_signal_prop_changed = 6, time=49
+[00:00:23.811]wpas_dbus_signal_prop_changed = 6, time=49
+[00:00:23.812]wpas_dbus_signal_prop_changed = 6, time=49
+[00:00:23.813]wpa_supplicant_select_config drv_ssid, 1705
+
+[00:00:23.816]wpas_dbus_signal_prop_changed = 7, time=49
+[00:00:23.818]ThisBulkSize : 184
+[00:00:23.938]wpas_dbus_signal_prop_changed = 8, time=49
+[00:00:23.940]wpas_dbus_signal_prop_changed = 9, time=49
+[00:00:23.940]put_ncmsg 7
+[00:00:23.941]threat_create:_rpc_tasklet_35ea5088,pid:0x0
+[00:00:23.942]wpas_scan_record OK
+[00:00:23.942]wpas_dbus_signal_prop_changed = 9, time=49
+[00:00:23.943]|network_user_callback->WIFI_STA_CONNECT_SUCC,CH=6
+[00:00:23.944]|lwip_renew [1][1].
+
+[00:00:23.944]kill for:_rpc_tasklet_35ea5088 succ
+[00:00:23.945]dhcp_start(netif=4018074) wl0
+[00:00:23.945]udp_bind: bound to
+[00:00:23.946]0.0.0.0
+[00:00:23.946], port 68)
+[00:00:23.946]udp_connect: connected to
+[00:00:23.947]0.0.0.0
+[00:00:23.947], port 67)
+[00:00:23.948]ThisBulkSize : 396
+[00:00:23.949]dhcp_discover: SELECTING
+[00:00:23.949]dhcp_discover(): set request timeout 2000 msecs
+
+[00:00:24.251]LINK
+[00:00:24.251]xmit: 1
+[00:00:24.251]recv: 10
+[00:00:24.252]fw: 0
+[00:00:24.252]drop: 0
+[00:00:24.252]chkerr: 0
+[00:00:24.253]lenerr: 0
+[00:00:24.253]memerr: 0
+[00:00:24.253]rterr: 0
+[00:00:24.254]proterr: 0
+[00:00:24.254]opterr: 0
+[00:00:24.254]err: 0
+[00:00:24.254]cachehit: 0
+
+[00:00:24.255]ETHARP
+[00:00:24.255]xmit: 0
+[00:00:24.255]recv: 0
+[00:00:24.256]fw: 0
+[00:00:24.256]drop: 8
+[00:00:24.256]chkerr: 0
+[00:00:24.256]lenerr: 0
+[00:00:24.257]memerr: 0
+[00:00:24.257]rterr: 0
+[00:00:24.257]proterr: 8
+[00:00:24.258]opterr: 0
+[00:00:24.258]err: 0
+[00:00:24.258]cachehit: 0
+
+[00:00:24.259]IP_FRAG
+[00:00:24.259]xmit: 0
+[00:00:24.259]recv: 0
+[00:00:24.259]fw: 0
+[00:00:24.260]drop: 0
+[00:00:24.260]chkerr: 0
+[00:00:24.260]lenerr: 0
+[00:00:24.261]memerr: 0
+[00:00:24.261]rterr: 0
+[00:00:24.261]proterr: 0
+[00:00:24.262]opterr: 0
+[00:00:24.262]err: 0
+[00:00:24.262]cachehit: 0
+
+[00:00:24.263]IP
+[00:00:24.263]xmit: 1
+[00:00:24.263]recv: 2
+[00:00:24.263]fw: 0
+[00:00:24.264]drop: 2
+[00:00:24.264]chkerr: 0
+[00:00:24.264]lenerr: 0
+[00:00:24.264]memerr: 0
+[00:00:24.265]rterr: 0
+[00:00:24.265]proterr: 0
+[00:00:24.265]opterr: 0
+[00:00:24.266]err: 0
+[00:00:24.266]cachehit: 0
+
+[00:00:24.266]IGMP
+[00:00:24.267]xmit: 0
+[00:00:24.267]recv: 0
+[00:00:24.267]drop: 0
+[00:00:24.267]chkerr: 0
+[00:00:24.268]lenerr: 0
+[00:00:24.268]memerr: 0
+[00:00:24.268]proterr: 0
+[00:00:24.269]rx_v1: 0
+[00:00:24.269]rx_group: 0
+[00:00:24.269]rx_general: 0
+[00:00:24.270]rx_report: 0
+[00:00:24.270]tx_join: 0
+[00:00:24.270]tx_leave: 0
+[00:00:24.271]tx_report: 0
+
+[00:00:24.271]ICMP
+[00:00:24.271]xmit: 0
+[00:00:24.272]recv: 0
+[00:00:24.272]fw: 0
+[00:00:24.272]drop: 0
+[00:00:24.272]chkerr: 0
+[00:00:24.273]lenerr: 0
+[00:00:24.273]memerr: 0
+[00:00:24.273]rterr: 0
+[00:00:24.274]proterr: 0
+[00:00:24.274]opterr: 0
+[00:00:24.274]err: 0
+[00:00:24.275]cachehit: 0
+
+[00:00:24.275]UDP
+[00:00:24.275]xmit: 1
+[00:00:24.275]recv: 0
+[00:00:24.276]fw: 0
+[00:00:24.276]drop: 0
+[00:00:24.276]chkerr: 0
+[00:00:24.277]lenerr: 0
+[00:00:24.277]memerr: 0
+[00:00:24.277]rterr: 0
+[00:00:24.277]proterr: 0
+[00:00:24.278]opterr: 0
+[00:00:24.278]err: 0
+[00:00:24.278]cachehit: 0
+
+[00:00:24.279]TCP
+[00:00:24.279]xmit: 0
+[00:00:24.279]recv: 0
+[00:00:24.280]fw: 0
+[00:00:24.280]drop: 0
+[00:00:24.280]chkerr: 0
+[00:00:24.280]lenerr: 0
+[00:00:24.281]memerr: 0
+[00:00:24.281]rterr: 0
+[00:00:24.281]proterr: 0
+[00:00:24.282]opterr: 0
+[00:00:24.282]err: 0
+[00:00:24.282]cachehit: 0
+
+[00:00:24.283]MEM UDP_PCB
+[00:00:24.283]avail: 16
+[00:00:24.283]used: 1
+[00:00:24.283]max: 1
+[00:00:24.284]err: 0
+
+[00:00:24.284]MEM TCP_PCB
+[00:00:24.284]avail: 20
+[00:00:24.285]used: 0
+[00:00:24.285]max: 0
+[00:00:24.285]err: 0
+
+[00:00:24.286]MEM TCP_PCB_LISTEN
+[00:00:24.286]avail: 16
+[00:00:24.286]used: 0
+[00:00:24.287]max: 0
+[00:00:24.287]err: 0
+
+[00:00:24.287]MEM TCP_SEG
+[00:00:24.287]avail: 128
+[00:00:24.288]used: 0
+[00:00:24.288]max: 0
+[00:00:24.288]err: 0
+
+[00:00:24.289]MEM REASSDATA
+[00:00:24.289]avail: 44
+[00:00:24.289]used: 0
+[00:00:24.290]max: 0
+[00:00:24.290]err: 0
+
+[00:00:24.290]MEM FRAG_PBUF
+[00:00:24.290]avail: 32
+[00:00:24.291]used: 0
+[00:00:24.291]max: 0
+[00:00:24.291]err: 0
+
+[00:00:24.292]MEM NETBUF
+[00:00:24.292]avail: 64
+[00:00:24.292]used: 0
+[00:00:24.293]max: 0
+[00:00:24.293]err: 0
+
+[00:00:24.293]MEM NETCONN
+[00:00:24.293]avail: 52
+[00:00:24.294]used: 0
+[00:00:24.294]max: 0
+[00:00:24.294]err: 0
+
+[00:00:24.295]MEM TCPIP_MSG_API
+[00:00:24.295]avail: 8
+[00:00:24.295]used: 0
+[00:00:24.296]max: 4
+[00:00:24.296]err: 0
+
+[00:00:24.296]MEM TCPIP_MSG_INPKT
+[00:00:24.297]avail: 120
+[00:00:24.297]used: 0
+[00:00:24.297]max: 1
+[00:00:24.297]err: 0
+
+[00:00:24.298]MEM IGMP_GROUP
+[00:00:24.298]avail: 2
+[00:00:24.298]used: 1
+[00:00:24.299]max: 1
+[00:00:24.299]err: 0
+
+[00:00:24.299]MEM SYS_TIMEOUT
+[00:00:24.300]avail: 16
+[00:00:24.300]used: 7
+[00:00:24.300]max: 7
+[00:00:24.300]err: 0
+
+[00:00:24.301]MEM NETDB
+[00:00:24.301]avail: 4
+[00:00:24.301]used: 0
+[00:00:24.302]max: 0
+[00:00:24.302]err: 0
+
+[00:00:24.302]MEM LOCALHOSTLIST
+[00:00:24.303]avail: 8
+[00:00:24.303]used: 1
+[00:00:24.303]max: 1
+[00:00:24.303]err: 0
+
+[00:00:24.304]MEM PBUF_REF/ROM
+[00:00:24.304]avail: 4
+[00:00:24.304]used: 0
+[00:00:24.305]max: 0
+[00:00:24.305]err: 0
+
+[00:00:24.305]MEM PBUF_POOL
+[00:00:24.306]avail: 120
+[00:00:24.306]used: 0
+[00:00:24.306]max: 1
+[00:00:24.306]err: 0
+[00:00:24.307]Active PCB states:
+[00:00:24.307]Listen PCB states:
+[00:00:24.308]TIME-WAIT PCB states:
+[00:00:24.308]WIFI U= 0 KB/s, D= 2 KB/s
+[00:00:24.309]Router_RSSI=-82,Quality=50
+[00:00:24.581]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:25.605]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:25.730]dhcp_fine_tmr(): request timeout
+[00:00:25.731]dhcp_discover: SELECTING
+[00:00:25.731]dhcp_discover(): set request timeout 4000 msecs
+[00:00:25.912]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.014]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.015]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.016]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.017]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.120]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.249]dhcp_handle_offer(): server 0x0101a8c0
+[00:00:26.250]dhcp_handle_offer(): offer for 0xce01a8c0
+[00:00:26.252]dhcp_select: REQUESTING
+[00:00:26.252]dhcp_select(): set request timeout 2000 msecs
+[00:00:26.629]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.837]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.838]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.839]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.844]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.845]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:26.936]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:27.550]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:27.755]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:27.757]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:27.758]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:27.759]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:27.760]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:27.858]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:28.230]dhcp_fine_tmr(): request timeout
+[00:00:28.230]dhcp_timeout(): REQUESTING, DHCP request timed out
+[00:00:28.232]dhcp_select: REQUESTING
+[00:00:28.232]dhcp_select(): set request timeout 4000 msecs
+[00:00:28.575]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:29.188]SYNC - AP changed B/G protection to 1
+
+[00:00:29.251]LINK
+[00:00:29.251]xmit: 4
+[00:00:29.252]recv: 78
+[00:00:29.252]fw: 0
+[00:00:29.252]drop: 0
+[00:00:29.253]chkerr: 0
+[00:00:29.253]lenerr: 0
+[00:00:29.253]memerr: 0
+[00:00:29.253]rterr: 0
+[00:00:29.254]proterr: 0
+[00:00:29.254]opterr: 0
+[00:00:29.254]err: 0
+[00:00:29.255]cachehit: 0
+
+[00:00:29.255]ETHARP
+[00:00:29.255]xmit: 0
+[00:00:29.256]recv: 23
+[00:00:29.256]fw: 0
+[00:00:29.256]drop: 14
+[00:00:29.256]chkerr: 0
+[00:00:29.257]lenerr: 0
+[00:00:29.257]memerr: 0
+[00:00:29.257]rterr: 0
+[00:00:29.258]proterr: 14
+[00:00:29.258]opterr: 0
+[00:00:29.258]err: 0
+[00:00:29.258]cachehit: 0
+
+[00:00:29.259]IP_FRAG
+[00:00:29.259]xmit: 0
+[00:00:29.259]recv: 0
+[00:00:29.260]fw: 0
+[00:00:29.260]drop: 0
+[00:00:29.260]chkerr: 0
+[00:00:29.261]lenerr: 0
+[00:00:29.261]memerr: 0
+[00:00:29.261]rterr: 0
+[00:00:29.261]proterr: 0
+[00:00:29.262]opterr: 0
+[00:00:29.262]err: 0
+[00:00:29.262]cachehit: 0
+
+[00:00:29.263]IP
+[00:00:29.263]xmit: 4
+[00:00:29.263]recv: 41
+[00:00:29.263]fw: 0
+[00:00:29.264]drop: 40
+[00:00:29.264]chkerr: 0
+[00:00:29.264]lenerr: 0
+[00:00:29.265]memerr: 0
+[00:00:29.265]rterr: 0
+[00:00:29.265]proterr: 0
+[00:00:29.266]opterr: 0
+[00:00:29.266]err: 0
+[00:00:29.266]cachehit: 0
+
+[00:00:29.266]IGMP
+[00:00:29.267]xmit: 0
+[00:00:29.267]recv: 0
+[00:00:29.267]drop: 0
+[00:00:29.268]chkerr: 0
+[00:00:29.268]lenerr: 0
+[00:00:29.268]memerr: 0
+[00:00:29.268]proterr: 0
+[00:00:29.269]rx_v1: 0
+[00:00:29.269]rx_group: 0
+[00:00:29.269]rx_general: 0
+[00:00:29.270]rx_report: 0
+[00:00:29.270]tx_join: 0
+[00:00:29.270]tx_leave: 0
+[00:00:29.271]tx_report: 0
+
+[00:00:29.271]ICMP
+[00:00:29.271]xmit: 0
+[00:00:29.272]recv: 0
+[00:00:29.272]fw: 0
+[00:00:29.272]drop: 0
+[00:00:29.272]chkerr: 0
+[00:00:29.273]lenerr: 0
+[00:00:29.273]memerr: 0
+[00:00:29.273]rterr: 0
+[00:00:29.274]proterr: 0
+[00:00:29.274]opterr: 0
+[00:00:29.274]err: 0
+[00:00:29.274]cachehit: 0
+
+[00:00:29.275]UDP
+[00:00:29.275]xmit: 4
+[00:00:29.275]recv: 1
+[00:00:29.276]fw: 0
+[00:00:29.276]drop: 0
+[00:00:29.276]chkerr: 0
+[00:00:29.276]lenerr: 0
+[00:00:29.277]memerr: 0
+[00:00:29.277]rterr: 0
+[00:00:29.277]proterr: 0
+[00:00:29.278]opterr: 0
+[00:00:29.278]err: 0
+[00:00:29.278]cachehit: 1
+
+[00:00:29.279]TCP
+[00:00:29.279]xmit: 0
+[00:00:29.279]recv: 0
+[00:00:29.279]fw: 0
+[00:00:29.280]drop: 0
+[00:00:29.280]chkerr: 0
+[00:00:29.280]lenerr: 0
+[00:00:29.281]memerr: 0
+[00:00:29.281]rterr: 0
+[00:00:29.281]proterr: 0
+[00:00:29.281]opterr: 0
+[00:00:29.282]err: 0
+[00:00:29.282]cachehit: 0
+
+[00:00:29.282]MEM UDP_PCB
+[00:00:29.283]avail: 16
+[00:00:29.283]used: 1
+[00:00:29.283]max: 1
+[00:00:29.284]err: 0
+
+[00:00:29.284]MEM TCP_PCB
+[00:00:29.284]avail: 20
+[00:00:29.284]used: 0
+[00:00:29.285]max: 0
+[00:00:29.285]err: 0
+
+[00:00:29.285]MEM TCP_PCB_LISTEN
+[00:00:29.286]avail: 16
+[00:00:29.286]used: 0
+[00:00:29.286]max: 0
+[00:00:29.287]err: 0
+
+[00:00:29.287]MEM TCP_SEG
+[00:00:29.287]avail: 128
+[00:00:29.287]used: 0
+[00:00:29.288]max: 0
+[00:00:29.288]err: 0
+
+[00:00:29.288]MEM REASSDATA
+[00:00:29.289]avail: 44
+[00:00:29.289]used: 0
+[00:00:29.289]max: 0
+[00:00:29.290]err: 0
+
+[00:00:29.290]MEM FRAG_PBUF
+[00:00:29.290]avail: 32
+[00:00:29.290]used: 0
+[00:00:29.291]max: 0
+[00:00:29.291]err: 0
+
+[00:00:29.291]MEM NETBUF
+[00:00:29.292]avail: 64
+[00:00:29.292]used: 0
+[00:00:29.292]max: 0
+[00:00:29.292]err: 0
+
+[00:00:29.293]MEM NETCONN
+[00:00:29.293]avail: 52
+[00:00:29.293]used: 0
+[00:00:29.294]max: 0
+[00:00:29.294]err: 0
+
+[00:00:29.294]MEM TCPIP_MSG_API
+[00:00:29.295]avail: 8
+[00:00:29.295]used: 0
+[00:00:29.295]max: 4
+[00:00:29.295]err: 0
+
+[00:00:29.296]MEM TCPIP_MSG_INPKT
+[00:00:29.296]avail: 120
+[00:00:29.297]used: 0
+[00:00:29.297]max: 2
+[00:00:29.297]err: 0
+
+[00:00:29.297]MEM IGMP_GROUP
+[00:00:29.298]avail: 2
+[00:00:29.298]used: 1
+[00:00:29.298]max: 1
+[00:00:29.299]err: 0
+
+[00:00:29.299]MEM SYS_TIMEOUT
+[00:00:29.299]avail: 16
+[00:00:29.300]used: 7
+[00:00:29.300]max: 7
+[00:00:29.300]err: 0
+
+[00:00:29.300]MEM NETDB
+[00:00:29.301]avail: 4
+[00:00:29.301]used: 0
+[00:00:29.301]max: 0
+[00:00:29.302]err: 0
+
+[00:00:29.302]MEM LOCALHOSTLIST
+[00:00:29.302]avail: 8
+[00:00:29.302]used: 1
+[00:00:29.303]max: 1
+[00:00:29.303]err: 0
+
+[00:00:29.303]MEM PBUF_REF/ROM
+[00:00:29.304]avail: 4
+[00:00:29.304]used: 0
+[00:00:29.304]max: 0
+[00:00:29.305]err: 0
+
+[00:00:29.305]MEM PBUF_POOL
+[00:00:29.305]avail: 120
+[00:00:29.305]used: 0
+[00:00:29.306]max: 2
+[00:00:29.306]err: 0
+[00:00:29.306]Active PCB states:
+[00:00:29.307]Listen PCB states:
+[00:00:29.307]TIME-WAIT PCB states:
+[00:00:29.308]WIFI U= 0 KB/s, D= 1 KB/s
+[00:00:29.308]Router_RSSI=-83,Quality=8
+[00:00:29.599]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:30.622]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:31.442]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:31.646]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:32.230]dhcp_fine_tmr(): request timeout
+[00:00:32.230]dhcp_timeout(): REQUESTING, DHCP request timed out
+[00:00:32.232]dhcp_select: REQUESTING
+[00:00:32.232]dhcp_select(): set request timeout 8000 msecs
+[00:00:32.261]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:32.363]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:32.577]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:32.578]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:32.671]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:32.773]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:33.182]SYNC - AP changed B/G protection to 0
+[00:00:33.285]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:33.286]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:33.287]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:33.288]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:33.388]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:33.592]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:34.206]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:34.207]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:34.252]LINK
+[00:00:34.252]xmit: 5
+[00:00:34.252]recv: 116
+[00:00:34.252]fw: 0
+[00:00:34.253]drop: 0
+[00:00:34.253]chkerr: 0
+[00:00:34.253]lenerr: 0
+[00:00:34.254]memerr: 0
+[00:00:34.254]rterr: 0
+[00:00:34.254]proterr: 0
+[00:00:34.255]opterr: 0
+[00:00:34.255]err: 0
+[00:00:34.255]cachehit: 0
+
+[00:00:34.255]ETHARP
+[00:00:34.256]xmit: 0
+[00:00:34.256]recv: 41
+[00:00:34.256]fw: 0
+[00:00:34.257]drop: 18
+[00:00:34.257]chkerr: 0
+[00:00:34.257]lenerr: 0
+[00:00:34.257]memerr: 0
+[00:00:34.258]rterr: 0
+[00:00:34.258]proterr: 18
+[00:00:34.258]opterr: 0
+[00:00:34.259]err: 0
+[00:00:34.259]cachehit: 0
+
+[00:00:34.259]IP_FRAG
+[00:00:34.260]xmit: 0
+[00:00:34.260]recv: 0
+[00:00:34.260]fw: 0
+[00:00:34.260]drop: 0
+[00:00:34.261]chkerr: 0
+[00:00:34.261]lenerr: 0
+[00:00:34.261]memerr: 0
+[00:00:34.262]rterr: 0
+[00:00:34.262]proterr: 0
+[00:00:34.262]opterr: 0
+[00:00:34.263]err: 0
+[00:00:34.263]cachehit: 0
+
+[00:00:34.263]IP
+[00:00:34.263]xmit: 5
+[00:00:34.264]recv: 57
+[00:00:34.264]fw: 0
+[00:00:34.264]drop: 56
+[00:00:34.265]chkerr: 0
+[00:00:34.265]lenerr: 0
+[00:00:34.265]memerr: 0
+[00:00:34.266]rterr: 0
+[00:00:34.266]proterr: 0
+[00:00:34.266]opterr: 0
+[00:00:34.266]err: 0
+[00:00:34.267]cachehit: 0
+
+[00:00:34.267]IGMP
+[00:00:34.267]xmit: 0
+[00:00:34.268]recv: 0
+[00:00:34.268]drop: 0
+[00:00:34.268]chkerr: 0
+[00:00:34.268]lenerr: 0
+[00:00:34.269]memerr: 0
+[00:00:34.269]proterr: 0
+[00:00:34.269]rx_v1: 0
+[00:00:34.270]rx_group: 0
+[00:00:34.270]rx_general: 0
+[00:00:34.270]rx_report: 0
+[00:00:34.271]tx_join: 0
+[00:00:34.271]tx_leave: 0
+[00:00:34.271]tx_report: 0
+
+[00:00:34.272]ICMP
+[00:00:34.272]xmit: 0
+[00:00:34.272]recv: 0
+[00:00:34.273]fw: 0
+[00:00:34.273]drop: 0
+[00:00:34.273]chkerr: 0
+[00:00:34.273]lenerr: 0
+[00:00:34.274]memerr: 0
+[00:00:34.274]rterr: 0
+[00:00:34.274]proterr: 0
+[00:00:34.275]opterr: 0
+[00:00:34.275]err: 0
+[00:00:34.275]cachehit: 0
+
+[00:00:34.276]UDP
+[00:00:34.276]xmit: 5
+[00:00:34.276]recv: 1
+[00:00:34.276]fw: 0
+[00:00:34.277]drop: 0
+[00:00:34.277]chkerr: 0
+[00:00:34.277]lenerr: 0
+[00:00:34.278]memerr: 0
+[00:00:34.278]rterr: 0
+[00:00:34.278]proterr: 0
+[00:00:34.278]opterr: 0
+[00:00:34.279]err: 0
+[00:00:34.279]cachehit: 1
+
+[00:00:34.279]TCP
+[00:00:34.280]xmit: 0
+[00:00:34.280]recv: 0
+[00:00:34.280]fw: 0
+[00:00:34.280]drop: 0
+[00:00:34.281]chkerr: 0
+[00:00:34.281]lenerr: 0
+[00:00:34.281]memerr: 0
+[00:00:34.282]rterr: 0
+[00:00:34.282]proterr: 0
+[00:00:34.282]opterr: 0
+[00:00:34.283]err: 0
+[00:00:34.283]cachehit: 0
+
+[00:00:34.283]MEM UDP_PCB
+[00:00:34.284]avail: 16
+[00:00:34.284]used: 1
+[00:00:34.284]max: 1
+[00:00:34.284]err: 0
+
+[00:00:34.285]MEM TCP_PCB
+[00:00:34.285]avail: 20
+[00:00:34.285]used: 0
+[00:00:34.286]max: 0
+[00:00:34.286]err: 0
+
+[00:00:34.286]MEM TCP_PCB_LISTEN
+[00:00:34.287]avail: 16
+[00:00:34.287]used: 0
+[00:00:34.287]max: 0
+[00:00:34.287]err: 0
+
+[00:00:34.288]MEM TCP_SEG
+[00:00:34.288]avail: 128
+[00:00:34.288]used: 0
+[00:00:34.289]max: 0
+[00:00:34.289]err: 0
+
+[00:00:34.289]MEM REASSDATA
+[00:00:34.290]avail: 44
+[00:00:34.290]used: 0
+[00:00:34.290]max: 0
+[00:00:34.290]err: 0
+
+[00:00:34.291]MEM FRAG_PBUF
+[00:00:34.291]avail: 32
+[00:00:34.291]used: 0
+[00:00:34.292]max: 0
+[00:00:34.292]err: 0
+
+[00:00:34.292]MEM NETBUF
+[00:00:34.293]avail: 64
+[00:00:34.293]used: 0
+[00:00:34.293]max: 0
+[00:00:34.293]err: 0
+
+[00:00:34.294]MEM NETCONN
+[00:00:34.294]avail: 52
+[00:00:34.294]used: 0
+[00:00:34.295]max: 0
+[00:00:34.295]err: 0
+
+[00:00:34.295]MEM TCPIP_MSG_API
+[00:00:34.296]avail: 8
+[00:00:34.296]used: 0
+[00:00:34.296]max: 4
+[00:00:34.296]err: 0
+
+[00:00:34.297]MEM TCPIP_MSG_INPKT
+[00:00:34.297]avail: 120
+[00:00:34.298]used: 0
+[00:00:34.298]max: 2
+[00:00:34.298]err: 0
+
+[00:00:34.298]MEM IGMP_GROUP
+[00:00:34.299]avail: 2
+[00:00:34.299]used: 1
+[00:00:34.299]max: 1
+[00:00:34.300]err: 0
+
+[00:00:34.300]MEM SYS_TIMEOUT
+[00:00:34.300]avail: 16
+[00:00:34.301]used: 7
+[00:00:34.301]max: 7
+[00:00:34.301]err: 0
+
+[00:00:34.301]MEM NETDB
+[00:00:34.302]avail: 4
+[00:00:34.302]used: 0
+[00:00:34.302]max: 0
+[00:00:34.303]err: 0
+
+[00:00:34.303]MEM LOCALHOSTLIST
+[00:00:34.303]avail: 8
+[00:00:34.304]used: 1
+[00:00:34.304]max: 1
+[00:00:34.304]err: 0
+
+[00:00:34.304]MEM PBUF_REF/ROM
+[00:00:34.305]avail: 4
+[00:00:34.305]used: 0
+[00:00:34.305]max: 0
+[00:00:34.306]err: 0
+
+[00:00:34.306]MEM PBUF_POOL
+[00:00:34.306]avail: 120
+[00:00:34.307]used: 0
+[00:00:34.307]max: 2
+[00:00:34.307]err: 0
+[00:00:34.307]Active PCB states:
+[00:00:34.308]Listen PCB states:
+[00:00:34.308]TIME-WAIT PCB states:
+[00:00:34.309]WIFI U= 0 KB/s, D= 0 KB/s
+[00:00:34.309]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:34.310]Router_RSSI=-82,Quality=39
+[00:00:34.411]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:34.617]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:35.641]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:36.153]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:36.664]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:37.074]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:37.688]etharp_input: we are unconfigured, ARP request ignored.
+[00:00:38.712]etharp_input: we are unconfigured, ARP request ignored.

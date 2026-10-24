@@ -51,20 +51,41 @@ objs/app/bt_wifi_app.c.o: ../../../app/bt_wifi_app.c \
   ../../../include_lib/utils\event/bt_event.h \
   ../../../include_lib/driver\device/gpio.h \
   ../../../include_lib/driver/cpu/wl82\asm/gpio.h \
+  ../../../include_lib/utils\event/net_event.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/port\lwip.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/netif.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/opt.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/port\lwipopts.h \
+  C:/JL/pi32/pi32v2-include\errno.h \
+  C:/JL/pi32/pi32v2-include\sys/errno.h \
+  ../../../include_lib\utils/crypto_toolbox/endian.h \
+  C:/JL/pi32/pi32v2-include\sys/time.h \
+  C:/JL/pi32/pi32v2-include\sys/_timeval.h \
+  C:/JL/pi32/pi32v2-include\sys/timespec.h \
+  C:/JL/pi32/pi32v2-include\sys/_timespec.h \
+  C:/JL/pi32/pi32v2-include\time.h \
+  C:/JL/pi32/pi32v2-include\machine/time.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/debug.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/arch.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/port\arch/cc.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/port\arch/cpu.h \
+  C:/JL/pi32/pi32v2-include\inttypes.h \
+  C:/JL/pi32/pi32v2-include\limits.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/err.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/ip_addr.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/def.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/ip4_addr.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/ip6_addr.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/pbuf.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/stats.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/mem.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/memp.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/priv/memp_std.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/priv/memp_priv.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/priv/mem_priv.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/prot/ethernet.h \
+  ../../../include_lib/net/lwip_2_1_3/lwip/src/include\lwip/prot/ieee.h \
+  ../../../include_lib/net\wifi/wifi_connect.h \
   ../../../include_lib/driver/cpu/wl82\asm/adc_api.h \
   ../../../include_lib/driver/device\key/key_driver.h \
-  ../../../include_lib/driver/device\key/adkey.h \
-  ../../../include_lib\btstack/btstack_task.h \
-  ../../../include_lib\btstack/avctp_user.h \
-  ../../../include_lib/btstack/btstack_typedef.h \
-  ../../../app/include\bt_common.h ../../../app/include/bt_profile_cfg.h \
-  ../../../include_lib/btctrler\btcontroller_modules.h \
-  ../../../include_lib/btctrler/hci_transport.h \
-  ../../../include_lib/btctrler/btcontroller_mode.h \
-  ../../../include_lib/btctrler/ble/hci_ll.h \
-  C:/JL/pi32/pi32v2-include\stdlib.h \
-  C:/JL/pi32/pi32v2-include\machine/stdlib.h \
-  C:/JL/pi32/pi32v2-include\alloca.h \
-  ../../../include_lib/btctrler/classic/hci_lmp.h \
-  ../../../app/common_ble/include\le_trans_data.h \
-  ../../../include_lib/net\wifi/wifi_connect.h
+  ../../../include_lib/driver/device\key/adkey.h

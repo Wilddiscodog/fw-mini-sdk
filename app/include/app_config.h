@@ -78,16 +78,17 @@
 #define TCFG_ADKEY_LED_SPI_IO_REUSE 0
 
 /* ================ 蓝牙/WiFi 外设(原厂栈移植) ================ */
-#define MINI_BT_SUPPORT             1   /* 0=关闭; 1=链接 btctrler/btstack 并开机自启 */
-#define MINI_BT_BLE_TRANS_EN        1   /* BLE 透传服务(广播名 WL82-BLE, 透传特征 ae82 notify) */
+#define MINI_BT_SUPPORT             0   /* 0=关闭; 1=链接 btctrler/btstack 并开机自启 */
+#define MINI_BT_BLE_TRANS_EN        0   /* BLE 透传服务(广播名 WL82-BLE, 透传特征 ae82 notify) */
+#define CONFIG_BT_ENABLE            0   
 #define MINI_WIFI_SUPPORT           1   /* WiFi STA: 扫描演示(wifi_on -> scan -> 打印 AP) */
 
 #if MINI_BT_SUPPORT
 #ifdef CONFIG_BT_ENABLE
-#define CONFIG_BT_RX_BUFF_SIZE  0
-#define CONFIG_BT_TX_BUFF_SIZE  0
-#define TCFG_USER_BLE_ENABLE        1
-#define TCFG_USER_BT_CLASSIC_ENABLE 0
+#define CONFIG_BT_RX_BUFF_SIZE  (12 * 1024)
+#define CONFIG_BT_TX_BUFF_SIZE  (6 * 1024)
+#define TCFG_USER_BLE_ENABLE        1       //BLE功能使能
+#define TCFG_USER_BT_CLASSIC_ENABLE 0       //经典蓝牙功能
 #define BT_NET_HID_EN               0
 #define TRANS_DATA_EN               1
 #define BT_NET_CENTRAL_EN           0

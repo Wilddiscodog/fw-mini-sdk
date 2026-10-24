@@ -51,7 +51,6 @@ static void heartbeat_task(void *p)
 {
     static u32 n = 0;
     while (1) {
-        printf("[alive] %u\n", ++n);
         os_time_dly(100);
     }
 }
@@ -219,28 +218,16 @@ static void pwm_breath_task(void *p)
 /*============================ ADC：PB01 电压采样 ============================= */
 static void adc_task(void *p)
 {
-    static int adc_value = 0;
     adc_init();
-    gpio_set_die(IO_PORTB_01, 0);       /* 模拟功能 */
-    gpio_set_direction(IO_PORTB_01, 1);
-    gpio_set_pull_up(IO_PORTB_01, 0);
-    gpio_set_pull_down(IO_PORTB_01, 0);
-    adc_add_sample_ch(AD_CH_PB01);
+    gpio_set_die(IO_PORTA_08, 0);       /* 模拟功能 */
+    gpio_set_direction(IO_PORTA_08, 1);
+    gpio_set_pull_up(IO_PORTA_08, 0);
+    gpio_set_pull_down(IO_PORTA_08, 0);
+    adc_add_sample_ch(AD_CH_PA08);
 
     while (1) {
-        adc_value = adc_get_value(AD_CH_PB01);
-        printf("[adc] PB01 raw=%d %dmv\n",
-               (int)adc_get_value(AD_CH_PB01), (int)adc_get_voltage(AD_CH_PB01));
-#if MINI_BT_SUPPORT
-        // if(adc_value < 1000) {
-        //     printf("[adc] PB01 low voltage, reset bt controller\n");
-        //         extern void bt_wifi_start(void);
-        //         printf("[cmd] bt start\n");
-        //         bt_wifi_start();
-        //         printf("[cmd] bt start returned\n");
-        // }
-
-#endif
+        printf("[adc] PA08 raw=%d %dmv\n",
+               (int)adc_get_value(AD_CH_PA08), (int)adc_get_voltage(AD_CH_PA08));
         os_time_dly(200);   /* 2s */
     }
 }
@@ -405,6 +392,4 @@ void app_main()
     // /* 外设演示(PWM/RTC/SD/加密, Makefile MINI_XXX_SUPPORT 开关, 默认全关) */
     // extern void periph_demo_start(void);
     // periph_demo_start();
-    extern void bt_wifi_start(void);
-    void bt_wifi_start(void);
 }

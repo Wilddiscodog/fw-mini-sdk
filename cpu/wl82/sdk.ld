@@ -822,18 +822,18 @@ SECTIONS
         acl_tx_pool = .;
         *(.bredr_tx_bulk)
 
-        acl_tx_pool_end = acl_tx_pool + 0;
 
 
+        acl_tx_pool_end = acl_tx_pool;
 
         . = acl_tx_pool_end;
 
         acl_rx_pool = .;
         *(.bredr_rx_bulk)
 
-        acl_rx_pool_end = acl_rx_pool + 0;
 
 
+        acl_rx_pool_end = acl_rx_pool;
 
         . = acl_rx_pool_end;
 
