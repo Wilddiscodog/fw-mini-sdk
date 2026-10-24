@@ -1,10 +1,10 @@
 /*
  * CherryUSB 组合设备 —— CDC ACM(系统日志口) + MSC(4MB RAM 盘, 虚拟U盘自动升级)
  *
- * 端点规划(沿用 V0.4.x 实测结论):
- *   EP1(0x81 IN / 0x01 OUT) bulk 512 —— CDC 数据(日志口, 原基准通道)
- *   EP2(0x82 IN)            int     —— CDC 通知(不注册端点, 不发 SERIAL_STATE)
- *   EP3(0x83 IN / 0x03 OUT) bulk 512 —— MSC, 双向大缓冲(各 4096B, ep_open 自动)
+ * 端点规划(V0.9.2 起按用户要求重排):
+ *   EP1(0x81 IN / 0x01 OUT) bulk 512 —— MSC(普通 DMA 模式, 64B 对齐组)
+ *   EP2(0x82 IN / 0x02 OUT) bulk 512 —— CDC 数据(日志口)
+ *   EP3(0x83 IN)            int 64  —— CDC 通知(已注册, DTR 变化发 SERIAL_STATE)
  *
  * 日志链路(原厂 debug_user.c 机制): lib 逐字符回调 putbyte() → 镜像 UART0 +
  * 写 200K 环形 lg_buf → usb_log_task 100ms 增量 cdc_write_data() → 本口 CDC IN。
@@ -32,13 +32,13 @@ static void msc_update_on_write(uint32_t sector, const uint8_t *buffer, uint32_t
 static void msc_ota_watch_task(void *arg);
 #endif
 
-/*!< 端点地址: CDC 数据 EP1 + 通知 EP2; MSC EP3 大缓冲 */
-#define CDC1_IN_EP   0x81
-#define CDC1_OUT_EP  0x01
-#define CDC1_INT_EP  0x82
+/*!< 端点地址: MSC 数据 EP1; CDC 数据 EP2 + 通知 EP3(仅描述符) */
+#define MSC_IN_EP    0x81
+#define MSC_OUT_EP   0x01
 
-#define MSC_IN_EP    0x83
-#define MSC_OUT_EP   0x03
+#define CDC1_IN_EP   0x82
+#define CDC1_OUT_EP  0x02
+#define CDC1_INT_EP  0x83
 
 #define USBD_VID           0xFFFF
 #define USBD_PID           0x0003
@@ -182,6 +182,34 @@ void usbd_cdc1_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
 struct usbd_endpoint cdc1_out_ep = { .ep_addr = CDC1_OUT_EP, .ep_cb = usbd_cdc1_bulk_out };
 struct usbd_endpoint cdc1_in_ep  = { .ep_addr = CDC1_IN_EP,  .ep_cb = usbd_cdc1_bulk_in };
 
+/* ---- CDC 通知端点(EP3 INT): 注册以完成 ep_open 硬件配置(bit14+mps 模式);
+ *     DTR 变化时发 PSTN SERIAL_STATE 通知(标准 CDC 行为, 主机串口状态指示) ---- */
+USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc_notify_buf[16];
+
+static void usbd_cdc_notify_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
+{
+    (void)busid;
+    (void)ep;
+    (void)nbytes;
+}
+
+static void usbd_cdc_send_serial_state(uint8_t busid, uint8_t intf, uint16_t state)
+{
+    cdc_notify_buf[0] = 0xA1;      /* bmRequestType: Device-to-Host | Class | Interface */
+    cdc_notify_buf[1] = 0x20;      /* SERIAL_STATE */
+    cdc_notify_buf[2] = 0;         /* wValue */
+    cdc_notify_buf[3] = 0;
+    cdc_notify_buf[4] = intf;      /* wIndex = comm 接口号 */
+    cdc_notify_buf[5] = 0;
+    cdc_notify_buf[6] = 2;         /* wLength */
+    cdc_notify_buf[7] = 0;
+    cdc_notify_buf[8] = (uint8_t)state;   /* UART 状态位图: bit0 DCD, bit1 DSR */
+    cdc_notify_buf[9] = (uint8_t)(state >> 8);
+    usbd_ep_start_write(busid, CDC1_INT_EP, cdc_notify_buf, 10);
+}
+
+struct usbd_endpoint cdc_notify_ep = { .ep_addr = CDC1_INT_EP, .ep_cb = usbd_cdc_notify_in };
+
 struct usbd_interface intf0; /* CDC comm */
 struct usbd_interface intf1; /* CDC data */
 struct usbd_interface intf_msc;
@@ -305,6 +333,7 @@ void cdc_msc_init(uint8_t busid, uintptr_t reg_base)
     usbd_add_interface(busid, usbd_cdc_acm_init_intf(busid, &intf1));
     usbd_add_endpoint(busid, &cdc1_out_ep);
     usbd_add_endpoint(busid, &cdc1_in_ep);
+    usbd_add_endpoint(busid, &cdc_notify_ep);   /* EP3 INT: ep_open 硬件配置 + SERIAL_STATE */
     usbd_add_interface(busid, usbd_msc_init_intf(busid, &intf_msc, MSC_OUT_EP, MSC_IN_EP));
 
     usbd_initialize(busid, reg_base, usbd_event_handler);
@@ -524,6 +553,7 @@ void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
     (void)busid;
     if (intf == 0) {
         dtr_intf_mask = dtr ? (dtr_intf_mask | 0x01) : (dtr_intf_mask & ~0x01);
+        usbd_cdc_send_serial_state(busid, 0, dtr ? 0x0003 : 0x0000); /* DSR|DCD 跟随 DTR */
         printf("[cdc] DTR=%d\n", dtr);
     }
 }

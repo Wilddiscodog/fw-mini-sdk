@@ -540,10 +540,14 @@ int usbd_ep_open(uint8_t busid, const struct usb_endpoint_descriptor *ep)
     old_ep_idx = musb_get_active_ep();
     musb_set_active_ep(ep_idx);
 
-    /* JL: EP3 双向大缓冲(MSC), EP4 TX 小大缓冲(通知), 其余普通模式 */
+    /* JL: EP3 bulk 走双向大缓冲(MSC), EP3 INT(通知)/EP4 按 mps 模式, 其余普通 */
     uint16_t bigsz = 0;
     if (ep_idx == 3) {
-        bigsz = JL82_UDC_BIG_DMA_SIZE;
+        if (USB_GET_ENDPOINT_TYPE(ep->bmAttributes) == USB_ENDPOINT_TYPE_BULK) {
+            bigsz = JL82_UDC_BIG_DMA_SIZE;
+        } else {
+            bigsz = USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize);
+        }
     } else if (ep_idx == 4) {
         bigsz = USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize);
     }
