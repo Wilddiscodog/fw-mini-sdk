@@ -48,6 +48,9 @@ REM 生成的文件名字为：db_update_files_data.bin
 REM 生成code + res + 预留区资源升级文件
 REM -update_files embedded $(files) ,其中$(files)为需要添加的资源文件
 REM 生成的文件名字为：db_update_files_data.bin
+
+
+set UPDATE_FILES=-update_files normal
 isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.bin cfg_tool.bin -res %AUDIO_RES% %UI_RES% %CFG_FILE% -reboot 500 %KEY_FILE% %UPDATE_FILES% -expend-bin
 
 
@@ -68,8 +71,8 @@ if exist *.res del *.res
 if exist *.sty del *.sty
 
 
-@REM 生成固件升级文件
-fw_add.exe -noenc -fw jl_isd.fw -add ota.bin -type 100 -out jl_isd.fw
+
+
 
 
 @REM 添加配置脚本的版本信息到 FW 文件中

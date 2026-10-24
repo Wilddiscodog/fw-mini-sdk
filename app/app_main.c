@@ -384,7 +384,8 @@ void app_main()
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
     os_task_create(lcd_test_task,    NULL,  8, 2048, 0, "lcd_test");
 #endif
-    // os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
+    /* USB 设备模式: MSC 4MB RAM 盘(含虚拟U盘自动升级看门, 见 cdc_acm_msc_app.c) */
+    os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
     /* 心跳: 1s 一拍, 判定系统在 BT 启动试验后是否存活 */
     os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
     /* ADC 按键框架开机独立初始化(PB01 电阻梯; 与 BT 启动解耦——

@@ -238,6 +238,7 @@ c_SRC_FILES := \
 	../../../driver/system/system_reset_reason.c \
 	../../../driver/system/version.c \
 	../../../driver/update/update.c \
+	../../../driver/update/net_update.c \
 	../../../cpu/wl82/debug.c \
 	../../../cpu/wl82/iic.c \
 	../../../cpu/wl82/key/adc_api.c \

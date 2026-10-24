@@ -37,6 +37,19 @@
 #define MINI_USB_MODE_HOST     1   /* MSC 主机(U盘) */
 #define MINI_USB_MODE          MINI_USB_MODE_DEVICE
 
+/* ================ 固件升级: MSC 虚拟U盘自动升级(双备份) =================
+ * 用法: 把构建产出的 update-ota.ufw 拖入设备虚拟U盘 → 文件静默 3s 后
+ *       自动校验 CRC → 写备用 bank → 烧 boot info → 2s 后复位进新固件。
+ * 前提(重要):
+ *   - 双备份改变 flash 布局(app 区双份), 切换后必须整体烧录一次 jl_isd.ufw,
+ *     之后的版本才能走虚拟U盘升级
+ *   - 升级文件由 isd_download 产出: cpu/wl82/tools/db_update_data.bin,
+ *     download.bat 自动改名复制为 update-ota.ufw
+ * 实现: driver/update/update.c + net_update.c(原厂 net_update.c 移植) +
+ *       liba/update.a(双备份烧写) + cdc_acm_msc_app.c(检测/触发) */
+#define CONFIG_DOUBLE_BANK_ENABLE  1   /* 0=单备份(不支持虚拟U盘升级) */
+#define TCFG_VIR_UPDATE_ENABLE     CONFIG_DOUBLE_BANK_ENABLE
+
 //*********************************************************************************//
 //                                  电源配置                                        //
 //*********************************************************************************//
