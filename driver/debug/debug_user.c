@@ -330,17 +330,33 @@ module_initcall(usb_log_task_create);
 
 #if (defined CONFIG_NETWORK_DEBUG_ENABLE || defined CONFIG_SDCARD_DEBUG_ENABLE || defined CONFIG_USB_DEBUG_ENABLE)
 #if defined CONFIG_USB_DEBUG_ENABLE
-/* fw-mini-sdk: 日志镜像 UART0(查询发送, 1M 波特下单字节 ~1us)。
- * 本强定义覆盖了 cpu.a 的弱 putbyte(其行为=写日志串口), 故 UART 输出由这里接管;
- * CON0: bit0=使能, bit13=启动发送, bit15=发送完成(与 cpu/wl82/debug.c 异常路径同款) */
+/* fw-mini-sdk: 日志镜像 UART0, 逐字段对齐原厂弱 putbyte(cpu.a, 基址 0x12000=
+ * JL_UART0): \r 跳过, \n 扩展为 \r\n, 每字节写前 kick CON0.BIT13, 等
+ * (CON0 & (BIT15|BIT0)) != BIT0(BIT15=发送完成)。差异仅一处: 有界等待——
+ * 硬件未就绪时放弃该字节而非死等(V0.9.0 无此保护, 极早期打印曾死循环致整机无输出)。 */
 static void uart0_log_putc(char c)
 {
-    if (JL_UART0->CON0 & BIT(0)) {
-        JL_UART0->CON0 |= BIT(13);
-        JL_UART0->BUF = c;
-        __asm_csync();
-        while ((JL_UART0->CON0 & BIT(15)) == 0);
+    JL_UART_TypeDef *u = JL_UART0;
+    int wait;
+
+    if (c == '\r') {
+        return;
     }
+    if (!(u->CON0 & BIT(0))) {           /* UART0 未使能: 静默丢弃(同原厂) */
+        return;
+    }
+    u->CON0 |= BIT(13);
+    if (c == '\n') {
+        u->BUF = '\r';
+        __asm_csync();
+        wait = 20000;
+        while (((u->CON0 & (BIT(15) | BIT(0))) == BIT(0)) && --wait);
+        u->CON0 |= BIT(13);
+    }
+    u->BUF = c;
+    __asm_csync();
+    wait = 20000;
+    while (((u->CON0 & (BIT(15) | BIT(0))) == BIT(0)) && --wait);
 }
 #endif
 
