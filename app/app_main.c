@@ -307,8 +307,9 @@ static void lcd_test_task(void *p)
                 fb[i] = colors[band];
             }
             for (u16 y = 0; y < h; y += 40) {
-                lcd->set_draw_area(0, w - 1, y, y + 39);
-                lcd->draw((u8 *)fb, w * 40 * 2, 0);
+                /* draw_lvgl = JD9853_lvgl_Fill: SetRange+RAMWR+DMA 真实写屏。
+                 * (lcd->draw 走 ui_send_data_ready —— te_stub 里是空函数, 画不上) */
+                lcd->draw_lvgl(0, w - 1, y, y + 39, (char *)fb);
             }
             os_time_dly(100);
         }

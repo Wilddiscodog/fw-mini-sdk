@@ -474,9 +474,9 @@ static void msc_ota_lcd_show(u16 rgb565)
     for (u32 i = 0; i < 240u * 40u; i++) {
         fb[i] = rgb565;
     }
-    for (u16 y = 0; y < 320; y += 40) {  /* 与 lcd_test_task 同款全屏画法 */
-        lcd->set_draw_area(0, 239, y, y + 39);
-        lcd->draw((u8 *)fb, 240 * 40 * 2, 0);
+    /* draw_lvgl = JD9853_lvgl_Fill: SetRange+RAMWR+DMA 真实写屏(lcd->draw 是空桩) */
+    for (u16 y = 0; y < 320; y += 40) {
+        lcd->draw_lvgl(0, 239, y, y + 39, (char *)fb);
     }
 }
 #else

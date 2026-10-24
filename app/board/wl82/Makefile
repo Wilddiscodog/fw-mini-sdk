@@ -344,10 +344,10 @@ endif
 
 
 # ---------------- LCD / LVGL 条件块 ----------------
-# LCD: EMI 8080-8bit 并口 + 屏驱动(默认 ili9341, 由 app_config.h 的 TCFG_LCD_xxx 选择)
+# LCD: EMI 8080-8bit 并口 + 屏驱动。只编一个面板驱动: 框架 list_for_each_lcd_driver
+# 取第一个注册项, 多个同时编译会按链接顺序误选(lcd_ili9341.c 曾因此抢在 jd9853 前)。
 ifeq ($(MINI_LCD_SUPPORT),1)
 c_SRC_FILES += ../../../driver/lcd/lcd_drive.c
-c_SRC_FILES += ../../../driver/lcd/lcd_ili9341.c
 c_SRC_FILES += ../../../driver/lcd/lcd_jd9853.c
 c_SRC_FILES += ../../../driver/lcd/lcd_te_stub.c
 INCLUDES    += -I../../../driver/lcd/include
