@@ -350,9 +350,6 @@ SECTIONS
     .data ALIGN(32):
     {
         . = ALIGN(4);
-        *(.ui_ram)
-
-        . = ALIGN(4);
 
 
     _vfs_ops_begin = .;

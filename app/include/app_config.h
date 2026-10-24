@@ -83,9 +83,11 @@
 #define CONFIG_DEBUG_LIB(x)         (x & LIB_DEBUG)
 
 /* ================ xiaolu-R2 手表屏/触摸(JD9853 8bit并口 + CST816 IIC) =================
- * 触摸引脚: PH0/PH1(iic0), PH3=TP_INT, PH4=TP_RST; 屏走 EMI 8080-8bit(board.c) */
-#define TCFG_LCD_JD9853_ENABLE      1
-#define TCFG_TOUCH_CST816_ENABLE    1
+ * 触摸引脚: PH0/PH1(iic0), PH3=TP_INT, PH4=TP_RST; 屏走 EMI 8080-8bit(board.c)
+ * ⚠ USB 排查期(V0.9.x)暂时关闭: 屏驱动(CST816 触摸轮询/JD9853)全裁, 待 USB
+ *   基线稳定后随 MINI_LCD_SUPPORT 一起回开。升级屏显状态色随 LCD 宏自动变空操作。 */
+#define TCFG_LCD_JD9853_ENABLE      0
+#define TCFG_TOUCH_CST816_ENABLE    0
 
 /* ================ ADC 按键(原厂 key_driver/adkey 框架, PB01 电阻梯) ================
  * 实测: 空闲 raw=1014(3.13V), 按键1 raw=162(500mV), 按键2 raw=0(0mV)。
