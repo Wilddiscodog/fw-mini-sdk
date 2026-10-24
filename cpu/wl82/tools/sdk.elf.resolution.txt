@@ -1343,10 +1343,6 @@ objs/cpu/wl82/debug.c.o
 -r=objs/cpu/wl82/debug.c.o,puts,l
 -r=objs/cpu/wl82/debug.c.o,cpu0_sstack_begin,
 -r=objs/cpu/wl82/debug.c.o,cpu0_sstack_end,
--r=objs/cpu/wl82/debug.c.o,text_rodata_begin,
--r=objs/cpu/wl82/debug.c.o,text_rodata_end,
--r=objs/cpu/wl82/debug.c.o,ram_text_rodata_begin,
--r=objs/cpu/wl82/debug.c.o,ram_text_rodata_end,
 -r=objs/cpu/wl82/debug.c.o,cpu1_sstack_begin,
 -r=objs/cpu/wl82/debug.c.o,cpu1_sstack_end,
 objs/cpu/wl82/iic.c.o
