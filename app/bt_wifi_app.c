@@ -23,6 +23,11 @@
 extern const u8 *bt_get_mac_addr(void);
 static char save_ssid_flag, request_connect_flag;
 
+/* 网页配网/网页升级(app/net/wifi_prov.c): 事件状态位 + 默认模式选择 + 状态机 */
+void wifi_prov_notify(enum WIFI_EVENT event);
+void wifi_prov_default_mode_setup(void);
+void wifi_prov_run(void);
+
 
 #define AP_SSID "AC79_WIFI_DEMO_"      //配置 AP模式的SSID前缀
 #define AP_PWD  "12345678"                //配置 AP模式的密码
@@ -92,7 +97,8 @@ void key_early_init(void)
     key_framework_init();
 }
 
-static void wifi_set_lan_setting_info(void)
+/* AP 模式 IP/DHCP 池(wifi_prov.c 的默认模式选择也调用) */
+void wifi_set_lan_setting_info(void)
 {
     struct lan_setting lan_setting_info = {
 
@@ -222,8 +228,7 @@ int init_net_device_mac_addr(char *macaddr, char ap_mode)
 
 static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 {
-    // printf("[wifi] event %d\n", event);
-    // return 0;
+    wifi_prov_notify(event);            /* 配网/升级模块状态位(AP_START/DHCP/超时/扫描完) */
     struct net_event net = {0};
     net.arg = "net";
     int ret = 0;
@@ -237,30 +242,9 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 #endif
         wifi_set_smp_cfg_timeout(30);       //配置MONITOR模式超时后事件回调通知时间
 
-//    u8 airkiss_aes_key[16] = {0x65, 0x31, 0x63, 0x33, 0x36, 0x31, 0x63, 0x63,0x32, 0x39, 0x65, 0x34, 0x33, 0x66, 0x62, 0x38};
-//    wifi_set_airkiss_key(airkiss_aes_key);        //配置 airkiss_aes_key
-
-        struct wifi_store_info wifi_default_mode_parm;
-        memset(&wifi_default_mode_parm, 0, sizeof(struct wifi_store_info));
-
-#if (defined AP_MODE_TEST)
-        wifi_set_lan_setting_info();    //AP模式配置IP地址信息和DHCP池起始分配地址
-
-        u8 mac_addr[6];
-        char ssid[64];
-        int init_net_device_mac_addr(char *macaddr, char ap_mode); //如果AP模式需要配置SSID和MAC地址相关,需要在这里先产生MAC地址
-        init_net_device_mac_addr((char *)mac_addr, 1);
-        sprintf((char *)ssid, AP_SSID"%02x%02x%02x%02x%02x%02x", mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-        wifi_default_mode_parm.mode = AP_MODE;
-        strncpy((char *)wifi_default_mode_parm.ssid[wifi_default_mode_parm.mode - STA_MODE], (const char *)ssid, sizeof(wifi_default_mode_parm.ssid[wifi_default_mode_parm.mode - STA_MODE]) - 1);
-        strncpy((char *)wifi_default_mode_parm.pwd[wifi_default_mode_parm.mode - STA_MODE], (const char *)AP_PWD, sizeof(wifi_default_mode_parm.pwd[wifi_default_mode_parm.mode - STA_MODE]) - 1);
-#elif (defined STA_MODE_TEST)
-        wifi_default_mode_parm.mode = STA_MODE;
-        strncpy((char *)wifi_default_mode_parm.ssid[wifi_default_mode_parm.mode - STA_MODE], (const char *)STA_SSID, sizeof(wifi_default_mode_parm.ssid[wifi_default_mode_parm.mode - STA_MODE]) - 1);
-        strncpy((char *)wifi_default_mode_parm.pwd[wifi_default_mode_parm.mode - STA_MODE], (const char *)STA_PWD, sizeof(wifi_default_mode_parm.pwd[wifi_default_mode_parm.mode - STA_MODE]) - 1);
-        wifi_default_mode_parm.connect_best_network = 0;
-#endif
-        wifi_set_default_mode(&wifi_default_mode_parm, FORCE_DEFAULT_MODE, wifi_default_mode_parm.mode == STA_MODE); //配置STA模式情况下,把默认配置SSID也存储起来,以后即使保存过其他SSID,也不会覆盖丢失,使用连接最优信号SSID策略的情况下可以匹配连接
+        /* 网页配网: 读存储→有则默认 STA 连存储配置, 无则默认 AP
+         * (原 AP_MODE_TEST/STA_MODE_TEST 硬编码模式由其取代) */
+        wifi_prov_default_mode_setup();
         break;
 
     case WIFI_EVENT_MODULE_START:
@@ -506,42 +490,24 @@ static void wifi_status(void *p)
     }
 }
 
-static void wifi_scan_task(void *p)
+/* WiFi 应用任务: 注册回调(必须先于 wifi_on: 库经 RPC 投递首事件, 空回调跳 0)
+ * → wifi_on(MODULE_INIT 里配网模块已选定默认模式) → 配网状态机
+ * (有存储→STA 重试 3 次→失败转 AP; 无存储→直接 AP; AP/STA 均起网页后台) */
+static void wifi_app_task(void *p)
 {
     (void)p;
-    os_time_dly(300);
-#if defined(STA_MODE_TEST)
-    wifi_set_store_ssid_cnt(5);
-#else
-    wifi_set_sta_connect_best_ssid(0);
-    wifi_set_store_ssid_cnt(0);
-    printf("[wifi] AP-only: STA saved-SSID auto-connect disabled\n");
-#endif
-    wifi_set_event_callback(wifi_event_callback);   /* 原厂 wifi_ipc 同款: 先注册回调 */
+    os_time_dly(200);
+    wifi_set_event_callback(wifi_event_callback);
     if (wifi_on()) {
         printf("[wifi] wifi_on fail\n");
         while (1) { os_time_dly(600); }
     }
-    // iperf_test();
     u8 wmac[6];
     wifi_get_mac(wmac);
     printf("[wifi] on, mac %02x:%02x:%02x:%02x:%02x:%02x\n",
            wmac[0], wmac[1], wmac[2], wmac[3], wmac[4], wmac[5]);
-    // sys_timer_add_to_task("app_core", NULL, wifi_status, 5 * 1000); //打印一下WIFI一些信息
-    while (1) {
-        // printf("[wifi] scan...\n");
-        // wifi_scan_req();
-        // os_time_dly(300);
-        // u32 cnt = 0;
-        // struct wifi_scan_ssid_info *r = wifi_get_scan_result(&cnt);
-        // printf("[wifi] ap count %u\n", cnt);
-        // for (u32 i = 0; i < cnt && i < 20; i++) {
-        //     printf("  [%u] %s ch=%u rssi=%d\n", i, r[i].ssid,
-        //            r[i].channel_number, r[i].rssi);
-        // }
-        // wifi_clear_scan_result();
-        os_time_dly(600);
-    }
+
+    wifi_prov_run();                     /* 配网状态机, 不返回 */
 }
 #endif
 
@@ -558,8 +524,14 @@ void bt_start(void)
 void wifi_start(void)
 {
 #if MINI_WIFI_SUPPORT
+    static u8 started = 0;
+    if (started) {                       /* 上电已自启(app_main), 手动触发不再重复创建 */
+        printf("[wifi] already started\n");
+        return;
+    }
+    started = 1;
     printf("[wifi] creating wifi_app task...\n");
-    os_task_create(wifi_scan_task, NULL, 12, 1024, 0, "wifi_app");
+    os_task_create(wifi_app_task, NULL, 12, 2048, 0, "wifi_app");
     printf("[wifi] wifi_app task created\n");
 #endif
 }

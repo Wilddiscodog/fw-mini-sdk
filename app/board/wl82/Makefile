@@ -209,6 +209,7 @@ c_SRC_FILES := \
 	../../../app/key/adkey.c \
 	../../../driver/lcd/touch_cst816.c \
 	../../../app/net/wifi_conf.c \
+	../../../app/net/wifi_prov.c \
 	../../../driver/config/log_config/lib_btctrler_config.c \
 	../../../driver/config/log_config/lib_btstack_config.c \
 	../../../app/board/wl82/board.c \
