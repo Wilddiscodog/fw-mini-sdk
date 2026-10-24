@@ -292,11 +292,16 @@ static void lcd_test_task(void *p)
         os_time_dly(1);
     }
 #else
-    /* 无 LVGL: 彩条自检(RGB565) */
+    /* 无 LVGL: 彩条自检(RGB565)。msc_ota_lcd_hold 非 0 时让出屏幕给升级状态色 */
+    extern volatile uint8_t msc_ota_lcd_hold;
     u16 w = 240, h = 320;
     static u16 fb[240 * 40];   /* 40 行条带 */
     u16 colors[8] = {0xF800, 0x07E0, 0x001F, 0xFFE0, 0xF81F, 0x07FF, 0xFFFF, 0x0000};
     while (1) {
+        if (msc_ota_lcd_hold) {          /* 升级状态色接管屏幕 */
+            os_time_dly(20);
+            continue;
+        }
         for (u8 band = 0; band < 8; band++) {
             for (u32 i = 0; i < w * 40; i++) {
                 fb[i] = colors[band];
