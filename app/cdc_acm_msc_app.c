@@ -22,6 +22,7 @@
 #include "usbd_cdc_acm.h"
 #include "usbd_msc.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -279,6 +280,14 @@ static uint8_t msc_ram_disk[MSC_RAM_SIZE];
 #define MSC_ROOT_ENTRIES       512u
 #define MSC_DATA_START_SECTOR  (MSC_ROOT_START_SECTOR + MSC_ROOT_ENTRIES * 32u / 512u)
 
+/* ---- 诊断通道: OTASTAT.TXT 预置在根目录第 1 槽, 数据占最后一个簇 ----
+ * 无串口/无屏时升级链路唯一可观测手段: 看门任务把各阶段状态写入该文件,
+ * 用户在资源管理器 F5 刷新读取。注意: 仅当拷贝文件耗尽 >99.9% 盘容量时
+ * 才会与保留簇冲突(4MB 盘/update-ota.ufw 仅占 ~18%)。 */
+#define MSC_STAT_SECTOR        (MSC_RAM_SECTORS - 1u)   /* 8191 */
+#define MSC_STAT_CLUSTER       (MSC_STAT_SECTOR - MSC_DATA_START_SECTOR + 2u)
+#define MSC_STAT_ROOT_SLOT     (MSC_ROOT_START_SECTOR * 512u + 32u)  /* 卷标后第1槽 */
+
 /* ---- FAT16 格式化(4MB 盘, 1 扇区/簇, 固定根目录) ---- */
 static void msc_ram_put16(uint32_t off, uint16_t v)
 {
@@ -327,6 +336,41 @@ static void msc_ram_mkfs16(void)
     /* FAT16 uses a fixed root directory immediately after both FAT copies. */
     memcpy(&msc_ram_disk[root_start_sector * 512U], "WL82RAMDISK", 11);
     msc_ram_disk[root_start_sector * 512U + 11U] = 0x08;
+
+    /* --- OTASTAT.TXT 预置(诊断通道): 根目录槽1 + 末簇 FAT EOF --- */
+    msc_ram_put16(fat_start_sector * 512U + MSC_STAT_CLUSTER * 2U, 0xFFFFU);
+    memcpy(&msc_ram_disk[second_fat_sector * 512U],
+           &msc_ram_disk[fat_start_sector * 512U], fat_sectors * 512U);
+    {
+        uint8_t *e = &msc_ram_disk[MSC_STAT_ROOT_SLOT];
+        memset(e, 0, 32);
+        memcpy(e, "OTASTAT  TXT", 11);
+        e[11] = 0x20;                                /* 归档属性 */
+        e[26] = (uint8_t)MSC_STAT_CLUSTER;           /* 首簇(LE) */
+        e[27] = (uint8_t)(MSC_STAT_CLUSTER >> 8);
+        /* size=0(待看门任务写入后更新) */
+    }
+}
+
+/* 看门任务写诊断状态到 OTASTAT.TXT(≤512B 单簇), 用户 F5 即可读取 */
+static void msc_ota_stat_printf(const char *fmt, ...)
+{
+    static char stat_buf[512];
+    va_list args;
+
+    va_start(args, fmt);
+    int n = vsnprintf(stat_buf, sizeof(stat_buf) - 1, fmt, args);
+    va_end(args);
+    if (n < 0 || n > 510) {
+        n = 510;
+    }
+    stat_buf[n++] = '\n';
+    stat_buf[n] = 0;
+
+    memcpy(&msc_ram_disk[MSC_STAT_SECTOR * 512U], stat_buf, (uint32_t)n);
+    /* 目录项 size 字段同步(槽1 项内偏移 28) */
+    msc_ram_disk[MSC_STAT_ROOT_SLOT + 28U] = (uint8_t)n;
+    msc_ram_disk[MSC_STAT_ROOT_SLOT + 29U] = (uint8_t)(n >> 8);
 }
 
 void usbd_msc_get_cap(uint8_t busid, uint8_t lun, uint32_t *block_num, uint32_t *block_size)
@@ -392,7 +436,7 @@ void msc_only_init(uint8_t busid, uintptr_t reg_base)
 
 #if TCFG_VIR_UPDATE_ENABLE
     /* 虚拟U盘升级看门: 500ms 轮询, 盘被写过且静默 3s 后扫 FAT 根目录触发升级 */
-    os_task_create(msc_ota_watch_task, NULL, 9, 1024, 0, "msc_ota");
+    os_task_create(msc_ota_watch_task, NULL, 9, 2048, 0, "msc_ota");
 #endif
 }
 
@@ -530,10 +574,12 @@ static int msc_ota_find_ufw(uint32_t *first_sector, uint32_t *size)
 static void msc_ota_do_upgrade(void)
 {
     printf("[msc-ota] file settled, size %u, flashing...\n", (unsigned)msc_ota.file_size);
+    msc_ota_stat_printf("stage=flashing size=%u", (unsigned)msc_ota.file_size);
 
     void *fd = net_fopen(CONFIG_UPGRADE_OTA_FILE_NAME, "w");
     if (!fd) {
         printf("[msc-ota] net_fopen fail\n");
+        msc_ota_stat_printf("stage=net_fopen_fail");
         goto out;
     }
 
@@ -541,6 +587,8 @@ static void msc_ota_do_upgrade(void)
     uint32_t total_sec = (msc_ota.file_size + 511U) / 512U;
     if (msc_ota.file_size < 64U || msc_ota.first_sector + total_sec > MSC_RAM_SECTORS) {
         printf("[msc-ota] bad size/range, drop\n");
+        msc_ota_stat_printf("stage=bad_range first=%u total=%u",
+                            (unsigned)msc_ota.first_sector, (unsigned)total_sec);
         net_fclose(fd, 1);
         goto out;
     }
@@ -550,6 +598,7 @@ static void msc_ota_do_upgrade(void)
                      (msc_ota.file_size - (total_sec - 1U) * 512U) : 512U;
         if (net_fwrite(fd, sec, (int)n, 0) != (int)n) {
             printf("[msc-ota] net_fwrite fail @%u\n", (unsigned)i);
+            msc_ota_stat_printf("stage=fw_fail sector=%u", (unsigned)i);
             net_fclose(fd, 1);
             goto out;
         }
@@ -562,12 +611,14 @@ static void msc_ota_do_upgrade(void)
     if (crc != msc_ota.data_crc) {
         printf("[msc-ota] crc err: calc %04x != head %04x, drop (re-drag file)\n",
                crc, msc_ota.data_crc);
+        msc_ota_stat_printf("stage=crc_err calc=%04x head=%04x", crc, msc_ota.data_crc);
         msc_ota_lcd_show(0xF800);        /* 红: CRC 错, 放弃 */
         net_fclose(fd, 1);               /* 不烧写不复位 */
         goto out;
     }
 
     printf("[msc-ota] crc ok, burn boot info, system will reset soon\n");
+    msc_ota_stat_printf("stage=crc_ok_rebooting");
     msc_ota_lcd_show(0x07E0);            /* 绿: 烧 boot info, 即将复位 */
     net_fclose(fd, 0);                   /* 内部: 烧 boot info + 2s 后 system_reset */
     while (1) {                          /* 等复位, 不再回 MSC 服务 */
@@ -610,11 +661,15 @@ static void msc_ota_watch_task(void *arg)
         quiet_ms = 0;
         printf("[msc-ota] quiet after %u writes, scanning root dir\n",
                (unsigned)msc_ota.write_seq);
+        msc_ota_stat_printf("seq=%u quiet_scan", (unsigned)msc_ota.write_seq);
 
         /* 盘被写过且已静默: 扫 FAT 根目录找升级文件(任务上下文) */
         uint32_t first_sector, size;
         if (!msc_ota_find_ufw(&first_sector, &size)) {
             /* 诊断: 打印根目录前几个目录项的 8.3 名, 看 Windows 写在哪 */
+            char names[64];
+            int off = 0;
+            names[0] = 0;
             for (uint32_t e = 0; e < 8; e++) {
                 const uint8_t *p = &msc_ram_disk[MSC_ROOT_START_SECTOR * 512U + e * 32U];
                 if (p[0] == 0x00) {
@@ -624,8 +679,12 @@ static void msc_ota_watch_task(void *arg)
                        (unsigned)e, (const char *)p, p[11],
                        (unsigned)(p[26] | ((uint32_t)p[27] << 8)),
                        (unsigned)(p[28] | ((uint32_t)p[29] << 8) | ((uint32_t)p[30] << 16) | ((uint32_t)p[31] << 24)));
+                if (off < 40) {
+                    off += snprintf(names + off, sizeof(names) - off, "%.8s.%.3s,",
+                                    (const char *)p, (const char *)p + 8);
+                }
             }
-            printf("[msc-ota] no valid .UFW entry in root, wait next write\n");
+            msc_ota_stat_printf("no_ufw root=%s", names);
             continue;                    /* 无升级文件(普通拷贝), 等下次写盘 */
         }
         JL_FILE_HEAD h;
@@ -635,6 +694,8 @@ static void msc_ota_watch_task(void *arg)
         put_buf((const u8 *)&h, 32);     /* 诊断: 加密头原样 32B */
         int head_ret = jl_file_head_valid_check(&h);
         printf("[msc-ota] head check ret=%d name=%.16s\n", head_ret, h.szFileName);
+        msc_ota_stat_printf("found sec=%u size=%u head_ret=%d",
+                            (unsigned)first_sector, (unsigned)size, head_ret);
         if (head_ret != 0 ||
             strncmp(h.szFileName, "update_data", 11) != 0) {
             printf("[msc-ota] .UFW head invalid, ignore\n");
