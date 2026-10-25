@@ -509,7 +509,8 @@ volatile uint8_t msc_ota_lcd_hold = 0;
 
 static void msc_ota_lcd_show(u16 rgb565)
 {
-    static u16 fb[240 * 40];
+    /* aligned(4): emi_write 对 ≥5 字节 DMA 写要求缓冲 4 字节对齐(反汇编实锤) */
+    static u16 fb[240 * 40] __attribute__((aligned(4)));
     struct lcd_interface *lcd = lcd_get_hdl();
     if (!lcd) {
         return;

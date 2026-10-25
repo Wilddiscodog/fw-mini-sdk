@@ -298,7 +298,9 @@ static void lcd_test_task(void *p)
     /* 无 LVGL: 彩条自检(RGB565)。msc_ota_lcd_hold 非 0 时让出屏幕给升级状态色 */
     extern volatile uint8_t msc_ota_lcd_hold;
     u16 w = 240, h = 320;
-    static u16 fb[240 * 40];   /* 40 行条带 */
+    /* aligned(4) 必须的: 闭源 emi_write 对 ≥5 字节 DMA 写检查缓冲运行时地址,
+     * 非 4 对齐直接返回 -22 且一个字节都不发(反汇编原厂参考工程 sdk.elf 实锤) */
+    static u16 fb[240 * 40] __attribute__((aligned(4)));   /* 40 行条带 */
     u16 colors[8] = {0xF800, 0x07E0, 0x001F, 0xFFE0, 0xF81F, 0x07FF, 0xFFFF, 0x0000};
     while (1) {
         if (msc_ota_lcd_hold) {          /* 升级状态色接管屏幕 */

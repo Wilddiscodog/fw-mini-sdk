@@ -188,12 +188,15 @@ static void JD9853_led_ctrl(u8 status)
 
 static int JD9853_init(void)
 {
+    /* 背光最先开(原厂 ili9481_init 同款): 只要本函数被调用, PA6 必拉高,
+     * 作为"驱动选择+EMI open 成功"的可见判据; 面板序列异常也不影响背光 */
+    lcd_bl_pinstate(BL_ON);
+
     JD9853_io_init();
     printf("[lcd] LCD_JD9853 init_start\n");
     JD9853_reg_cfg();
     JD9853_set_direction(ROTATE_DEGREE_0);
     init_TE(JD9853_Fill);
-    lcd_bl_pinstate(BL_ON);
     printf("[lcd] LCD_JD9853 config succes\n");
     return 0;
 }
