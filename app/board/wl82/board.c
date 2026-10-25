@@ -182,6 +182,40 @@ const struct gpcnt_platform_data gpcnt_data = {
 };
 #endif
 
+/*============================ 内置音频: MIC + DAC (MINI_AUDIO_SUPPORT) =========
+ * 结构对齐原厂 demo_DevKitBoard(已编译参考): dac_data/adc_data 数值同款;
+ * xiaolu-R2 差异: 功放 PA MUTE 引脚原理图未标定 → pa_auto_mute=0(不控制 MUTE,
+ * 功放常开), 定位到 MUTE 脚后改 1 + 填 pa_mute_port。 */
+#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
+#include "asm/audio.h"
+#include "server/audio_dev.h"           /* audio_platform_data + audio_dev_ops */
+static const struct dac_platform_data dac_data = {
+    .sw_differ          = 0,
+    .pa_auto_mute       = 0,            /* TODO: xiaolu 功放 MUTE 脚定位后改 1 */
+    .pa_mute_port       = IO_PORTB_02,  /* TODO: 按本板硬件改 */
+    .pa_mute_value      = 0,
+    .differ_output      = 0,
+    .hw_channel         = 0x05,         /* 原厂同款 DAC 模拟通道 */
+    .ch_num             = 4,
+    .vcm_init_delay_ms  = 1000,
+    .mute_delay_ms      = 200,
+};
+static const struct adc_platform_data adc_data = {
+    .mic_channel        = LADC_CH_MIC1_P_N,   /* 内置 MIC1 差分 */
+    .mic_ch_num         = 1,
+    .isel               = 2,
+    .dump_num           = 480,
+};
+static const struct audio_pf_data audio_pf_d = {
+    .adc_pf_data = &adc_data,
+    .dac_pf_data = &dac_data,
+    /* IIS/PLNK/SPDIF 未用: NULL, 库仅在选择对应 source 时才解引用 */
+};
+static const struct audio_platform_data audio_data = {
+    .private_data = (void *)&audio_pf_d,
+};
+#endif
+
 REGISTER_DEVICES(device_table) = {
 	{"uart0", &uart_dev_ops, (void *)&uart0_data },
 	{"uart1", &uart_dev_ops, (void *)&uart1_data },
@@ -201,6 +235,9 @@ REGISTER_DEVICES(device_table) = {
 #endif
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 	{"emi",   &emi_dev_ops,  (void *)&emi_data },
+#endif
+#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
+	{"audio", &audio_dev_ops, (void *)&audio_data },
 #endif
 	{"pwm1",  &pwm_dev_ops,  (void *)&pwm_data1 },
 	{"rtc",   &rtc_dev_ops,  NULL},

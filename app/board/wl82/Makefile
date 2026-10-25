@@ -27,6 +27,12 @@ MINI_SD_SUPPORT        ?= 0
 MINI_GPCNT_SUPPORT     ?= 0
 MINI_HW_CRYPTO_SUPPORT ?= 0
 MINI_KEY_EXTRA_SUPPORT ?= 0   # 预留: IR/旋转/CTMU 按键源文件
+MINI_AUDIO_SUPPORT     ?= 0   # 内置音频: MIC 录音 + DAC 播放(audio_server 库, mic→DAC 回环自检)
+# 音频库注入 LFLAGS 用(LFLAGS 是 := 立即展开, 此变量必须先于其定义)
+AUDIO_LIB :=
+ifeq ($(MINI_AUDIO_SUPPORT),1)
+AUDIO_LIB := ../../../cpu/wl82/liba/audio_server.a
+endif
 
 ifeq ($(OS), Windows_NT)
 # 工具链与构建工具路径已写死, 直接 make / make clean 即可(无需手动设置 PATH)
@@ -150,6 +156,7 @@ DEFINES += -DMINI_PWM_SUPPORT=$(MINI_PWM_SUPPORT) -DMINI_RTC_SUPPORT=$(MINI_RTC_
 DEFINES += -DMINI_SD_SUPPORT=$(MINI_SD_SUPPORT) -DMINI_GPCNT_SUPPORT=$(MINI_GPCNT_SUPPORT)
 DEFINES += -DMINI_HW_CRYPTO_SUPPORT=$(MINI_HW_CRYPTO_SUPPORT)
 DEFINES += -DMINI_KEY_EXTRA_SUPPORT=$(MINI_KEY_EXTRA_SUPPORT)
+DEFINES += -DMINI_AUDIO_SUPPORT=$(MINI_AUDIO_SUPPORT)
 
 # 头文件搜索路径
 INCLUDES := \
@@ -200,6 +207,7 @@ c_SRC_FILES := \
 	../../../app/bt_wifi_app.c \
 	../../../app/bt_profile_config.c \
 	../../../app/cdc_acm_msc_app.c \
+	../../../app/audio_demo.c \
 	../../../app/periph_demo.c \
 	../../../app/usbh_msc_app.c \
 	../../../app/usbh_cdc_hid_app.c \
@@ -301,6 +309,7 @@ LFLAGS := \
 	../../../cpu/wl82/liba/fs.a \
 	../../../cpu/wl82/liba/common_lib.a \
 	../../../cpu/wl82/liba/update.a \
+	$(AUDIO_LIB) \
 	../../../cpu/wl82/liba/wl_rf_common.a \
 	../../../cpu/wl82/liba/btctrler.a \
 	../../../cpu/wl82/liba/btstack.a \

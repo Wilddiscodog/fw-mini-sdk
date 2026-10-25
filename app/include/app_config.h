@@ -75,6 +75,36 @@
  * ⚠ 同上排查期暂时 0。CDC 代码在 cdc_acm_msc_app.c 内保留, 宏开即回。 */
 #define MINI_USB_CDC_ENABLE    0
 
+/* ================ 内置音频(MIC 录音 + DAC 播放, MINI_AUDIO_SUPPORT) =================
+ * Makefile 注入 -DMINI_AUDIO_SUPPORT=$(var), 默认 0(不编译不入链接)。
+ * 组成: board.c 音频平台数据(dac/adc) + {"audio",audio_dev_ops} 设备 +
+ *       task_info_table 四个音频库任务 + app/audio_demo.c(mic→DAC 回环自检)。
+ * 库: cpu/wl82/liba/audio_server.a(audio_dev_ops 也在其中)。
+ * ⚠ CONFIG_* 音频宏与原厂 demo_DevKitBoard 逐字对齐 —— 闭源 audio_server.a 按
+ *   该配置编译, 应用层宏仅影响 demo 代码, 不得随意增删。 */
+#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
+#define CONFIG_AUDIO_MIX_ENABLE                   /* 叠音(参考工程同款) */
+#define CONFIG_AUDIO_PS_ENABLE                    /* 变调变速 */
+
+#define AUDIO_ENC_SAMPLE_SOURCE_MIC         0     /* 录音输入源: 内置模拟MIC */
+#define AUDIO_ENC_SAMPLE_SOURCE_PLNK0       1
+#define AUDIO_ENC_SAMPLE_SOURCE_PLNK1       2
+#define AUDIO_ENC_SAMPLE_SOURCE_IIS0        3
+#define AUDIO_ENC_SAMPLE_SOURCE_IIS1        4
+#define AUDIO_ENC_SAMPLE_SOURCE_LINEIN      5
+
+#define CONFIG_AUDIO_ENC_SAMPLE_SOURCE      AUDIO_ENC_SAMPLE_SOURCE_MIC
+#define CONFIG_AUDIO_DEC_PLAY_SOURCE        "dac" /* 播放输出源 */
+#define CONFIG_AUDIO_RECORDER_SAMPLERATE    16000
+#define CONFIG_AUDIO_RECORDER_CHANNEL       1
+#define CONFIG_AUDIO_RECORDER_DURATION      (30 * 1000)
+
+#define CONFIG_AUDIO_ADC_CHANNEL_L          1     /* 左 mic 通道 */
+#define CONFIG_AUDIO_ADC_CHANNEL_R          3     /* 右 mic 通道 */
+#define CONFIG_AUDIO_ADC_GAIN               100   /* mic/aux 增益 */
+#define CONFIG_REVERB_ADC_CHANNEL           1     /* 回环自检 mic 通道 */
+#endif  /* MINI_AUDIO_SUPPORT */
+
 #if !defined CONFIG_DEBUG_ENABLE || defined CONFIG_LIB_DEBUG_DISABLE
 #define LIB_DEBUG    0
 #else

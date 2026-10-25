@@ -79,6 +79,14 @@ const struct task_info task_info_table[] = {
     {"RtmpMlmeTask",        17,     700,    0   },
     {"RtmpCmdQTask",        17,     300,    0   },
     {"wl_rx_irq_thread",     5,     256,    0   },
+#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
+    /* 音频库任务(demo_DevKitBoard 同款参数, audio_server 库按名字 task_create):
+     * audio_server=服务主任务, audio_mix=叠音, audio_decoder/audio_encoder=解码/编码 */
+    {"audio_server",        16,     512,    64  },
+    {"audio_mix",           28,     512,    0   },
+    {"audio_decoder",       30,     1024,   64  },
+    {"audio_encoder",       12,     384,    64  },
+#endif
     {0, 0, 0, 0, 0},
 };
 
@@ -409,6 +417,11 @@ void app_main()
      * 之前埋在 bt_wifi_start 里形成循环依赖, 按键永远没机会触发) */
     extern void key_early_init(void);
     key_early_init();
+#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
+    /* 内置音频回环自检(MIC→DAC, 见 app/audio_demo.c) */
+    extern void audio_demo_start(void);
+    audio_demo_start();
+#endif
     // /* 外设演示(PWM/RTC/SD/加密, Makefile MINI_XXX_SUPPORT 开关, 默认全关) */
     // extern void periph_demo_start(void);
     // periph_demo_start();
