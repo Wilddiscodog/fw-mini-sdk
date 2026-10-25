@@ -203,6 +203,9 @@ static const struct dac_platform_data dac_data = {
 static const struct adc_platform_data adc_data = {
     .mic_channel        = LADC_CH_MIC1_P_N,   /* 内置 MIC1 差分 */
     .mic_ch_num         = 1,
+    .linein_channel     = LADC_CH_AUX0,       /* AEC 回采通道(AEC_ADC_CHANNEL=0, 原厂同款;
+                                               * DAC 回采的物理路由需上板确认, 详见音频记录) */
+    .linein_ch_num      = 1,
     .isel               = 2,
     .dump_num           = 480,
 };

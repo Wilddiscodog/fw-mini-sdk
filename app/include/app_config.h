@@ -103,6 +103,12 @@
 #define CONFIG_AUDIO_ADC_CHANNEL_R          3     /* 右 mic 通道 */
 #define CONFIG_AUDIO_ADC_GAIN               100   /* mic/aux 增益 */
 #define CONFIG_REVERB_ADC_CHANNEL           1     /* 回环自检 mic 通道 */
+
+/* AEC 回采(demo_edr/bt_decode.c 通话路径同款): 回采=DAC 输出回灌 ADC 作回声参考 */
+#define CONFIG_AEC_ENC_ENABLE                     /* 编码 AEC 使能门控 */
+#define CONFIG_AEC_ADC_CHANNEL              0     /* 回采 ADC 通道(AUX0, 原厂同款) */
+#define CONFIG_PHONE_CALL_ADC_CHANNEL       1     /* 通话 mic 通道 */
+#define CONFIG_AEC_AUDIO_ADC_GAIN           80    /* 回采通道增益 */
 #endif  /* MINI_AUDIO_SUPPORT */
 
 #if !defined CONFIG_DEBUG_ENABLE || defined CONFIG_LIB_DEBUG_DISABLE

@@ -17,6 +17,7 @@
 #include "server/server_core.h"
 #include "generic/circular_buf.h"
 #include "asm/wdt.h"
+#include <string.h>
 
 #define AUDIO_DEMO_RATE       16000
 #define AUDIO_DEMO_PLAY_MS    10000   /* 回环时长 */
@@ -155,9 +156,12 @@ static int demo_start(void)
     os_sem_create(&__this->r_sem, 0);
     __this->run_flag = 1;
 
-    /* MIC 采集(内置模拟 MIC1, 单声道 PCM) */
+    /* MIC 采集(内置模拟 MIC1, 单声道 PCM) + AEC 回采:
+     * 路径对齐原厂 demo_edr/bt_decode.c 通话编码(aec_enable + aec_s_attr +
+     * 回采通道 BIT(CONFIG_AEC_ADC_CHANNEL)), 采样源仍 "mic", pcm 输出 */
     req.enc.cmd            = AUDIO_ENC_OPEN;
     req.enc.channel        = 1;
+    req.enc.channel_bit_map = BIT(CONFIG_PHONE_CALL_ADC_CHANNEL);
     req.enc.volume         = CONFIG_AUDIO_ADC_GAIN;
     req.enc.output_buf     = NULL;
     req.enc.output_buf_len = 8 * 1024;
@@ -167,6 +171,42 @@ static int demo_start(void)
     req.enc.sample_source  = "mic";
     req.enc.vfs_ops        = &demo_vfs_ops;
     req.enc.msec           = 0;              /* 不限时长, 由任务控制启停 */
+
+#if defined CONFIG_AEC_ENC_ENABLE
+    /* AEC 回采(参考 bt_decode.c): ADVANCE=AEC+NLP+ANS, 16k 宽带参数 */
+#define AEC_EN              BIT(0)
+#define NLP_EN              BIT(1)
+#define ANS_EN              BIT(2)
+#define AEC_MODE_ADVANCE    (AEC_EN | NLP_EN | ANS_EN)
+    {
+        static struct aec_s_attr aec_param;   /* static: 库异步引用, 不可栈上 */
+        memset(&aec_param, 0, sizeof(aec_param));
+        aec_param.EnableBit     = AEC_MODE_ADVANCE;
+        aec_param.AGC_echo_look_ahead = 100;
+        aec_param.AGC_echo_hold       = 400;
+        aec_param.ES_MinSuppress      = 4.f;
+        aec_param.ES_Unconverge_OverDrive = aec_param.ES_MinSuppress;
+        aec_param.ANS_AggressFactor = 1.02f;
+        aec_param.ANS_MinSuppress   = 4.f;
+        aec_param.ANS_NoiseLevel    = -70.f;
+        if (req.enc.sample_rate == 16000) {
+            aec_param.wideband        = 1;
+            aec_param.hw_delay_offset = 50;
+        } else {
+            aec_param.wideband        = 0;
+            aec_param.hw_delay_offset = 75;
+        }
+        req.enc.aec_attr  = &aec_param;
+        req.enc.aec_enable = 1;
+        /* 回采通道: output_way=1 时需把回采 ADC 通道加入位图(参考同款条件) */
+        req.enc.channel_bit_map |= BIT(CONFIG_AEC_ADC_CHANNEL);
+        if (CONFIG_AEC_ADC_CHANNEL > CONFIG_PHONE_CALL_ADC_CHANNEL) {
+            req.enc.ch_data_exchange = 1;   /* 差分回采通道交换 */
+        }
+        printf("[audio] AEC enabled, ref ch=%d\n", CONFIG_AEC_ADC_CHANNEL);
+    }
+#endif
+
     err = server_request(__this->enc_server, AUDIO_REQ_ENC, &req);
     if (err) {
         printf("[audio] enc open err %d\n", err);

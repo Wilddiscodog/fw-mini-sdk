@@ -86,6 +86,7 @@ const struct task_info task_info_table[] = {
     {"audio_mix",           28,     512,    0   },
     {"audio_decoder",       30,     1024,   64  },
     {"audio_encoder",       12,     384,    64  },
+    {"echo_deal",           11,     1024,   32  },   /* AEC 回采处理(demo_DevKitBoard 同款) */
 #endif
     {0, 0, 0, 0, 0},
 };

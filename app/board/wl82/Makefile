@@ -29,9 +29,14 @@ MINI_HW_CRYPTO_SUPPORT ?= 0
 MINI_KEY_EXTRA_SUPPORT ?= 0   # 预留: IR/旋转/CTMU 按键源文件
 MINI_AUDIO_SUPPORT     ?= 0   # 内置音频: MIC 录音 + DAC 播放(audio_server 库, mic→DAC 回环自检)
 # 音频库注入 LFLAGS 用(LFLAGS 是 := 立即展开, 此变量必须先于其定义)
+# audio_server.a: 音频服务+audio_dev_ops; libaec/libdns/libjlsp: AEC 回采算法库
+# (jl_math 源码在 LCD 条件块之后追加——必须在 c_SRC_FILES := 主赋值之后)
 AUDIO_LIB :=
 ifeq ($(MINI_AUDIO_SUPPORT),1)
 AUDIO_LIB := ../../../cpu/wl82/liba/audio_server.a
+AUDIO_LIB += ../../../cpu/wl82/liba/libaec.a
+AUDIO_LIB += ../../../cpu/wl82/liba/libdns.a
+AUDIO_LIB += ../../../cpu/wl82/liba/libjlsp.a
 endif
 
 ifeq ($(OS), Windows_NT)
@@ -239,6 +244,7 @@ c_SRC_FILES := \
 	../../../driver/config/log_config/lib_driver_config.c \
 	../../../driver/config/log_config/lib_system_config.c \
 	../../../driver/config/log_config/lib_update_config.c \
+	../../../driver/config/log_config/lib_audio_config.c \
 	../../../driver/config/user_cfg.c \
 	../../../driver/iic/iic.c \
 	../../../driver/iic/software_iic.c \
@@ -362,6 +368,18 @@ c_SRC_FILES += ../../../driver/lcd/lcd_drive.c
 c_SRC_FILES += ../../../driver/lcd/lcd_jd9853.c
 c_SRC_FILES += ../../../driver/lcd/lcd_te_stub.c
 INCLUDES    += -I../../../driver/lcd/include
+endif
+
+# ---------------- jl_math 源码库(MINI_AUDIO_SUPPORT, AEC 回采用) ----------------
+# 原厂 apps/common/jl_math 同目录: AEC/DNS 的 WOLA 滤波器组引用 flrfft/flrifft
+# 等浮点 FFT 原语(闭源库内没有, 由应用层源码提供)
+ifeq ($(MINI_AUDIO_SUPPORT),1)
+c_SRC_FILES += ../../../app/jl_math/flfft_core_pi32v2.c
+c_SRC_FILES += ../../../app/jl_math/jl_fft.c
+c_SRC_FILES += ../../../app/jl_math/jl_math.c
+c_SRC_FILES += ../../../app/jl_math/kiss_fft.c
+c_SRC_FILES += ../../../app/jl_math/nn_function_vec.c
+INCLUDES    += -I../../../app/jl_math
 endif
 
 # LVGL: 需先获取 lvgl v8.2.0 源码到 third/lvgl/lvgl 并运行 tools/apply_lvgl_patch.bat
