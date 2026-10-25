@@ -163,6 +163,10 @@ REM set KEY_FILE=-key1 JL_791N-XXXX.key1 -mkey JL_791N-XXXX.mkey
 
 set CFG_FILE=cfg
 
+@REM chip key: without it the update file heads use default seed 0xFFFF and the
+@REM device-side head verify (chip key) rejects the file at first 4K flush.
+set KEY_FILE=-key 0x7DF1.key
+
 REM  添加新参数-update_files说明
 REM  1/normal就是普通的文件目录结构
 REM  2/embedded就是每个文件数据前都会有一个头

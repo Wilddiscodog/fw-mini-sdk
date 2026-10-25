@@ -712,9 +712,9 @@ static void msc_ota_do_upgrade(void)
             flushed = 1;                    /* 满 4K 落盘成功, update ctx 必已建立 */
         }
         wdt_clear();
-        /* CRC 覆盖 [32B 头之后, 文件尾), 与原厂 ram_disk_update 一致 */
-        crc = calc_crc16_with_init_val(crc, sec + (i ? 0U : 32U),
-                                       (uint16_t)(n - (i ? 0U : 32U)));
+        /* CRC 覆盖载荷 [64B 双头之后, 文件尾), 与内层头 dataCrc 比对(包内约定) */
+        crc = calc_crc16_with_init_val(crc, sec + (i ? 0U : 64U),
+                                       (uint16_t)(n - (i ? 0U : 64U)));
     }
 
     if (crc != msc_ota.data_crc) {
@@ -820,10 +820,24 @@ static void msc_ota_watch_task(void *arg)
             msc_ota_lcd_show(0xFFE0);    /* 黄 */
             continue;
         }
-        msc_ota.data_crc     = h.u16DataCrc;
+        /* 内层 app_core 头(流偏移 32B): 描述写镜像, 其 dataCrc = 镜像 CRC(包内约定),
+         * 外层头的 dataCrc 不校验载荷 —— 2026-10-25 实测核对 */
+        JL_FILE_HEAD h2;
+        memcpy(&h2, &msc_ram_disk[first_sector * 512U + 32U], sizeof(h2));
+        if (h2.u32Length != h.u32Length - 64U ||
+            strncmp(h2.szFileName, "app_core", 8) != 0) {
+            printf("[msc-ota] inner head bad: name=%.16s len=%u (want %u)\n",
+                   h2.szFileName, (unsigned)h2.u32Length,
+                   (unsigned)(h.u32Length - 64U));
+            msc_ota_stat_printf("stage=bad_inner name=%.8s len=%u",
+                                h2.szFileName, (unsigned)h2.u32Length);
+            msc_ota_lcd_show(0xFFE0);    /* 黄 */
+            continue;
+        }
+        msc_ota.data_crc     = h2.u16DataCrc;
         msc_ota.file_size    = h.u32Length;
         msc_ota.first_sector = first_sector;
-        printf("[msc-ota] update file @sec %u size %u crc %04x\n",
+        printf("[msc-ota] update file @sec %u size %u payload-crc %04x\n",
                (unsigned)first_sector, (unsigned)msc_ota.file_size, msc_ota.data_crc);
         msc_ota_lcd_show(0x001F);        /* 蓝: 合法升级文件, 开始烧写 */
         msc_ota.busy = 1;

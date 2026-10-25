@@ -325,7 +325,7 @@ static void http_handle_upload(int conn, const char *boundary,
     int slen = residue_len - (int)(body - residue);
 
     memset(&upl, 0, sizeof(upl));
-    upl.crc_skip = 32;
+    upl.crc_skip = 64;                    /* CRC 覆盖载荷 [64B 双头之后, 文件尾) */
     upl.fd = net_fopen(CONFIG_UPGRADE_OTA_FILE_NAME, "w");
     if (!upl.fd) {
         http_send(conn, HTML_HDR_200,
@@ -391,15 +391,23 @@ static void http_handle_upload(int conn, const char *boundary,
                         return;
                     }
                     JL_FILE_HEAD_PLAIN *h = (JL_FILE_HEAD_PLAIN *)head64;
-                    upl.data_crc = h->data_crc;
-                    upl.file_size = h->length;
-                    printf("[ota-http] head ok: len %u crc %04x\n",
-                           upl.file_size, upl.data_crc);
+                    upl.file_size = h->length;   /* 外层头: 整包长度 */
+                    printf("[ota-http] head ok: len %u\n", upl.file_size);
                 }
                 if (head_got == 64) {
+                    /* 内层 app_core 头: dataCrc = 写镜像 CRC(包内约定), 内层长度须吻合 */
                     JL_FILE_HEAD_PLAIN *h2 = (JL_FILE_HEAD_PLAIN *)(head64 + 32);
                     printf("[ota-http] inner head: %.16s len %u addr 0x%x\n",
                            h2->name, h2->length, h2->addr);
+                    if (h2->length != upl.file_size - 64 ||
+                        memcmp(h2->name, "app_core", 8) != 0) {
+                        net_fclose(upl.fd, 1);
+                        upl.fd = NULL;
+                        http_send(conn, HTML_HDR_200,
+                                  upload_finish_page("升级文件内层头异常, 请用构建产出的 update-ota.ufw。"));
+                        return;
+                    }
+                    upl.data_crc = h2->data_crc;
                 }
             }
             /* 投喂(文件流含 32B 头), CRC 跳过头 32B, 超出声明长度的丢弃 */
