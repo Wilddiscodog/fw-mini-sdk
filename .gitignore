@@ -25,3 +25,4 @@ cpu/wl82/tools/cache_ram_data.bin
 
 # 历史构建事故残留(download.bat 被误复制到 board 目录)
 app/board/wl82/*cpuwl82toolsdownload.bat
+ref_disasm.txt
