@@ -184,6 +184,7 @@ USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc1_read_buffer[2048];
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc1_write_buffer[2048];
 
 volatile bool cdc1_tx_busy = false;
+static volatile bool cdc_notify_busy = false;   /* EP5 SERIAL_STATE 通知在途 */
 volatile uint8_t dtr_intf_mask = 0;   /* bit0: CDC DTR(主机打开串口) */
 volatile uint8_t cdc_configured = 0;  /* SET_CONFIGURATION 完成 */
 
@@ -193,6 +194,7 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
     case USBD_EVENT_CONFIGURED:
         cdc_configured = 1;
         cdc1_tx_busy = false;
+        cdc_notify_busy = false;
         usbd_ep_start_read(busid, CDC1_OUT_EP, cdc1_read_buffer, 2048);
         break;
     case USBD_EVENT_DISCONNECTED:
@@ -225,7 +227,7 @@ void usbd_cdc1_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
 struct usbd_endpoint cdc1_out_ep = { .ep_addr = CDC1_OUT_EP, .ep_cb = usbd_cdc1_bulk_out };
 struct usbd_endpoint cdc1_in_ep  = { .ep_addr = CDC1_IN_EP,  .ep_cb = usbd_cdc1_bulk_in };
 
-/* ---- CDC 通知端点(EP3 INT): 注册以完成 ep_open 硬件配置(bit14+mps 模式);
+/* ---- CDC 通知端点(EP5 INT): 注册以完成 ep_open 硬件配置(bit14+mps 模式);
  *     DTR 变化时发 PSTN SERIAL_STATE 通知(标准 CDC 行为, 主机串口状态指示) ---- */
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc_notify_buf[16];
 
@@ -234,10 +236,14 @@ static void usbd_cdc_notify_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
     (void)busid;
     (void)ep;
     (void)nbytes;
+    cdc_notify_busy = false;
 }
 
 static void usbd_cdc_send_serial_state(uint8_t busid, uint8_t intf, uint16_t state)
 {
+    if (cdc_notify_busy) {
+        return;                    /* 上一通知未完成: 丢弃本次(状态类信息, 可丢) */
+    }
     cdc_notify_buf[0] = 0xA1;      /* bmRequestType: Device-to-Host | Class | Interface */
     cdc_notify_buf[1] = 0x20;      /* SERIAL_STATE */
     cdc_notify_buf[2] = 0;         /* wValue */
@@ -248,6 +254,7 @@ static void usbd_cdc_send_serial_state(uint8_t busid, uint8_t intf, uint16_t sta
     cdc_notify_buf[7] = 0;
     cdc_notify_buf[8] = (uint8_t)state;   /* UART 状态位图: bit0 DCD, bit1 DSR */
     cdc_notify_buf[9] = (uint8_t)(state >> 8);
+    cdc_notify_busy = true;
     usbd_ep_start_write(busid, CDC1_INT_EP, cdc_notify_buf, 10);
 }
 
@@ -443,28 +450,37 @@ void msc_only_init(uint8_t busid, uintptr_t reg_base)
 #if MINI_USB_CDC_ENABLE
 /* ---- CDC 日志输出口: 原厂 debug_user.c usb_log_task 调用(usb_id 忽略, 单口)
  *     512B 分块 + 完成等待; 串口未打开(DTR=0)/未配置/写超时 → 丢弃返回 len */
+/* CDC 日志输出口: 原厂 debug_user.c usb_log_task 调用(usb_id 忽略, 单口)
+ * 512B 分块 + 完成等待; 约定"返回实发字节数, 未发出的由调用方续传":
+ *   - 主机未连(DTR=0)/未配置: 返回 0(不假装成功, 调用方据此保留数据)
+ *   - 上一包未完成(主机暂停读取): 先等; 5s 仍未完则带着 busy 返回——
+ *     端点武装状态不动, 主机恢复读取产生 IN 完成后自然续传(绝不在
+ *     旧包未落时重新武装覆盖, 那是此前"日志断断续续"的丢失根源) */
 uint32_t cdc_write_data(int usb_id, uint8_t *buf, uint32_t len)
 {
     (void)usb_id;
     if (!cdc_configured || !(dtr_intf_mask & 0x01)) {
-        return len;    /* 主机未打开串口: 丢弃, 与原厂行为一致 */
+        return 0;
     }
     uint32_t sent = 0;
     while (sent < len) {
-        uint32_t n = (len - sent > 512U) ? 512U : (len - sent);
-        if (cdc1_tx_busy) {                     /* 上次写未完成(不应发生, 防御) */
-            return sent;
+        int wait = 0;
+        while (cdc1_tx_busy && ++wait < 500) {
+            os_time_dly(1);
         }
+        if (cdc1_tx_busy) {
+            return sent;              /* 主机暂停读取: 保留余量, 不动端点 */
+        }
+        uint32_t n = (len - sent > 512U) ? 512U : (len - sent);
         memcpy(cdc1_write_buffer, buf + sent, n);
         cdc1_tx_busy = true;
         usbd_ep_start_write(0, CDC1_IN_EP, cdc1_write_buffer, n);
-        int wait = 0;
+        wait = 0;
         while (cdc1_tx_busy && ++wait < 500) {  /* 5s 超时(拔线保护) */
             os_time_dly(1);
         }
         if (cdc1_tx_busy) {
-            cdc1_tx_busy = false;
-            return sent;
+            return sent;              /* 不清 busy: 包仍挂着, IN 完成后自续 */
         }
         sent += n;
     }

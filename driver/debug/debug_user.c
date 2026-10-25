@@ -302,15 +302,23 @@ static void usb_log_task(void *priv)
     os_time_dly(300);
 
     while (1) {
-        if (lg_cnt > last_cnt && last_cnt != lg_cnt) {
-            if (lg_cnt / sizeof(lg_buf) > last_cnt / sizeof(lg_buf)) {
-                cdc_write_data(0, (u8 *)lg_buf + (last_cnt % sizeof(lg_buf)), sizeof(lg_buf) - last_cnt % sizeof(lg_buf));
-                cdc_write_data(0, (u8 *)lg_buf, lg_cnt - last_cnt - (sizeof(lg_buf) - last_cnt % sizeof(lg_buf)));
-            } else {
-                cdc_write_data(0, (u8 *)lg_buf + (last_cnt % sizeof(lg_buf)), lg_cnt - last_cnt);
+        u32 avail = lg_cnt - last_cnt;
+        if (avail) {
+            /* 积压过多(串口长时间未开): 跳到最新 4KB, 陈旧日志丢弃防刷屏 */
+            if (avail > 8 * 1024) {
+                last_cnt = lg_cnt - 4 * 1024;
+                avail = 4 * 1024;
             }
+            /* 环形边界取连续段, 单次限 4KB 防占 CPU; 只推进实发字节(cdc 返回值),
+             * 未发完的下一拍续传 —— 丢日志根源即此前无条件 last_cnt = lg_cnt */
+            u32 pos = last_cnt % sizeof(lg_buf);
+            u32 chunk = sizeof(lg_buf) - pos;
+            if (chunk > avail) {
+                chunk = avail;
+            }
+            u32 sent = cdc_write_data(0, (u8 *)lg_buf + pos, chunk);
+            last_cnt += sent;
         }
-        last_cnt = lg_cnt;
         os_time_dly(10);
     }
 }
