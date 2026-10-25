@@ -60,7 +60,9 @@
 
 /* ================ MUSB DCD (port/jl82) ================ */
 #define CONFIG_USB_MUSB_JL82            1   /* JL 变体: 读清中断/无FIFO配置寄存器/桥接器同步 */
-#define CONFIG_USB_MUSB_EP_NUM          2   /* MSC-only test: EP0 + EP1 */
+/* 复合设备端点上限(数组维度, 必须 > 实际最大 EP 号): MSC=EP1, CDC=EP2/EP5。
+ * ⚠ V0.8 MSC-only 时代设 2, 开 CDC 后 EP2/EP5 越界 → 枚举即崩/重启循环(2026-10-25 实锤)。 */
+#define CONFIG_USB_MUSB_EP_NUM          6   /* EP0~EP5 */
 #define CONFIG_USB_HS                   1   /* HUSB 2.0 高速 */
 
 #endif

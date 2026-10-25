@@ -3,7 +3,7 @@
  *
  * 端点规划:
  *   EP1(0x81 IN / 0x01 OUT) bulk 512 —— MSC(普通 DMA 模式, V0.8 验证配置)
- *   [MINI_USB_CDC_ENABLE=1 时] EP2(0x82/0x02) CDC 数据 + EP3(0x83) INT 通知
+ *   [MINI_USB_CDC_ENABLE=1 时] EP2(0x82/0x02) CDC 数据 + EP5(0x85) INT 通知(CDC 为日志输出口)
  *
  * USB 枚举异常排查期(V0.9.x): CDC 与 CDC 日志暂时关闭(app_config.h),
  * 只保留 MSC 升级路径(msc_ota, V0.9.3 起钩子中断内仅计数, 检测全在任务)。
@@ -39,7 +39,7 @@ static void msc_ota_watch_task(void *arg);
 #if MINI_USB_CDC_ENABLE
 #define CDC1_IN_EP   0x82
 #define CDC1_OUT_EP  0x02
-#define CDC1_INT_EP  0x83
+#define CDC1_INT_EP  0x85
 #endif
 
 #define USBD_VID           0xFFFF
@@ -344,7 +344,7 @@ static void msc_ram_mkfs16(void)
     {
         uint8_t *e = &msc_ram_disk[MSC_STAT_ROOT_SLOT];
         memset(e, 0, 32);
-        memcpy(e, "OTASTAT  TXT", 11);
+        memcpy(e, "OTASTAT TXT", 11);              /* 8.3 基名8B+扩展3B: 单空格补齐, 双空格会截掉扩展名末字符 */
         e[11] = 0x20;                                /* 归档属性 */
         e[26] = (uint8_t)MSC_STAT_CLUSTER;           /* 首簇(LE) */
         e[27] = (uint8_t)(MSC_STAT_CLUSTER >> 8);
@@ -500,6 +500,57 @@ typedef struct stJL_FILE_HEAD {
 
 extern int jl_file_head_valid_check(void *head);             /* update.a(会读 flash, 仅任务上下文调用) */
 extern uint16_t calc_crc16_with_init_val(uint16_t init_crc, uint8_t *ptr, uint16_t len);
+/* BootInfo 布局镜像 dual_bank_updata_api.h(免引头文件); 读运行时 .boot_info, 反映 flash 引导状态 */
+struct msc_boot_info { uint32_t code_len; uint32_t base_addr; uint16_t version; };
+extern int get_current_boot_info(void *info);
+extern uint32_t get_target_udate_addr(void);                /* update.a: 升级目标地址(ctx 建立后有效) */
+extern uint32_t dual_bank_update_read_data(uint32_t offset, uint8_t *read_buf, uint32_t read_len);
+/* flash 实际容量诊断: 直接读 JEDEC ID(sfc_norflash_api.h 原语, 任务上下文+互斥) */
+extern void norflash_mutex_enter(void);
+extern void norflash_mutex_exit(void);
+extern void norflash_spi_cs(char cs);
+extern void norflash_spi_write_byte(unsigned char data);
+extern unsigned char norflash_spi_read_byte(void);
+extern int norflash_wait_busy(void);
+
+static uint32_t msc_flash_jedec(void)
+{
+    static uint32_t cached = 0xFFFFFFFF;                  /* 0xFFFFFFFF=未读 */
+    if (cached != 0xFFFFFFFF) {
+        return cached;
+    }
+    uint8_t id[3] = {0, 0, 0};
+    norflash_mutex_enter();
+    norflash_wait_busy();
+    norflash_spi_cs(0);
+    norflash_spi_write_byte(0x9F);                        /* JEDEC ID 读命令 */
+    for (int i = 0; i < 3; i++) {
+        id[i] = norflash_spi_read_byte();
+    }
+    norflash_spi_cs(1);
+    norflash_mutex_exit();
+    cached = ((uint32_t)id[0] << 16) | ((uint32_t)id[1] << 8) | id[2];
+    return cached;                                        /* 容量 = 1 << id[2]: 0x16=4M 0x17=8M 0x18=16M */
+}
+
+/* 状态寄存器 SR1(0x05)+SR2(0x35): BP/CMP 保护位非 0 = 阵列(顶部)区域被写保护 */
+static uint32_t msc_flash_status(void)
+{
+    uint8_t sr[2] = {0, 0};
+    norflash_mutex_enter();
+    norflash_wait_busy();
+    norflash_spi_cs(0);
+    norflash_spi_write_byte(0x05);
+    sr[0] = norflash_spi_read_byte();
+    norflash_spi_cs(1);
+    norflash_wait_busy();
+    norflash_spi_cs(0);
+    norflash_spi_write_byte(0x35);
+    sr[1] = norflash_spi_read_byte();
+    norflash_spi_cs(1);
+    norflash_mutex_exit();
+    return ((uint32_t)sr[1] << 8) | sr[0];
+}
 
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 /* ---- 屏显状态(无串口时的诊断通道): 关键节点刷纯色, 彩条任务见 hold 让出屏 ----
@@ -577,6 +628,12 @@ static void msc_ota_do_upgrade(void)
     printf("[msc-ota] file settled, size %u, flashing...\n", (unsigned)msc_ota.file_size);
     msc_ota_stat_printf("stage=flashing size=%u", (unsigned)msc_ota.file_size);
 
+    /* 诊断: 升级前的 boot info(fw_fail 时随失败行一并写入 OTASTAT, 全 0=flash 引导信息异常) */
+    struct msc_boot_info bi = {0, 0, 0};
+    int bret = get_current_boot_info(&bi);
+    printf("[msc-ota] boot info ret=%d ver=%u base=0x%08x len=0x%08x\n",
+           bret, bi.version, bi.base_addr, bi.code_len);
+
     void *fd = net_fopen(CONFIG_UPGRADE_OTA_FILE_NAME, "w");
     if (!fd) {
         printf("[msc-ota] net_fopen fail\n");
@@ -593,15 +650,50 @@ static void msc_ota_do_upgrade(void)
         net_fclose(fd, 1);
         goto out;
     }
+    uint8_t flushed = 0;                       /* 已成功落盘过(ctx 已建立, 可查目标地址/回读) */
     for (uint32_t i = 0; i < total_sec; i++) {
         uint8_t *sec = &msc_ram_disk[(msc_ota.first_sector + i) * 512U];
         uint32_t n = (i == total_sec - 1U) ?
                      (msc_ota.file_size - (total_sec - 1U) * 512U) : 512U;
-        if (net_fwrite(fd, sec, (int)n, 0) != (int)n) {
-            printf("[msc-ota] net_fwrite fail @%u\n", (unsigned)i);
-            msc_ota_stat_printf("stage=fw_fail sector=%u", (unsigned)i);
+        int wret = net_fwrite(fd, sec, (int)n, 0);
+        if (wret != (int)n) {
+            printf("[msc-ota] net_fwrite fail @%u ret=%d\n", (unsigned)i, wret);
+            /* tgt=升级目标地址(写入运行bank=布局错; 备份bank才对)
+             * rb=回读校验: -1=未到落盘, -2=读失败, 0=与源一致, 1=不一致 */
+            uint32_t tgt = 0;
+            int rb = -1, rbo = -1;
+            unsigned rbf = 0, rbs = 0;
+            if (flushed) {
+                tgt = get_target_udate_addr();
+                uint8_t rbbuf[64];
+                const uint8_t *src = &msc_ram_disk[msc_ota.first_sector * 512U];
+                uint32_t rn = dual_bank_update_read_data(0, rbbuf, 64);
+                if (rn != 64) {
+                    rb = -2;                          /* 回读失败 */
+                } else {
+                    rb = 0;                           /* 逐字节找首个差异 */
+                    for (int k = 0; k < 64; k++) {
+                        if (rbbuf[k] != src[k]) {
+                            rb = 1;
+                            rbo = k;
+                            rbf = rbbuf[k];
+                            rbs = src[k];
+                            break;
+                        }
+                    }
+                }
+            }
+            printf("[msc-ota] tgt=0x%08x rb=%d@%d f=%02x s=%02x jedec=%06x sr=%04x\n",
+                   tgt, rb, rbo, rbf, rbs, (unsigned)msc_flash_jedec(),
+                   (unsigned)msc_flash_status());
+            msc_ota_stat_printf("stage=fw_fail sector=%u ret=%d tgt=%08x rb=%d@%d f=%02x s=%02x jedec=%06x sr=%04x",
+                                (unsigned)i, wret, tgt, rb, rbo, rbf, rbs,
+                                (unsigned)msc_flash_jedec(), (unsigned)msc_flash_status());
             net_fclose(fd, 1);
             goto out;
+        }
+        if (((i + 1U) * 512U) % 4096U == 0U) {
+            flushed = 1;                    /* 满 4K 落盘成功, update ctx 必已建立 */
         }
         wdt_clear();
         /* CRC 覆盖 [32B 头之后, 文件尾), 与原厂 ram_disk_update 一致 */
@@ -662,7 +754,10 @@ static void msc_ota_watch_task(void *arg)
         quiet_ms = 0;
         printf("[msc-ota] quiet after %u writes, scanning root dir\n",
                (unsigned)msc_ota.write_seq);
-        msc_ota_stat_printf("seq=%u quiet_scan", (unsigned)msc_ota.write_seq);
+        msc_ota_stat_printf("seq=%u quiet_scan jedec=%06x cap=%uK sr=%04x",
+                            (unsigned)msc_ota.write_seq, (unsigned)msc_flash_jedec(),
+                            (unsigned)(1u << (msc_flash_jedec() & 0xFF)) / 1024u,
+                            (unsigned)msc_flash_status());
 
         /* 盘被写过且已静默: 扫 FAT 根目录找升级文件(任务上下文) */
         uint32_t first_sector, size;

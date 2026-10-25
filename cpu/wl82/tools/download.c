@@ -226,6 +226,13 @@ fw_add.exe -noenc -fw jl_isd.fw -add script.ver -out jl_isd.fw
 ufw_maker.exe -fw_to_ufw jl_isd.fw
 copy jl_isd.ufw update.ufw
 
+@REM db_update_files_data.bin (-update_files normal output, plaintext update_data head)
+@REM is the dual-bank OTA/virtual-udisk upgrade file. Copy as update-ota.ufw to drag in.
+@REM DO NOT use db_update_data.bin: encrypted head fails device-side head check.
+#if CONFIG_DOUBLE_BANK_ENABLE
+if exist db_update_files_data.bin copy /Y db_update_files_data.bin update-ota.ufw
+#endif
+
 
 @REM 生成配置文件升级文件
 rem ufw_maker.exe -chip AC630N %ADD_KEY% -output config.ufw -res bt_cfg.cfg

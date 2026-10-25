@@ -18,10 +18,12 @@
 关键判断:
 - 虚拟U盘升级**只能走双备份**(flash 内 app 区双份, 应用态直接写备用 bank);
   单备份需复位进 uboot 从真实介质重读, RAM 盘不满足。
-- 升级文件 = `update-ota.ufw` = isd_download 产出的 `db_update_data.bin`
-  (本版工具链文件名, 原厂文档叫 db_update_files_data.bin), 文件头为加密
-  JL_FILE_HEAD(32B), 设备端 jl_file_head_valid_check 解密校验后 szFileName
-  == "update_data"。
+- 升级文件 = `update-ota.ufw` = isd_download 带 `-update_files normal` 产出的
+  `db_update_files_data.bin`(745000B: update_data 头 32B + app_core 头 32B + 载荷)。
+  头为**明文** JL_FILE_HEAD, 设备端 jl_file_head_valid_check 校验
+  (反汇编实锤: 无解密, 仅 CRC16-XMODEM(head[2..31]) == u16@head[0])后 szFileName
+  == "update_data"。同目录 `db_update_data.bin` 头是密文, 过不了该校验, 不能用
+  (2026-10-25 实测 head_ret=-1 即拖了该文件复制出的 update-ota.ufw)。
 - jl_isd.ufw(整烧镜像, ~1MB)与升级文件(仅 OTA 载荷, ~703KB)是**两个不同的文件**,
   拖错文件不会误触发(头校验不过)。
 
@@ -57,9 +59,9 @@ msc_ota_watch_task(500ms 轮询, msc_only_init 时启动):
 | app/include/app_config.h | `CONFIG_DOUBLE_BANK_ENABLE 1` + `TCFG_VIR_UPDATE_ENABLE`(升级总开关) |
 | driver/update/net_update.c | 新增: 原厂 net_update.c 移植(差异: storage_device_ready 恒 0 桩 + 编译门) |
 | app/cdc_acm_msc_app.c | 升级模块: msc_update_on_write 钩子 + msc_ota_watch_task + FAT16 几何常量提取 |
-| app/app_main.c | 启用 usb_mode_task(此前被注释, USB 设备模式从未启动——LTO 把升级模块一并裁掉, app.bin 无 [msc-ota] 串即此因) |
+| app/app_main.c | 启用 usb_mode_task(此前被注释, USB 设备模式从未启动——LTO 把升级模块一并裁掉, app.bin 无 [msc-ota] 串即此因); task_info_table 补 `dw_update` 条目(update.a 按名创建升级任务, 缺失→task_create 返 -14→首包 fw_fail, 2026-10-25 实锤) |
 | app/board/wl82/Makefile | 编入 net_update.c |
-| cpu/wl82/tools/download.bat | `db_update_data.bin → update-ota.ufw` 自动复制 |
+| cpu/wl82/tools/download.c | `db_update_files_data.bin → update-ota.ufw` 自动复制(源头; download.bat 每次构建由它重新生成, 勿直接改 bat; 注释须纯 ASCII——fixbat.exe 会吞含 UTF-8 中文的行) |
 
 ## 3. flash 布局变化(重要)
 
@@ -92,5 +94,6 @@ tools/update-ota.ufw, 不要用 jl_isd.ufw。
 - [ ] 拖入 jl_isd.ufw(整烧镜像): 应静默拒绝(头校验不过, 无升级动作)
 - [ ] 升级期间 USB 主机读盘行为(复位瞬间 Windows 可能弹"设备拔出", 属预期)
 - [ ] 版本号递增: isd_config_rule.c 的 BR22_TWS_VERSION 按原厂 note.txt 规则
-      升级固件版本时应 +1(当前 0, 未启用版本防回滚, 暂不影响)
+      升级固件版本时应 +1(2026-10-25 已置 1, 板上固件为 0; 若升级仍被拒,
+      优先核对 CDC 串口在 fw_fail 前打印的 init/allow_check 日志)
 - [ ] RAM 盘内容掉电即失: 每次插拔 U 盘都是空盘, 属设计内

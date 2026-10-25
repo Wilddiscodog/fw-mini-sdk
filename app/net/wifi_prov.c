@@ -47,6 +47,11 @@ extern int jl_file_head_valid_check(void *head);             /* update.a(任务�
 extern uint16_t calc_crc16_with_init_val(uint16_t init_crc, uint8_t *ptr, uint16_t len);
 extern int init_net_device_mac_addr(char *macaddr, char ap_mode);
 extern void wifi_set_lan_setting_info(void);                 /* bt_wifi_app.c(AP IP/DHCP池) */
+/* 升级诊断(update.a): boot_info 状态 / 升级目标地址 / 升级区回读 */
+struct upl_boot_info { u32 code_len; u32 base; u16 ver; };
+extern int get_current_boot_info(void *info);
+extern u32 get_target_udate_addr(void);
+extern u32 dual_bank_update_read_data(u32 offset, u8 *read_buf, u32 read_len);
 
 /* ---- 状态(事件回调置位, 任务轮询) ---- */
 static volatile u8 prov_dhcp_ok;         /* STA: DHCP 成功 */
@@ -296,7 +301,7 @@ static struct {
 
 static const char *upload_finish_page(const char *msg)
 {
-    static char page[256];
+    static char page[640];
     snprintf(page, sizeof(page),
         "<html><meta charset=utf-8><body>%s <a href=/>返回</a></body></html>", msg);
     return page;
@@ -334,10 +339,15 @@ static void http_handle_upload(int conn, const char *boundary,
     u8 window[512];
     int wlen = 0;
     int keep = strlen(boundary) + 8;
-    u8 head32[32];
+    u8 head64[64];                        /* 前 64B = 外层 update_data 头 + 内层 app_core 头 */
     int head_got = 0;
     int done = 0;
     u8 recvbuf[1024];
+    struct upl_boot_info bi = {0, 0, 0};
+    int biret = get_current_boot_info(&bi);
+    int ctx_ok = 0;                       /* 已过首次 4K 落盘(update ctx 有效) */
+    printf("[ota-http] boot info ret=%d ver=%u base=0x%08x len=0x%08x\n",
+           biret, bi.ver, bi.base, bi.code_len);
 
     while (!done) {
         while (wlen < keep) {            /* 窗口不足: 补数据 */
@@ -365,13 +375,13 @@ static void http_handle_upload(int conn, const char *boundary,
 
         int emit = wlen - keep;          /* 窗口中确定不属于结束边界的部分 */
         if (emit > 0) {
-            /* 文件头 32B: 校验(一次) */
-            if (head_got < 32) {
-                int t = (32 - head_got) < emit ? (32 - head_got) : emit;
-                memcpy(head32 + head_got, window, t);
+            /* 文件前 64B: 外层头(32B,校验一次) + 内层 app_core 头(诊断) */
+            if (head_got < 64) {
+                int t = (64 - head_got) < emit ? (64 - head_got) : emit;
+                memcpy(head64 + head_got, window, t);
                 head_got += t;
-                if (head_got == 32) {
-                    upl.head_ok = (jl_file_head_valid_check(head32) == 0);
+                if (head_got >= 32 && !upl.head_ok) {
+                    upl.head_ok = (jl_file_head_valid_check(head64) == 0);
                     if (!upl.head_ok) {
                         upload_fail_head:
                         net_fclose(upl.fd, 1);
@@ -380,11 +390,16 @@ static void http_handle_upload(int conn, const char *boundary,
                                   upload_finish_page("升级文件头校验失败, 请上传 update-ota.ufw。"));
                         return;
                     }
-                    JL_FILE_HEAD_PLAIN *h = (JL_FILE_HEAD_PLAIN *)head32;
+                    JL_FILE_HEAD_PLAIN *h = (JL_FILE_HEAD_PLAIN *)head64;
                     upl.data_crc = h->data_crc;
                     upl.file_size = h->length;
                     printf("[ota-http] head ok: len %u crc %04x\n",
                            upl.file_size, upl.data_crc);
+                }
+                if (head_got == 64) {
+                    JL_FILE_HEAD_PLAIN *h2 = (JL_FILE_HEAD_PLAIN *)(head64 + 32);
+                    printf("[ota-http] inner head: %.16s len %u addr 0x%x\n",
+                           h2->name, h2->length, h2->addr);
                 }
             }
             /* 投喂(文件流含 32B 头), CRC 跳过头 32B, 超出声明长度的丢弃 */
@@ -394,15 +409,40 @@ static void http_handle_upload(int conn, const char *boundary,
                 done = 1;                /* 文件收满, 剩余全是尾边界 */
             } else {
                 int feed = emit < (int)want ? emit : (int)want;
-                if (net_fwrite(upl.fd, (u8 *)window, feed, 0) != feed) {
-                    printf("[ota-http] net_fwrite fail\n");
+                int wret = net_fwrite(upl.fd, (u8 *)window, feed, 0);
+                if (wret != feed) {
+                    /* 详细诊断页: 偏移/返回码/目标地址/回读/boot/双层头 */
+                    u32 tgt = 0;
+                    int rb = -1;
+                    if (ctx_ok) {
+                        tgt = get_target_udate_addr();
+                        u8 rbbuf[64];
+                        u32 rn = dual_bank_update_read_data(0, rbbuf, 64);
+                        rb = (rn != 64) ? -2 : memcmp(rbbuf, head64, 64);
+                    }
+                    char n1[17], n2[17], diag[420];
+                    memcpy(n1, head64 + 16, 16);  n1[16] = 0;
+                    memcpy(n2, head64 + 48, 16);  n2[16] = 0;
+                    JL_FILE_HEAD_PLAIN *h2 = (JL_FILE_HEAD_PLAIN *)(head64 + 32);
+                    snprintf(diag, sizeof(diag),
+                        "写入 flash 失败(offset=%u ret=%d)<br>"
+                        "tgt=%08x rb=%d (rb:0=首4K已落盘 1=未写入 -1=未到落盘 -2=读失败)<br>"
+                        "boot: ret=%d ver=%u base=%08x len=%08x<br>"
+                        "heads: [%s len=%u] [%s len=%u addr=%u]",
+                        upl.recv_total, wret, tgt, rb,
+                        biret, bi.ver, bi.base, bi.code_len,
+                        n1, upl.file_size, n2, h2->length, h2->addr);
+                    printf("[ota-http] net_fwrite fail @%u ret=%d tgt=0x%x rb=%d\n",
+                           upl.recv_total, wret, tgt, rb);
                     net_fclose(upl.fd, 1);
                     upl.fd = NULL;
-                    http_send(conn, HTML_HDR_200,
-                              upload_finish_page("写入 flash 失败。"));
+                    http_send(conn, HTML_HDR_200, upload_finish_page(diag));
                     return;
                 }
                 upl.recv_total += feed;
+                if (upl.recv_total >= 4096) {
+                    ctx_ok = 1;         /* 首 4K 已成功过, update ctx 有效 */
+                }
                 /* CRC: 跳过文件头 32B */
                 int cs = 0;
                 while (feed > cs && upl.crc_skip) {
@@ -432,10 +472,14 @@ static void http_handle_upload(int conn, const char *boundary,
            upl.calc_crc, upl.data_crc);
     if (done != 1 || !upl.head_ok || upl.recv_total != upl.file_size ||
         upl.calc_crc != upl.data_crc) {
+        char diag[160];
+        snprintf(diag, sizeof(diag),
+                 "CRC 校验失败: done=%d recv=%u/%u crc=%04x/%04x, 请重试。",
+                 done, (unsigned)upl.recv_total, (unsigned)upl.file_size,
+                 upl.calc_crc, upl.data_crc);
         net_fclose(upl.fd, 1);           /* 不烧写不复位 */
         upl.fd = NULL;
-        http_send(conn, HTML_HDR_200,
-                  upload_finish_page("CRC 校验失败(文件不完整或损坏), 请重试。"));
+        http_send(conn, HTML_HDR_200, upload_finish_page(diag));
         return;
     }
 

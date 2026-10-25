@@ -79,6 +79,8 @@ const struct task_info task_info_table[] = {
     {"RtmpMlmeTask",        17,     700,    0   },
     {"RtmpCmdQTask",        17,     300,    0   },
     {"wl_rx_irq_thread",     5,     256,    0   },
+    /* 双备份升级任务(update.a 按名 task_create; 缺失→返回-14→U盘/WiFi 升级首包 fw_fail) */
+    {"dw_update",           10,     1024,   64  },
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
     /* 音频库任务(demo_DevKitBoard 同款参数, audio_server 库按名字 task_create):
      * audio_server=服务主任务, audio_mix=叠音, audio_decoder/audio_encoder=解码/编码 */
@@ -99,9 +101,9 @@ static void led_task(void *p)
     gpio_direction_output(IO_PORTA_06, 1);
     while (1) {
         gpio_direction_output(IO_PORTA_06, 0);
-        os_time_dly(50);
+        os_time_dly(10);
         gpio_direction_output(IO_PORTA_06, 1);
-        os_time_dly(50);
+        os_time_dly(10);
     }
 }
 
@@ -395,7 +397,7 @@ void app_main()
     printf("[clk] sys=%dMHz sdram=%dMHz hsb=%dMHz\r\n",
            clk_get("sys") / 1000000, clk_get("sdram") / 1000000, clk_get("hsb") / 1000000);
 
-    // os_task_create(led_task,         NULL, 10, 512,  0, "led_task");
+    os_task_create(led_task,         NULL, 10, 512,  0, "led_task");
     // os_task_create(clock_task,       NULL,  9, 512,  0, "clock_task");
     os_task_create(uart1_echo_task,  NULL,  8, 1024, 0, "uart1_echo");
     /* WiFi/蓝牙外设(原厂栈移植): 蓝牙开机自启, 与 USB 角色无关。

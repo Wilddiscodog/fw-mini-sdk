@@ -43,8 +43,10 @@
  * 前提(重要):
  *   - 双备份改变 flash 布局(app 区双份), 切换后必须整体烧录一次 jl_isd.ufw,
  *     之后的版本才能走虚拟U盘升级
- *   - 升级文件由 isd_download 产出: cpu/wl82/tools/db_update_data.bin,
- *     download.bat 自动改名复制为 update-ota.ufw
+ *   - 升级文件由 isd_download 产出: download.bat 带 -update_files normal 时生成
+ *     cpu/wl82/tools/db_update_files_data.bin(明文 JL_FILE_HEAD, name=update_data),
+ *     自动改名复制为 update-ota.ufw。注意: 同目录的 db_update_data.bin 是密文头,
+ *     设备端 jl_file_head_valid_check(纯 CRC16-XMODEM, 不解密)校验不过, 不能用
  * 实现: driver/update/update.c + net_update.c(原厂 net_update.c 移植) +
  *       liba/update.a(双备份烧写) + cdc_acm_msc_app.c(检测/触发) */
 #define CONFIG_DOUBLE_BANK_ENABLE  1   /* 0=单备份(不支持虚拟U盘升级) */
@@ -67,13 +69,12 @@
 
 #define CONFIG_DEBUG_ENABLE
 /* 日志镜像到 USB CDC 口(组合设备的串口, 打开串口即实时输出; UART0 仍保留)。
- * ⚠ USB 枚举异常排查期(V0.9.x)暂时关闭: 关闭后 putbyte 不再被覆盖,
- * 日志完全走原厂 lib→UART0 路径。重开需同时 MINI_USB_CDC_ENABLE=1。 */
-/* #define CONFIG_USB_DEBUG_ENABLE */
+ * V0.9.x USB 枚举排查期曾关闭(putbyte 不覆盖), 枚举已稳定, 2026-10-25 重开。 */
+#define CONFIG_USB_DEBUG_ENABLE
 
 /* USB 设备形态开关: 1=CDC(日志)+MSC 组合设备; 0=MSC-only(EP1, V0.8 验证配置)。
  * ⚠ 同上排查期暂时 0。CDC 代码在 cdc_acm_msc_app.c 内保留, 宏开即回。 */
-#define MINI_USB_CDC_ENABLE    0
+#define MINI_USB_CDC_ENABLE    1
 
 /* ================ 内置音频(MIC 录音 + DAC 播放, MINI_AUDIO_SUPPORT) =================
  * Makefile 注入 -DMINI_AUDIO_SUPPORT=$(var), 默认 0(不编译不入链接)。

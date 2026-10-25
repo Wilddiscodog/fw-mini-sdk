@@ -56,7 +56,7 @@
 [EXTRA_CFG_PARAM]
 #if CONFIG_DOUBLE_BANK_ENABLE
 BR22_TWS_DB=YES;
-BR22_TWS_VERSION=0;
+BR22_TWS_VERSION=1;/*防回滚版本号: 每次出升级包必须+1(note.txt); 板上烧的是0*/
 DB_UPDATE_DATA=YES;
 #else
 NEW_FLASH_FS=YES; [单备份模式]//单备份
