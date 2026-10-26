@@ -1,6 +1,6 @@
 # OTA 升级 "app head key verify fail" 问题记录
 
-> 日期: 2026-10-25 · 状态: **根因已定位, 修复被打包工具链 bug 阻塞(见 §4), 待解决**
+> 日期: 2026-10-25 · 状态: **已修复(2026-10-26)** — 根因确认 + 绕开 fixbat 吞行
 > 关联: doc/U盘自动升级移植记录.md · 提交 a61a2f8 / 59c0b17 之后的未竟工作
 
 ## 1. 现象与排查过程(时间线)
@@ -60,41 +60,44 @@ s  = ((s << 1) & 0xEFDE) | fb | (((s>>11)^fb)&1)<<12 | (((s>>4)^fb)&1)<<5
 - CDC 日志镜像(CONFIG_USB_DEBUG_ENABLE): update.a 内部 `[UPDATE]` 标签日志实时可见
   (依赖 EP_NUM=6 修复; 流控三处修复保证不丢行)
 
-## 4. ⚠️ 阻塞项: fixbat.exe 吞行 bug(待解决)
+## 4. 阻塞项与修复(2026-10-26)
+
+### 4.1 fixbat.exe 吞行(已定位)
 
 `tools/utils/fixbat.exe`(闭源)在 pre_build 里对 cpp 生成的 download.bat 做行尾处理,
 **会确定性吞掉 download.c 模板中新增的行**:
 
-- 实测两次: 加在 `REM set KEY_FILE...mkey` 之后、加在 `set CFG_FILE=cfg` 之后, 均被吞
-  (含纯 ASCII 行; 早期含中文的行同样被吞)
-- 直接对 cpp 原始输出手跑 fixbat 却不吞(同样输入!) —— 差异疑似与 make 管线中 bat 的
-  多次累积转换有关: bat 行尾已劣化为 `\r\r\r\r\r\r\n`(每次 make 增加一个 \r),
-  cpp 输入行尾为 `\n`
-- 结果: `set KEY_FILE=-key 0x7DF1.key` 进不了 download.bat, 打包产物仍是 0xFFFF 形态
+- 实测: 加在 `REM set KEY_FILE...mkey` 之后、加在 `set CFG_FILE=cfg` 之后, 均被吞
+- 直接对 cpp 原始输出手跑 fixbat 却不吞 —— 差异与 make 管线中 bat 的多次累积转换有关:
+  bat 行尾已劣化为 `\r\r\r\r\r\r\n`(每次 make 增加一个 `\r`), cpp 输入行尾为 `\n`
+- 结果: 新增的 `set KEY_FILE=-key 0x7DF1.key` 进不了 download.bat, `%KEY_FILE%` 为空,
+  打包产物仍是 0xFFFF 形态 → `app head key verify fail`
 
-### 待尝试的解决路径(按优先级)
+### 4.2 已落地修复
 
-1. **绕开 download.bat**: 把 key 参数写进 isd_config.ini(isd_config_rule.c 直接生成,
-   无 fixbat 环节) —— 需查 isd_download 是否支持 ini 内 KEY 字段
-2. 手动复现 make 管线(cpp → bat → fixbat, 用 make 同款相对路径)逐字节对比, 找出吞行
-   的确切触发条件后规避(如改变行内容/位置/行尾)
-3. pre_build 后置一步: 用 powershell/python 在 fixbat 之后把 KEY 行补写进 bat
-   (改 Makefile pre_build, 加一条 `python fix_key.py` 类命令)
-4. 最粗暴: 不改模板, 每次构建后手工执行
-   `isd_download ... -key 0x7DF1.key -update_files normal` 重打升级包(脚本化)
+1. **`download.c`**: 把芯片 KEY 写到**原本就存在的** `REM set KEY_FILE=-key JL_791N-XXXX.key`
+   那一行位置(改 REM → 生效 set), 避免「新增行被吞」
+2. **`tools/ensure_download_key.ps1` + Makefile `pre_build`**: fixbat 之后强制:
+   - 折叠多重 `\r` 并规范为 CRLF(切断累积劣化)
+   - 若仍无 `set KEY_FILE=-key 0x7DF1.key` 则注入
+3. key 文件: `cpu/wl82/tools/0x7DF1.key`(已在仓库; `flash_msc.bat` 等早已使用同款)
 
-### 修复后的验证清单
+重新 `make` / `make.bat` 后检查 `cpu/wl82/tools/download.bat` 应含:
+`set KEY_FILE=-key 0x7DF1.key`, 且 isd_download 命令行展开后带 `-key 0x7DF1.key`。
 
-- [ ] `update-ota.ufw` 载荷首 32B 用 0x7DF1 解码 = `app_area_head`(离线脚本已具备)
-- [ ] 内层 app_core 头 dataCrc == CRC16(载荷) (设备端已改为按此约定校验)
+### 4.3 验证清单
+
+- [ ] `download.bat` 含 `set KEY_FILE=-key 0x7DF1.key`(pre_build 后)
+- [ ] `update-ota.ufw` 载荷首 32B 用 0x7DF1 解码 = `app_area_head`
+- [ ] 内层 app_core 头 dataCrc == CRC16(载荷)
 - [ ] 拖入后串口: `Match app_core file` → 无 `app head key verify fail` → 写入推进过 sector 16
-- [ ] `crc ok, burn boot info` → 2s 复位 → 新 bank 启动(注意: 板上 flash 现为无 KEY 时代
-      镜像, 新 bank 为 KEY 形态, 若启动解码不兼容会回退旧 bank, 需观察)
-- [ ] 全链路通后: 烧录器重刷一次带 -key 的 jl_isd.ufw, 让 flash 布局与升级包形态一致
+- [ ] `crc ok, burn boot info` → 2s 复位 → 新 bank 启动
+- [ ] 全链路通后: 烧录器重刷一次带 `-key` 的 `jl_isd.ufw`, 让 flash 与升级包形态一致
+  (板上若仍是无 KEY 时代镜像, 新 bank 为 KEY 形态时启动解码需观察兼容性)
 
-## 5. 当前工作区未提交内容(本文档随本次提交)
+## 5. 相关改动
 
-- download.c: `set KEY_FILE=-key 0x7DF1.key`(已加, 待 fixbat 问题解决后生效)
-- cdc_acm_msc_app.c / wifi_prov.c: CRC 约定改为内层头 dataCrc vs 载荷[64:] —— **此修复
-  与 KEY 修复独立且必要**(否则 verify 过了也会死在 crc_err), 已验证与包内约定一致
-- 产物 bin/ufw: 仍为 0xFFFF 形态(KEY 未生效), 拖入无效, 勿再测试
+- `cpu/wl82/tools/download.c`: KEY 占用原 REM 行槽位
+- `tools/ensure_download_key.ps1` + `app/board/wl82/Makefile` pre_build 兜底
+- `cdc_acm_msc_app.c` / `wifi_prov.c`: CRC 约定改为内层头 dataCrc vs 载荷[64:]
+  (与 KEY 修复独立且必要, 否则 verify 过了也会死在 crc_err)

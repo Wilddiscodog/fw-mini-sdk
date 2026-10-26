@@ -125,9 +125,9 @@ const u8 *bt_get_mac_addr(void)
         } while (!bytecmp(mac_addr, 0, 6));
         //此处用户可自行修改为本地生成mac地址的算法
         mac_addr[0] &= ~((1 << 0) | (1 << 1));
-        /* mini-sdk: VM 首写暂缓(VM 池未联调, 首写疑似挂死源), 每次上电由 UID 重派生,
-         * 地址在两次上电间可能变化, 仅影响已配对设备回连 */
-        // syscfg_write(CFG_BT_MAC_ADDR, mac_addr, 6);
+        /* 写回 VM: 未写入时库内 get_bt_mac_addr 每次读 CFG_BT_MAC_ADDR 都报
+         * [SYSCFG]key_mac crc_err(WiFi 起 AP/切模式会反复触发)。VM 已验证可写。 */
+        syscfg_write(CFG_BT_MAC_ADDR, mac_addr, 6);
         return mac_addr;
     }
 }

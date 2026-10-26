@@ -19,6 +19,8 @@
 #include "event/net_event.h"
 #include "lwip.h"
 #include "wifi/wifi_connect.h"
+#include "system/includes.h"
+#include "syscfg/syscfg_id.h"            /* NETWORK_SSID_INFO_CNT */
 
 extern const u8 *bt_get_mac_addr(void);
 static char save_ssid_flag, request_connect_flag;
@@ -293,11 +295,12 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         break;
 
     case WIFI_EVENT_AP_START:
+        /* 关闭「连最优 SSID」自动重连, 但保留 store_ssid_cnt, 否则扫描列表/存配会异常 */
         wifi_set_sta_connect_best_ssid(0);
-        wifi_set_store_ssid_cnt(0);
-        printf("[wifi] AP active: STA reconnect policy disabled\n");
+        wifi_set_store_ssid_cnt(NETWORK_SSID_INFO_CNT);
+        wifi_rxfilter_cfg(1);            /* AP 默认不过滤, 扫描依赖广播 beacon */
+        printf("[wifi] AP active: best-ssid reconnect off, rxfilter=AP-open\n");
         printf("|network_user_callback->WIFI_EVENT_AP_START,CH=%d\n", wifi_get_channel());
-        //wifi_rxfilter_cfg(7);    //过滤广播+多播+not_my_bssid
 #ifdef USE_FTP_UPGRADE_DEMO
         extern void ftp_update_test(void);
         ftp_update_test();

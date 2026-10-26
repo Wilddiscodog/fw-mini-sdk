@@ -158,14 +158,12 @@ set AUDIO_RES=audlogo
 #endif
 #endif
 
-REM set KEY_FILE=-key JL_791N-XXXX.key
+REM Chip KEY must ride an EXISTING template line: fixbat drops newly-added
+REM lines when download.bat already has accumulated multi-CR endings.
+set KEY_FILE=-key 0x7DF1.key
 REM set KEY_FILE=-key1 JL_791N-XXXX.key1 -mkey JL_791N-XXXX.mkey
 
 set CFG_FILE=cfg
-
-@REM chip key: without it the update file heads use default seed 0xFFFF and the
-@REM device-side head verify (chip key) rejects the file at first 4K flush.
-set KEY_FILE=-key 0x7DF1.key
 
 REM  添加新参数-update_files说明
 REM  1/normal就是普通的文件目录结构

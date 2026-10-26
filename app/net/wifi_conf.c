@@ -51,7 +51,9 @@ const char wifi_temperature_drift_trim_on = 0; //WiFi温度漂移校准开关,0�
 const char wifi_temperature_drift_trim_on = 1; //WiFi温度漂移校准开关,0为关闭，1为打开
 #endif
 
-const char wifi_ap_scan_support = 0; //ap扫描开关，0为关闭，1为开启
+/* AP 模式网页配网必须开启: 为 0 时 wifi_scan_req 虽返回 0, 但不会真正扫信道,
+ * 也不会上报 WIFI_EVENT_STA_SCAN_COMPLETED, 结果恒为 0(2026-10-26 实锤) */
+const char wifi_ap_scan_support = 1; //ap扫描开关，0为关闭，1为开启
 
 #if defined CONFIG_NO_SDRAM_ENABLE
 const u16 MAX_PACKETS_IN_QUEUE = 16; //配置WiFi驱动最大发送数据包队列

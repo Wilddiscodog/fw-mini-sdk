@@ -432,6 +432,8 @@ pre_build:
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../cpu/wl82/sdk_ld.c -o ../../../cpu/wl82/sdk.ld
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../cpu/wl82/tools/download.c -o $(POST_SCRIPT)
 	$(QUITE) $(FIXBAT) $(POST_SCRIPT)
+	# fixbat may drop new KEY lines + accumulate multi-CR; force -key 0x7DF1.key + normalize CRLF
+	$(QUITE) powershell -NoProfile -ExecutionPolicy Bypass -File ..\..\..\tools\ensure_download_key.ps1 $(POST_SCRIPT)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../cpu/wl82/tools/isd_config_rule.c -o ../../../cpu/wl82/tools/isd_config.ini
 
 clean:
