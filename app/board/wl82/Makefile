@@ -10,7 +10,7 @@
 #   MINI_LCD_SUPPORT=0  关闭 EMI 8080 并口 LCD(JD9853 + CST816 触摸, xiaolu-R2)
 #   ⚠ USB 排查期(V0.9.x)保持 0: 实测彩条真实刷 EMI 后 USB 不再枚举, 待隔离
 #   MINI_LVGL_SUPPORT=1 启用 LVGL(需 lvgl v8.2.0 源码 + tools/apply_lvgl_patch.bat)
-MINI_LCD_SUPPORT  ?= 0
+MINI_LCD_SUPPORT  ?= 1
 MINI_LVGL_SUPPORT ?= 0
 
 # ================= C++ 支持开关 =================
@@ -425,6 +425,7 @@ all: pre_build $(OUT_ELF)
 	$(info +POST-BUILD)
 	$(QUITE) $(RUN_POST_SCRIPT) sdk
 
+# fixbat may drop new KEY lines + accumulate multi-CR; force -key 0x7DF1.key + normalize CRLF
 pre_build:
 	$(info +PRE-BUILD)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../cpu/wl82/sdk_used_list.c -o ../../../cpu/wl82/sdk_used_list.used
@@ -432,7 +433,6 @@ pre_build:
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../cpu/wl82/sdk_ld.c -o ../../../cpu/wl82/sdk.ld
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../cpu/wl82/tools/download.c -o $(POST_SCRIPT)
 	$(QUITE) $(FIXBAT) $(POST_SCRIPT)
-	# fixbat may drop new KEY lines + accumulate multi-CR; force -key 0x7DF1.key + normalize CRLF
 	$(QUITE) powershell -NoProfile -ExecutionPolicy Bypass -File ..\..\..\tools\ensure_download_key.ps1 $(POST_SCRIPT)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../cpu/wl82/tools/isd_config_rule.c -o ../../../cpu/wl82/tools/isd_config.ini
 

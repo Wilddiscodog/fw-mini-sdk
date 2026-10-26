@@ -1,12 +1,15 @@
 # fw-mini-sdk（AC7912BB / WL82 精简 SDK）
 
-当前版本: **V0.2.0**（`app/include/fw_version.h`，启动横幅与 usb-irq 探针均打印）
-- USB **从机 CDC**（CherryUSB，高速口）枚举与收发验证通过（Windows10+ 免驱）
-- USB **主机 MSC**（CherryUSB，U盘）已移植，首版以全速主机运行（`CONFIG_USBH_JL82_FORCE_FS=1`）
-- **LCD 8 位 8080 并口（EMI）+ LVGL 8.2.0** 移植完成（ ili9341 参考驱动，彩条自检/LVGL 可选）
+当前版本: **V1.1.6**（`app/include/fw_version.h`，启动横幅打印）
+- USB **组合设备**（CherryUSB，高速口）：CDC 日志串口 + MSC 4MB 虚拟U盘
+  （VID=0xFFFF/PID=0x0003，Win10+/Linux 免驱）；拖入 `.UFW` 静默 3s 自动校验烧写复位
+- USB **主机 MSC**（CherryUSB，U盘）可用，全速主机（`CONFIG_USBH_JL82_FORCE_FS=1`），插盘跑 1MB 读写基准
+- **LCD 240×320 JD9853（EMI 8 位并口）+ CST816 触摸** 默认开启（彩条自检，LVGL 可选）
+- **蓝牙 + WiFi**（原厂协议栈）：BT 开机自启；WiFi 按键2 触发，AP 配网 + 网页固件升级
+- **内置音频**可选（MIC+DAC 回环自检 + AEC 回采，`MINI_AUDIO_SUPPORT` 默认关）
 
-从官方 AC79 AIoT SDK 精简而来的最小开发框架：**只保留外设驱动 + FreeRTOS + USB 从机栈**，
-不含蓝牙/WiFi/媒体/服务器等大模块。应用逻辑全部在 `app/` 下自定义。
+从官方 AC79 AIoT SDK 精简而来的开发框架：外设驱动 + FreeRTOS + CherryUSB，
+蓝牙/WiFi/OTA/音频按宏开关裁剪。应用逻辑全部在 `app/` 下自定义。
 
 ## 目录结构
 
@@ -59,17 +62,17 @@ C++ 开关说明：开启后自动加入全局构造调用（`cpp_run_init`）�
 
 | 功能 | 引脚 | 现象 |
 |---|---|---|
-| GPIO 输出 | PA6 | LED 每 500ms 翻转 |
-| 时钟控制 | - | 调试口每 2s 打印 sys/sdram/hsb/lsb 时钟树 |
+| LCD 彩条自检 | EMI 8位并口 + 背光 PA6 | 开机 8s（与 USB 枚举解耦）后 8 色彩条循环，JD9853 240×320，2s/色 |
+| USB 组合设备（默认） | USB D+/D- | CDC 日志串口 + MSC 4MB 虚拟U盘；拖入 `.UFW` 静默 3s 自动升级复位 |
+| USB 主机(MSC) | USB D+/D-（需 VBUS 5V 供电） | `MINI_USB_MODE_HOST` 时 U盘枚举，跑 1MB 读写基准并打印速率 |
 | UART 收发 | PB3=TX, PB4=RX @115200 | 发什么回什么（回显） |
-| SPI 主机 | PA1=CS PA2=DO PA3=CLK PA4=DI | 上电 5s 读 W25Qxx JEDEC ID 并打印 |
-| 软件 I2C | PH0=SCL, PH1=SDA ~100kHz | 每 10s 扫描总线并打印器件地址 |
-| PWM 输出 | PA5 @1kHz (TIMER2+输出通道2) | 呼吸灯（占空比 0↔100，约 5s 周期） |
-| ADC 采样 | PB1 | 每 2s 打印原始值与毫伏电压 |
-| 硬件定时器 | 内部 TIMER5 | 1Hz 中断，打印 1s tick |
-| USB 从机(CDC) | USB D+/D- | 默认关闭；`MINI_USB_MODE_DEVICE` 时高速口枚举为串口 |
-| USB 主机(MSC) | USB D+/D-（需 VBUS 5V 供电） | 默认；U盘插入枚举，打印容量并读 0 号扇区 |
-| 调试打印 | PB2 @1000000 | 日志输出 |
+| 硬件定时器 | 内部 TIMER5 | 1Hz 中断心跳 |
+| 蓝牙 | - | 开机自启（见 `app/bt_wifi_app.c`） |
+| WiFi 配网+网页升级 | 按键2 触发 | 读存储→STA 重试→失败转 AP，网页配网/上传固件（`app/net/wifi_prov.c`） |
+| 调试打印 | PB2 @1000000 | 日志输出（CDC 串口打开时镜像走 CDC 日志口） |
+
+> SPI(W25Qxx)/软件I2C扫描/PWM 呼吸灯/ADC 采样/时钟树打印等演示任务在 `app_main.c`
+> 中以注释保留（且 PA5/PA6 等脚与 LCD 复用），需要时取消对应 `os_task_create` 的注释。
 
 ## 二次开发要点
 
@@ -89,7 +92,7 @@ C++ 开关说明：开启后自动加入全局构造调用（`cpp_run_init`）�
 ## USB：CherryUSB 设备栈 + 主机栈（已替换杰理协议栈）
 
 `app_config.h` 的 `MINI_USB_MODE` 选择角色（**同一时刻只能一个**，共用管脚）：
-`MINI_USB_MODE_DEVICE`=CDC 从机 / `MINI_USB_MODE_HOST`=MSC 主机（默认）。
+`MINI_USB_MODE_DEVICE`=CDC+MSC 组合设备（默认，含虚拟U盘升级）/ `MINI_USB_MODE_HOST`=MSC 主机。
 
 ### 主机栈（usbh）移植要点
 
@@ -129,8 +132,10 @@ C++ 开关说明：开启后自动加入全局构造调用（`cpp_run_init`）�
      `usb_g_sie_init(1)` + `usb_iomode` + `usb_slave_init(1)`。
 - 配置头：`app/include/usb_config.h`（经 Makefile 的 `-include usb_config.h`
   注入 CherryUSB 源文件，**文件名必须是 usb_config.h**）。
-- CDC 应用：`app/cdc_acm_app.c`（VID=0xFFFF/PID=0x8888，端点 EP1 双向 bulk 512B +
-  EP2 IN 通知；Windows10+/Linux 免驱，显示为串口）。
+- 设备应用：`app/cdc_acm_msc_app.c`（组合设备 VID=0xFFFF/PID=0x0003；MSC 虚拟U盘 EP1，
+  CDC 日志 EP2 bulk + EP3 INT 通知；Windows10+/Linux 免驱）。CDC 日志输出接原厂
+  `debug_user.c` 的 `usb_log_task`；虚拟U盘升级看门（写盘静默 3s 扫根目录）见
+  `doc/U盘自动升级移植记录.md`。
 - board.c 不注册 otg 设备：共用管脚下 OTG 双口检测会误拆从机会话。
 - 诊断设施（当前固件仍保留，稳定后可移除）：`[usb-irq]` 中断探针（含 10 万次风暴
   熔断）与 `[ep0] setup#` 枚举跟踪，均在 `port/jl82/` 内。
@@ -147,29 +152,43 @@ C++ 开关说明：开启后自动加入全局构造调用（`cpp_run_init`）�
 | V0.1.0 | USB 主机栈（usbh_core/hub/msc + musb HC 移植 + FreeRTOS OSAL）接入，U盘 MSC 演示（FS 主机） |
 | V0.1.0 | `MINI_CXX_SUPPORT` 一键开关：C++ 运行时（全局构造/new-delete/STL）可切换，含冒烟自检 |
 | V0.2.0 | LCD 8位 8080 并口（EMI）+ 屏驱动框架移植（ili9341 彩条自检）；LVGL 8.2.0 适配层就绪（开关+获取脚本） |
+| V0.3.8 | 主机传输改轮询模式（EP0 完成中断不触发，轮询为可靠路径） |
+| V0.5.5 | USB 数据面 DMA 化 + 蓝牙栈移植 + ADC 按键框架 |
+| V0.6.x | BT/WiFi 移植系列：事件路由走原厂框架、WiFi 库任务补齐、全功能 wl_wifi.a |
+| V0.7.0 | xiaolu-R2 手表屏 JD9853(240×320) + CST816 触摸；V0.7.2 起 LCD 默认开启 |
+| V0.8.0 | MSC 虚拟U盘自动升级（双备份）：拖入 update-ota.ufw 静默 3s 自动烧写复位 |
+| V0.9.x | CDC(日志)+MSC 组合设备定型（EP1/EP2/EP3 重排）；EMI 刷屏干扰 USB 枚举隔离实验，LCD 暂关 |
+| V1.0.0 | WiFi 网页配网 + 网页固件升级（`app/net/wifi_prov.c`） |
+| V1.1.0 | 内置音频移植（MIC+DAC 回环 + AEC 回采），`MINI_AUDIO_SUPPORT` 默认关 |
+| V1.1.5 | 升级链路修复（流控/CRC 约定）；OTA 打包强制带芯片 KEY；AP 扫描配网页；BT MAC 写回 VM |
+| V1.1.6 | **重新启用 LCD**；调试日志瘦身：删除 OTASTAT.TXT 诊断机制、屏显状态色通道、[usbh-mon] 寄存器转储与扇区/加密头 hex 转储；修 Makefile recipe 内 `#` 注释行被 mingw32-make 当命令执行的构建错误 |
 
 USB 移植调试方法论备忘：ISR 内 PRE/POST 寄存器回读探针 + EP0 SETUP 跟踪打印 +
 风暴熔断，配合版本号，每轮日志都能把问题边界收窄一层。
 
 ## LCD（EMI 8080-8bit 并口）与 LVGL
 
-WL82 显示外设：**EMI**(8080 并口时序)/PAP/LCDC/IMD(硬件图层)。官方 8 位并口屏
-（ili9341 等）走 **EMI 接口**：`dev_open("emi")`(闭源库, 已链接) + 开源屏驱动
-`REGISTER_LCD_INTERFACE` 注册。移植文件在 `driver/lcd/`（框架+ili9341 参考驱动，
-来自官方 apps/common/ui 与 LVGL 补丁）。
+WL82 显示外设：**EMI**(8080 并口时序)/PAP/LCDC/IMD(硬件图层)。8 位并口屏走 **EMI 接口**：
+`dev_open("emi")`(闭源库, 已链接) + 开源屏驱动 `REGISTER_LCD_INTERFACE` 注册。
+移植文件在 `driver/lcd/`（框架 + jd9853 当前面板 + ili9341 参考驱动，来自官方
+apps/common/ui 与 LVGL 补丁；**只编一个面板驱动**——框架取第一个注册项，多面板会按
+链接顺序误选）。
 
 - 开关：`MINI_LCD_SUPPORT`（Makefile，默认 1）/ `MINI_LVGL_SUPPORT`（默认 0）
-- 板级：`board.c` 的 `emi_data`（时序）+ `ui_cfg_data`（RS/BL/TE 引脚）——按硬件调整
-- 上电现象：`lcd_test_task` 跑 8 色彩条循环（240x320 ili9341）
+- 板级：`board.c` 的 `emi_data`（时序）+ `ui_cfg_data`（RST/RS/BL/TE 引脚）——按硬件调整
+- 上电现象：`lcd_test_task` 延迟 8s（EMI 高频刷屏历史上会干扰 USB 枚举，此为时序解耦）
+  后跑 8 色彩条循环（240×320 JD9853，2s/色）
+- 触摸 CST816（IIC，INT=PH3/RST=PH4）已入编译；TE 撕裂同步仍为桩（`lcd_te_stub.c`），
+  需要时从官方 `apps/common/ui/lcd_driver/te_driver/` 补齐。
 - LVGL 启用三步：
   1. `git clone --branch v8.2.0 --depth 1 https://github.com/lvgl/lvgl.git third\lvgl\lvgl`
-  2. `toolspply_lvgl_patch.bat`（覆盖杰理适配文件 + 放置 lv_conf.h）
+  2. `tools\apply_lvgl_patch.bat`（覆盖杰理适配文件 + 放置 lv_conf.h）
   3. `make clean && make MINI_LVGL_SUPPORT=1`（LCD 任务自动切到 LVGL 主循环）
-- TE 撕裂同步与触摸（ft6236/gt911）暂未移植（桩实现），需要时从官方
-  `apps/common/ui/lcd_driver/te_driver/`、`touch_panel/` 补齐。
 
 ## 与官方 SDK 的关系
 
 - 闭源库、头文件、链接/烧录工具均原样复制自官方 `AC79NN_SDK_V1.1.9_2023-08-01`；
 - 官方 SDK 保持在 `D:\fw-AC79_AIoT_SDK` 不动，日后升级可对比替换 `cpu/wl82/liba` + `include_lib`；
-- 源码级差异：去掉了 C++ 运行时、蓝牙/WiFi/媒体全部模块、OTG 自动检测注册。
+- 源码级差异：C++ 运行时/蓝牙/WiFi/音频按宏开关裁剪（`MINI_CXX_SUPPORT`/
+  `MINI_AUDIO_SUPPORT` 等，BT/WiFi 默认随官方栈链接）；不注册 OTG 自动检测
+  （双控制器共用管脚，OTG 双口检测会误拆从机会话）。

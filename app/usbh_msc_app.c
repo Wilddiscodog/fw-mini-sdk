@@ -1,7 +1,7 @@
 /*
  * CherryUSB Host MSC 演示 —— U盘读写 (JL WL82 HUSB)
  *
- * 行为：U盘插入 → 枚举 → MSC 类连接 → 打印容量 → 读 0 号扇区打印
+ * 行为：U盘插入 → 枚举 → MSC 类连接 → 打印容量 → 1MB 读写基准测试
  * 依赖：usbh_core(内部创建 usbh 线程) + usbh_hub + usbh_msc + HC 移植层
  */
 #include "usbh_core.h"
@@ -24,7 +24,6 @@ extern unsigned int os_time_get(void);
 #include <stdio.h>
 #include <string.h>
 
-USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t sector_buf[512];
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_msc_bench_src[MSC_BENCH_CHUNK_SIZE];
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_msc_bench_dst[MSC_BENCH_CHUNK_SIZE];
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX FATFS g_msc_fatfs;
@@ -243,30 +242,17 @@ void usbh_msc_run(struct usbh_msc *msc_class)
            msc_class->blocknum, msc_class->blocksize,
            (unsigned)((uint64_t)msc_class->blocknum * msc_class->blocksize / 1024 / 1024));
 
-    ret = usbh_msc_scsi_read10(msc_class, 0, sector_buf, 1);
-    if (ret < 0) {
-        printf("[usbh-msc] read sector0 fail %d\n", ret);
-        return;
-    }
-    printf("[usbh-msc] sector0 head:");
-    for (int i = 0; i < 16; i++) {
-        printf(" %02x", sector_buf[i]);
-    }
-    printf("\n");
-
     msc_benchmark_run(msc_class);
-    printf("[usbh-msc] demo done, class=%p\n", msc_class);
 }
 
 void usbh_msc_stop(struct usbh_msc *msc_class)
 {
-    printf("[usbh-msc] stop %p\n", msc_class);
+    (void)msc_class;                 /* 断开事件已由 usbh_event DISCONNECTED 打印 */
 }
 
 void usbh_host_demo_start(void)
 {
-    printf("[usbh] initialize host on HUSB(USB1) fw=%s\n", FW_VERSION);
-    printf("[usbh] host stack ready for CDC/HID/MSC class devices on the same bus\n");
+    printf("[usbh] host on HUSB(USB1) fw=%s, CDC/HID/MSC on same bus\n", FW_VERSION);
     usbh_initialize(0, JL82_HUSB_BASE, usbh_event);
 }
 

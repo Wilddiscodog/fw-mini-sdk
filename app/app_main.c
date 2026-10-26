@@ -306,18 +306,13 @@ static void lcd_test_task(void *p)
         os_time_dly(1);
     }
 #else
-    /* 无 LVGL: 彩条自检(RGB565)。msc_ota_lcd_hold 非 0 时让出屏幕给升级状态色 */
-    extern volatile uint8_t msc_ota_lcd_hold;
+    /* 无 LVGL: 彩条自检(RGB565) */
     u16 w = 240, h = 320;
     /* aligned(4) 必须的: 闭源 emi_write 对 ≥5 字节 DMA 写检查缓冲运行时地址,
      * 非 4 对齐直接返回 -22 且一个字节都不发(反汇编原厂参考工程 sdk.elf 实锤) */
     static u16 fb[240 * 40] __attribute__((aligned(4)));   /* 40 行条带 */
     u16 colors[8] = {0xF800, 0x07E0, 0x001F, 0xFFE0, 0xF81F, 0x07FF, 0xFFFF, 0x0000};
     while (1) {
-        if (msc_ota_lcd_hold) {          /* 升级状态色接管屏幕 */
-            os_time_dly(20);
-            continue;
-        }
         for (u8 band = 0; band < 8; band++) {
             for (u32 i = 0; i < w * 40; i++) {
                 fb[i] = colors[band];
@@ -338,11 +333,8 @@ static void lcd_test_task(void *p)
 #if (MINI_USB_MODE == MINI_USB_MODE_HOST)
 extern void usbh_host_demo_start(void);
 extern void usbh_host_poll(void);
-extern volatile uint32_t g_hc_irq_cnt, g_ep0_irq_cnt, g_ep0_setup_cnt, g_ep0_last_csr0, g_urb_err_cnt;
 static void usb_mode_task(void *p)
 {
-    uint32_t mon = 0;
-
     os_time_dly(100);
     usbh_host_demo_start();     /* 单 host bus 上统一启动，自动分流 CDC/HID/MSC */
 
@@ -351,17 +343,6 @@ static void usb_mode_task(void *p)
     while (1) {
         os_time_dly(1);         /* 10ms 轮询周期 */
         usbh_host_poll();       /* 窗口读挂起集, 有挂起才处理(读即清除) */
-        if (++mon >= 200) {     /* 2s: 状态快照(DEVCTL/帧计数/CSR0/TXIS/TXIE/桥接器) */
-            mon = 0;
-            printf("[usbh-mon] irq=%u ep0=%u setup=%u err=%u | DEVCTL=%02x FRAME=%04x CSR0=%04x TXIS=%04x TXIE=%04x BR=%08x\n",
-                   g_hc_irq_cnt, g_ep0_irq_cnt, g_ep0_setup_cnt, g_urb_err_cnt,
-                   *(volatile unsigned char *)0x16060UL,
-                   *(volatile unsigned short *)0x1600CUL,
-                   *(volatile unsigned short *)0x16102UL,
-                   *(volatile unsigned short *)0x16002UL,
-                   *(volatile unsigned short *)0x16006UL,
-                   *(volatile unsigned long *)0x16800UL);
-        }
     }
 }
 #else
@@ -397,7 +378,7 @@ void app_main()
     printf("[clk] sys=%dMHz sdram=%dMHz hsb=%dMHz\r\n",
            clk_get("sys") / 1000000, clk_get("sdram") / 1000000, clk_get("hsb") / 1000000);
 
-    os_task_create(led_task,         NULL, 10, 512,  0, "led_task");
+    // os_task_create(led_task,         NULL, 10, 512,  0, "led_task");
     // os_task_create(clock_task,       NULL,  9, 512,  0, "clock_task");
     os_task_create(uart1_echo_task,  NULL,  8, 1024, 0, "uart1_echo");
     /* WiFi/蓝牙外设(原厂栈移植): 蓝牙开机自启, 与 USB 角色无关。
@@ -411,7 +392,7 @@ void app_main()
     os_task_create(lcd_test_task,    NULL,  8, 2048, 0, "lcd_test");
 #endif
     /* USB 设备模式: MSC 4MB RAM 盘(含虚拟U盘自动升级看门, 见 cdc_acm_msc_app.c) */
-    os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
+    // os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
     /* WiFi 由 ADC 按键2 触发启动(bt_wifi_app.c key handler → wifi_start());
      * 启动后流程不变: 读存储→STA 重试→失败转 AP, 网页后台(配网/上传升级固件) */
     /* 心跳: 1s 一拍, 判定系统在 BT 启动试验后是否存活 */
