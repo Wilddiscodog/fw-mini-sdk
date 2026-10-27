@@ -77,18 +77,23 @@
 /* USB 设备形态: 1=CDC+MSC 组合; 0=MSC-only。暂关 CDC(与上项配套)。 */
 #define MINI_USB_CDC_ENABLE    0
 
-/* ================ 内置音频(MIC 录音 + DAC 播放, MINI_AUDIO_SUPPORT) =================
- * Makefile 注入 -DMINI_AUDIO_SUPPORT=$(var), 默认 0(不编译不入链接)。
- * 组成: board.c 音频平台数据(dac/adc) + {"audio",audio_dev_ops} 设备 +
- *       task_info_table 四个音频库任务 + app/audio_demo.c(mic→DAC 回环自检)。
- * 库: cpu/wl82/liba/audio_server.a(audio_dev_ops 也在其中)。
- * ⚠ CONFIG_* 音频宏与原厂 demo_DevKitBoard 逐字对齐 —— 闭源 audio_server.a 按
- *   该配置编译, 应用层宏仅影响 demo 代码, 不得随意增删。 */
+/* ================ 内置音频(MIC + DAC + AEC, MINI_AUDIO_SUPPORT) =================
+ * Makefile: MINI_AUDIO_SUPPORT 默认 1(蓝牙音箱需要)。
+ * 硬件: MIC1=PH8/PH9 拾音, MIC3=PH5/PH6 回采, PH7 高=功放使能。 */
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
-#define CONFIG_AUDIO_MIX_ENABLE                   /* 叠音(参考工程同款) */
-#define CONFIG_AUDIO_PS_ENABLE                    /* 变调变速 */
+#define CONFIG_AUDIO_MIX_ENABLE
+/* 蓝牙音箱不需变调; 开 CONFIG_AUDIO_PS_ENABLE 会拉 pitch-shift 库 */
+#define CONFIG_PCM_ENC_ENABLE
+#define CONFIG_SBC_DEC_ENABLE
+#define CONFIG_SBC_ENC_ENABLE
+#define CONFIG_MSBC_DEC_ENABLE
+#define CONFIG_MSBC_ENC_ENABLE
+#define CONFIG_CVSD_DEC_ENABLE
+#define CONFIG_CVSD_ENC_ENABLE
+#define CONFIG_AAC_DEC_ENABLE                 /* A2DP AAC 解码(较 SBC 音质更好) */
+#define CONFIG_VIRTUAL_DEV_ENC_ENABLE
 
-#define AUDIO_ENC_SAMPLE_SOURCE_MIC         0     /* 录音输入源: 内置模拟MIC */
+#define AUDIO_ENC_SAMPLE_SOURCE_MIC         0
 #define AUDIO_ENC_SAMPLE_SOURCE_PLNK0       1
 #define AUDIO_ENC_SAMPLE_SOURCE_PLNK1       2
 #define AUDIO_ENC_SAMPLE_SOURCE_IIS0        3
@@ -96,21 +101,33 @@
 #define AUDIO_ENC_SAMPLE_SOURCE_LINEIN      5
 
 #define CONFIG_AUDIO_ENC_SAMPLE_SOURCE      AUDIO_ENC_SAMPLE_SOURCE_MIC
-#define CONFIG_AUDIO_DEC_PLAY_SOURCE        "dac" /* 播放输出源 */
+#define CONFIG_AUDIO_DEC_PLAY_SOURCE        "dac"
 #define CONFIG_AUDIO_RECORDER_SAMPLERATE    16000
 #define CONFIG_AUDIO_RECORDER_CHANNEL       1
 #define CONFIG_AUDIO_RECORDER_DURATION      (30 * 1000)
 
-#define CONFIG_AUDIO_ADC_CHANNEL_L          1     /* 左 mic 通道 */
-#define CONFIG_AUDIO_ADC_CHANNEL_R          3     /* 右 mic 通道 */
-#define CONFIG_AUDIO_ADC_GAIN               100   /* mic/aux 增益 */
-#define CONFIG_REVERB_ADC_CHANNEL           1     /* 回环自检 mic 通道 */
+#define CONFIG_ALL_ADC_CHANNEL_OPEN_ENABLE        /* 多 MIC 通道 bit_map 开关 */
+#define CONFIG_AUDIO_ADC_CHANNEL_L          1     /* MIC1 拾音 */
+#define CONFIG_AUDIO_ADC_CHANNEL_R          3     /* MIC3 */
+#define CONFIG_AUDIO_ADC_GAIN               100
+#define CONFIG_REVERB_ADC_CHANNEL           1
 
-/* AEC 回采(demo_edr/bt_decode.c 通话路径同款): 回采=DAC 输出回灌 ADC 作回声参考 */
-#define CONFIG_AEC_ENC_ENABLE                     /* 编码 AEC 使能门控 */
-#define CONFIG_AEC_ADC_CHANNEL              0     /* 回采 ADC 通道(AUX0, 原厂同款) */
-#define CONFIG_PHONE_CALL_ADC_CHANNEL       1     /* 通话 mic 通道 */
-#define CONFIG_AEC_AUDIO_ADC_GAIN           80    /* 回采通道增益 */
+/* AEC: MIC3(PH5/6) 回采功放; MIC1(PH8/9) 通话 MIC */
+#define CONFIG_AEC_ENC_ENABLE
+#define CONFIG_DNS_ENC_ENABLE
+#define CONFIG_PHONE_CALL_ADC_CHANNEL       1     /* MIC1 */
+#define CONFIG_AEC_ADC_CHANNEL              3     /* MIC3 回采 */
+#define CONFIG_AEC_AUDIO_ADC_GAIN           80
+
+/* EQ(audio_config.c / EQ_CORE_V1 需要); 在线调试默认关, 先用文件/关闭 */
+#define TCFG_EQ_ENABLE                      0
+#define TCFG_EQ_ONLINE_ENABLE               0
+#define TCFG_EQ_FILE_ENABLE                 0
+#define TCFG_HW_SOFT_EQ_ENABLE              0
+#define TCFG_LIMITER_ENABLE                 0
+#define TCFG_DRC_ENABLE                     0
+#define TCFG_AUDIO_OUT_EQ_ENABLE            0
+#define TCFG_EQ_DIVIDE_ENABLE               0
 #endif  /* MINI_AUDIO_SUPPORT */
 
 #if !defined CONFIG_DEBUG_ENABLE || defined CONFIG_LIB_DEBUG_DISABLE
@@ -146,16 +163,30 @@
 
 /* ================ 蓝牙/WiFi 外设(原厂栈移植) ================ */
 #define MINI_BT_SUPPORT             1   /* 0=关闭; 1=链接 btctrler/btstack 并开机自启 */
-#define MINI_BT_BLE_TRANS_EN        1   /* BLE 透传服务(广播名 WL82-BLE, 透传特征 ae82 notify) */
-#define CONFIG_BT_ENABLE            1   
-#define MINI_WIFI_SUPPORT           1   /* WiFi STA: 扫描演示(wifi_on -> scan -> 打印 AP) */
+#define MINI_BT_SPEAKER_EN          1   /* 经典蓝牙音箱: A2DP 播放 + HFP 通话 */
+#define MINI_BT_BLE_TRANS_EN        1   /* BLE 透传(与音箱双模并存) */
+#define CONFIG_BT_ENABLE            1
+#define MINI_WIFI_SUPPORT           1
 
 #if MINI_BT_SUPPORT
 #ifdef CONFIG_BT_ENABLE
 #define CONFIG_BT_RX_BUFF_SIZE  (12 * 1024)
-#define CONFIG_BT_TX_BUFF_SIZE  (6 * 1024)
-#define TCFG_USER_BLE_ENABLE        1       //BLE功能使能
-#define TCFG_USER_BT_CLASSIC_ENABLE 0       //经典蓝牙功能
+#define CONFIG_BT_TX_BUFF_SIZE  (12 * 1024)
+#define TCFG_USER_BLE_ENABLE            1
+#if MINI_BT_SPEAKER_EN
+/* 原厂音箱/DevKitBoard: 经典蓝牙 A2DP(+可选 AAC)+HFP; BLE 不能做手机音乐播放 */
+#define TCFG_USER_BT_CLASSIC_ENABLE     1
+#define CONFIG_POWER_ON_ENABLE_BT       1
+#define TCFG_USER_EMITTER_ENABLE        0   /* 接收端音箱, 非发射 */
+#define TCFG_BT_SNIFF_ENABLE            0
+#define TCFG_BT_SUPPORT_AAC             1   /* 高音质: 对齐 demo_DevKitBoard */
+#define BT_SUPPORT_MUSIC_VOL_SYNC       1
+#define BT_SUPPORT_DISPLAY_BAT          0
+#define SPP_TRANS_DATA_EN               0
+#else
+#define TCFG_USER_BT_CLASSIC_ENABLE     0
+#define TCFG_BT_SUPPORT_AAC             0
+#endif
 #define BT_NET_HID_EN               0
 #define TRANS_DATA_EN               1
 #define BT_NET_CENTRAL_EN           0
@@ -163,6 +194,13 @@
 #define CONFIG_BLE_MESH_ENABLE      0
 #define TCFG_BLE_SECURITY_EN        1
 #endif
+#endif
+
+#ifndef TCFG_USER_EMITTER_ENABLE
+#define TCFG_USER_EMITTER_ENABLE    0
+#endif
+#ifndef BT_SUPPORT_MUSIC_VOL_SYNC
+#define BT_SUPPORT_MUSIC_VOL_SYNC   0
 #endif
 
 #endif

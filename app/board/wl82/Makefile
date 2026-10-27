@@ -26,17 +26,23 @@ MINI_RTC_SUPPORT       ?= 0
 MINI_SD_SUPPORT        ?= 0
 MINI_GPCNT_SUPPORT     ?= 0
 MINI_HW_CRYPTO_SUPPORT ?= 0
-MINI_KEY_EXTRA_SUPPORT ?= 0   # 预留: IR/旋转/CTMU 按键源文件
-MINI_AUDIO_SUPPORT     ?= 0   # 内置音频: MIC 录音 + DAC 播放(audio_server 库, mic→DAC 回环自检)
+# 注意: ?= 值与 # 注释之间勿留空格, 否则 ifeq ($(VAR),1) 会因尾部空格失败
+MINI_KEY_EXTRA_SUPPORT ?= 0
+# 内置音频: 蓝牙音箱 MIC1/MIC3/DAC + AEC(默认开)
+MINI_AUDIO_SUPPORT ?= 1
 # 音频库注入 LFLAGS 用(LFLAGS 是 := 立即展开, 此变量必须先于其定义)
 # audio_server.a: 音频服务+audio_dev_ops; libaec/libdns/libjlsp: AEC 回采算法库
 # (jl_math 源码在 LCD 条件块之后追加——必须在 c_SRC_FILES := 主赋值之后)
 AUDIO_LIB :=
-ifeq ($(MINI_AUDIO_SUPPORT),1)
-AUDIO_LIB := ../../../cpu/wl82/liba/audio_server.a
-AUDIO_LIB += ../../../cpu/wl82/liba/libaec.a
-AUDIO_LIB += ../../../cpu/wl82/liba/libdns.a
-AUDIO_LIB += ../../../cpu/wl82/liba/libjlsp.a
+ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
+# 对齐 demo_edr: audio_server + AEC/DNS + AAC(seek) + DRC
+AUDIO_LIB := \
+	../../../cpu/wl82/liba/audio_server.a \
+	../../../cpu/wl82/liba/libaec.a \
+	../../../cpu/wl82/liba/libdns.a \
+	../../../cpu/wl82/liba/libjlsp.a \
+	../../../cpu/wl82/liba/lib_m4a_dec_seek.a \
+	../../../cpu/wl82/liba/libdrc.a
 endif
 
 ifeq ($(OS), Windows_NT)
@@ -163,7 +169,10 @@ DEFINES += -DMINI_PWM_SUPPORT=$(MINI_PWM_SUPPORT) -DMINI_RTC_SUPPORT=$(MINI_RTC_
 DEFINES += -DMINI_SD_SUPPORT=$(MINI_SD_SUPPORT) -DMINI_GPCNT_SUPPORT=$(MINI_GPCNT_SUPPORT)
 DEFINES += -DMINI_HW_CRYPTO_SUPPORT=$(MINI_HW_CRYPTO_SUPPORT)
 DEFINES += -DMINI_KEY_EXTRA_SUPPORT=$(MINI_KEY_EXTRA_SUPPORT)
-DEFINES += -DMINI_AUDIO_SUPPORT=$(MINI_AUDIO_SUPPORT)
+DEFINES += -DMINI_AUDIO_SUPPORT=$(strip $(MINI_AUDIO_SUPPORT))
+ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
+DEFINES += -DCONFIG_AUDIO_ENABLE
+endif
 
 # 头文件搜索路径
 INCLUDES := \
@@ -213,6 +222,9 @@ c_SRC_FILES := \
 	../../../app/app_main.c \
 	../../../app/bt_wifi_app.c \
 	../../../app/bt_profile_config.c \
+	../../../app/bt_music.c \
+	../../../app/bt_decode.c \
+	../../../app/audio_config.c \
 	../../../app/cdc_acm_msc_app.c \
 	../../../app/audio_demo.c \
 	../../../app/periph_demo.c \
@@ -225,6 +237,7 @@ c_SRC_FILES := \
 	../../../driver/lcd/touch_cst816.c \
 	../../../app/net/wifi_conf.c \
 	../../../app/net/wifi_prov.c \
+	../../../app/net/wifi_log_mute.c \
 	../../../driver/config/log_config/lib_btctrler_config.c \
 	../../../driver/config/log_config/lib_btstack_config.c \
 	../../../app/board/wl82/board.c \
@@ -375,7 +388,7 @@ endif
 # ---------------- jl_math 源码库(MINI_AUDIO_SUPPORT, AEC 回采用) ----------------
 # 原厂 apps/common/jl_math 同目录: AEC/DNS 的 WOLA 滤波器组引用 flrfft/flrifft
 # 等浮点 FFT 原语(闭源库内没有, 由应用层源码提供)
-ifeq ($(MINI_AUDIO_SUPPORT),1)
+ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
 c_SRC_FILES += ../../../app/jl_math/flfft_core_pi32v2.c
 c_SRC_FILES += ../../../app/jl_math/jl_fft.c
 c_SRC_FILES += ../../../app/jl_math/jl_math.c

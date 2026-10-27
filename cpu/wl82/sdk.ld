@@ -12,6 +12,37 @@ sdfile_vfs_ops
 nor_sdfile_vfs_ops
 clock_timer1
 clock_port
+audio_server_info
+subdev_pcm_enc
+pcm_package_ops
+msbc_decoder
+
+
+subdev_msbc_enc
+msbc_package_ops
+
+
+sbc_decoder
+
+
+subdev_sbc_enc
+sbc_package_ops
+
+
+cvsd_decoder
+
+
+subdev_cvsd_enc
+cvsd_package_ops
+aac_decoder
+aas_decoder
+vir_dev_sub
+subdev_dns_enc
+subdev_dns_dual_enc
+
+
+
+subdev_aec_enc
 );
 
 
@@ -67,6 +98,27 @@ SECTIONS
         *(.jlsp_code)
         . = ALIGN(4);
         *(.jlsp_const)
+
+
+        . = ALIGN(4);
+        *(.dns_common_data)
+        . = ALIGN(4);
+        *(.dns_16k_data)
+        . = ALIGN(4);
+        *(.dns_8k_data)
+        . = ALIGN(4);
+        *(.dns_param_data_single)
+        . = ALIGN(4);
+        *(.dns_param_data_dual)
+
+
+
+        *(.sms_code)
+        *(.sms_sparse_code)
+        . = ALIGN(4);
+        *(.opcore_maskrom)
+        . = ALIGN(4);
+        *(.sms_const)
 
 
         . = ALIGN(4);
@@ -349,6 +401,13 @@ SECTIONS
     . = ORIGIN(sdram);
     .data ALIGN(32):
     {
+
+
+
+
+
+        . = ALIGN(4);
+        *(.jlsp_data)
         . = ALIGN(4);
         *(.ui_ram)
 
@@ -825,7 +884,7 @@ SECTIONS
         acl_tx_pool = .;
         *(.bredr_tx_bulk)
 
-        acl_tx_pool_end = acl_tx_pool + (6 * 1024);
+        acl_tx_pool_end = acl_tx_pool + (12 * 1024);
 
 
 

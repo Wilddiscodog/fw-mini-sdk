@@ -10,8 +10,10 @@
  *     - 首页: 状态/连接表单/扫描链接/固件上传表单
  *     - /scan: AP 模式下扫描空中SSID(wifi_scan_req 官方支持 AP 扫描)
  *     - /connect: 保存(wifi_store_mode_info→VM 持久化) + wifi_enter_sta_mode 切 STA
- *     - /upload: multipart 流式上传 update-ota.ufw → net_update→dual_bank 烧写
- *       (与 MSC U盘升级同一条通道: jl_file_head_valid_check 解密头 + CRC16 + 2s 复位)
+ *     - /upload: multipart 上传 update-ota.ufw → 先入 SDRAM 缓存(目标 4MB,
+ *       头解析后尽量扩到 file_size 整包落盘后再烧; 不够则分块烧且烧写间隙
+ *       MSG_DONTWAIT 抽 TCP 防窗口饿死) → net_update→dual_bank; 流式回传进度
+ *       (与 MSC U盘升级同一条通道: jl_file_head_valid_check + CRC16 + 2s 复位)
  *   STA 模式: 网页后台同样在局域网可用。
  *
  * 事件钩子: bt_wifi_app.c 的 wifi_event_callback(MODULE_INIT → 默认模式选择;
@@ -21,6 +23,7 @@
 #include "app_config.h"
 #include "typedef.h"
 #include "os/os_api.h"
+#include "system/malloc.h"
 #include "lwip.h"
 #include "lwip/sockets.h"
 #include "wifi/wifi_connect.h"
@@ -30,7 +33,24 @@
 #include <string.h>
 #include <stdio.h>
 
+/* 网页 OTA: 优先 4MB 整包(当前 update-ota.ufw ~3.6MB); 失败则降级。
+ * 中途刷 flash 若不抽 TCP, 对端窗口堵死 → recv stall → net_update err。 */
+#define OTA_CACHE_TARGET   (4u * 1024u * 1024u)
+#define OTA_CACHE_MIN      (64u * 1024u)
+#define OTA_BURN_CHUNK     (4u * 1024u)
+#define OTA_SPILL_SIZE     (256u * 1024u)
+
 #if MINI_WIFI_SUPPORT
+
+/* 0=关掉 [prov] 刷屏; [ota-http] 保留。排障配网时改 1 */
+#ifndef MINI_WIFI_VERBOSE_LOG
+#define MINI_WIFI_VERBOSE_LOG  0
+#endif
+#if MINI_WIFI_VERBOSE_LOG
+#define prov_log(...)  printf(__VA_ARGS__)
+#else
+#define prov_log(...)  ((void)0)
+#endif
 
 #define PROV_AP_PWD            "12345678"
 #define PROV_STA_TIMEOUT_SEC   25          /* 单次连接超时 */
@@ -119,14 +139,14 @@ void wifi_prov_default_mode_setup(void)
         strncpy((char *)parm.pwd[0], prov_stored_pwd, sizeof(parm.pwd[0]) - 1);
         parm.connect_best_network = 0;
         wifi_set_default_mode(&parm, 1, 0);
-        printf("[prov] stored wifi '%s'\n", prov_stored_ssid);
+        prov_log("[prov] stored wifi '%s'\n", prov_stored_ssid);
     } else {
         prov_has_stored = 0;
         parm.mode = AP_MODE;
         strncpy((char *)parm.ssid[0], "WL82-SETUP", sizeof(parm.ssid[0]) - 1);
         strncpy((char *)parm.pwd[0], PROV_AP_PWD, sizeof(parm.pwd[0]) - 1);
         wifi_set_default_mode(&parm, 1, 0);
-        printf("[prov] no stored wifi, boot to AP\n");
+        prov_log("[prov] no stored wifi, boot to AP\n");
     }
 }
 
@@ -242,7 +262,7 @@ static u32 prov_do_scan(void)
     for (int round = 0; round < 2; round++) {
         prov_scan_done = 0;
         int req = wifi_scan_req();
-        printf("[prov] scan round=%d req=%d (0=started,-1=busy/in-progress)\n",
+        prov_log("[prov] scan round=%d req=%d (0=started,-1=busy/in-progress)\n",
                round, req);
         /* req==-1 也可能是「正在扫」, 仍要等 COMPLETED; 不可因非 0 直接放弃 */
         int waited = 0;
@@ -250,7 +270,7 @@ static u32 prov_do_scan(void)
             os_time_dly(5);
             wdt_clear();
         }
-        printf("[prov] scan round=%d done=%d waited=%dms\n",
+        prov_log("[prov] scan round=%d done=%d waited=%dms\n",
                round, prov_scan_done, waited * 50);
         if (!prov_scan_done && round == 0) {
             /* 首轮无事件: 再给一轮机会 */
@@ -264,7 +284,7 @@ static u32 prov_do_scan(void)
 
     u32 cnt = 0;
     struct wifi_scan_ssid_info *r = wifi_get_scan_result(&cnt);
-    printf("[prov] scan raw cnt=%u\n", (unsigned)cnt);
+    prov_log("[prov] scan raw cnt=%u\n", (unsigned)cnt);
 
     for (u32 i = 0; r && i < cnt && prov_scan_cnt < PROV_SCAN_MAX; i++) {
         u32 len = r[i].ssid_len;
@@ -303,7 +323,7 @@ static u32 prov_do_scan(void)
     if (r) {
         free(r);
     }
-    printf("[prov] scan unique cnt=%u\n", (unsigned)prov_scan_cnt);
+    prov_log("[prov] scan unique cnt=%u\n", (unsigned)prov_scan_cnt);
     return prov_scan_cnt;
 }
 
@@ -345,17 +365,22 @@ static const char *HTML_CSS =
     ".bars i.on{background:var(--acc)}"
     ".tip{color:var(--mut);font-size:.8rem;margin:8px 0 0}"
     ".err{color:var(--danger)}.ok{color:var(--ok)}"
+    ".prog{display:none;margin-top:12px}.prog.on{display:block}"
+    ".prog .lab{display:flex;justify-content:space-between;font-size:.78rem;color:var(--mut);margin:6px 0 2px}"
+    ".bar{height:10px;background:#0b1220;border-radius:999px;overflow:hidden;border:1px solid var(--line)}"
+    ".bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),#38bdf8);"
+    "transition:width .12s linear}"
     ".foot{text-align:center;color:var(--mut);font-size:.75rem;margin-top:18px}";
 
 static int http_render_portal(int fd)
 {
-    char *body = malloc(7200);
+    char *body = malloc(10240);
     if (!body) {
         return -1;
     }
     const char *mode = prov_ap_active ? "AP 配网" : (prov_dhcp_ok ? "STA 已联网" : "STA 连接中");
     const char *ip = prov_ap_active ? "192.168.1.1" : "路由器 DHCP";
-    snprintf(body, 7200,
+    snprintf(body, 10240,
         "<!doctype html><html lang=zh-CN><head><meta charset=utf-8>"
         "<meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>"
         "<title>WL82 设备后台</title><style>%s</style></head><body><div class=wrap>"
@@ -373,11 +398,15 @@ static int http_render_portal(int fd)
         "<div class=row><button type=submit>连接 WiFi</button></div>"
         "<p class=tip>连接后热点会断开；失败约 60 秒自动回到配网模式。</p></form></div>"
         "<div class=card><h2>固件升级</h2>"
-        "<form method=POST action=/upload enctype='multipart/form-data'>"
+        "<form id=fUp method=POST action=/upload enctype='multipart/form-data'>"
         "<label>升级文件 (update-ota.ufw)</label>"
-        "<input type=file name=fw accept='.ufw,application/octet-stream'>"
-        "<div class=row><button type=submit>上传并升级</button></div>"
-        "<p class=tip>校验通过后设备自动重启进入新固件。</p></form></div>"
+        "<input type=file name=fw id=fw accept='.ufw,application/octet-stream'>"
+        "<div class=row><button type=submit id=btnUp>上传并升级</button></div>"
+        "<div class=prog id=otaProg>"
+        "<div class=lab><span>上传</span><span id=upPct>0%%</span></div><div class=bar><i id=upBar></i></div>"
+        "<div class=lab><span>烧录</span><span id=burnPct>0%%</span></div><div class=bar><i id=burnBar></i></div>"
+        "<p class=tip id=otaMsg>准备中…</p></div>"
+        "<p class=tip>先整包进 SDRAM 再烧录。浏览器进度≠设备进度；软AP上接收约需数十秒，收齐后才开始烧录条。</p></form></div>"
         "<div class=foot>fw-mini-sdk · CherryUSB / WiFi portal</div></div>"
         "<script>"
         "function bars(r){var n=r>-55?4:r>-65?3:r>-75?2:1,h=[4,7,10,14],s='<span class=bars>',i;"
@@ -399,6 +428,33 @@ static int http_render_portal(int fd)
         "}).catch(function(){m.textContent='扫描失败(AP扫信道时手机可能短暂掉线，请重试)';m.className='tip err';})"
         ".finally(function(){b.disabled=false});}"
         "document.getElementById('btnScan').onclick=doScan;"
+        "function setBar(bar,pct,lab){pct=Math.max(0,Math.min(100,pct|0));"
+        "document.getElementById(bar+'Bar').style.width=pct+'%%';"
+        "document.getElementById(bar+'Pct').textContent=pct+'%%';"
+        "if(lab)document.getElementById('otaMsg').textContent=lab;}"
+        "document.getElementById('fUp').onsubmit=function(ev){"
+        "ev.preventDefault();var f=document.getElementById('fw').files[0];"
+        "if(!f){alert('请选择 update-ota.ufw');return;}"
+        "var btn=document.getElementById('btnUp'),prog=document.getElementById('otaProg');"
+        "btn.disabled=true;prog.classList.add('on');setBar('up',0,'上传中…');setBar('burn',0);"
+        "var fd=new FormData(document.getElementById('fUp')),xhr=new XMLHttpRequest(),seen=0;"
+        "xhr.open('POST','/upload');"
+        "xhr.upload.onprogress=function(e){if(e.lengthComputable)"
+        "setBar('up',e.loaded*100/e.total,'上传 '+(e.loaded/1048576).toFixed(2)+' / '+(e.total/1048576).toFixed(2)+' MB');};"
+        "xhr.upload.onload=function(){setBar('up',100,'浏览器已发完，设备接收中…');};"
+        "function parseOta(t){t.split('\\n').forEach(function(line){line=line.trim();if(!line)return;"
+        "if(line.charAt(0)==='B')setBar('burn',parseInt(line.slice(1),10)||0,'烧录中…');"
+        "else if(line.indexOf('OK')===0){setBar('burn',100,'校验通过，即将重启…');"
+        "document.getElementById('otaMsg').className='tip ok';}"
+        "else if(line.indexOf('ERR')===0){document.getElementById('otaMsg').textContent=line;"
+        "document.getElementById('otaMsg').className='tip err';btn.disabled=false;}});}"
+        "xhr.onprogress=function(){var t=xhr.responseText||'',chunk=t.slice(seen);seen=t.length;parseOta(chunk);};"
+        "xhr.onload=function(){parseOta((xhr.responseText||'').slice(seen));"
+        "if(xhr.status!==200){document.getElementById('otaMsg').textContent='HTTP '+xhr.status;"
+        "document.getElementById('otaMsg').className='tip err';btn.disabled=false;}};"
+        "xhr.onerror=function(){document.getElementById('otaMsg').textContent='网络中断';"
+        "document.getElementById('otaMsg').className='tip err';btn.disabled=false;};"
+        "xhr.send(fd);};"
         "</script></body></html>",
         HTML_CSS, mode, ip, PROV_AP_PWD);
     int ret = http_send(fd, HTML_HDR_200, body);
@@ -516,7 +572,7 @@ static void http_handle_connect(int conn, const char *body)
     if (!ssid[0]) {
         goto bad;
     }
-    printf("[prov] connect req ssid='%s' pwd_len=%d\n", ssid, (int)strlen(pwd));
+    prov_log("[prov] connect req ssid='%s' pwd_len=%d\n", ssid, (int)strlen(pwd));
 
     /* 先回包再切模式(切 STA 会断开 AP, 手机立即失联) */
     {
@@ -545,24 +601,21 @@ bad:
     send(conn, "HTTP/1.0 400 Bad Request\r\nConnection: close\r\n\r\n", 46, 0);
 }
 
-/* ================ POST /upload: multipart 流式 → OTA ================ */
+/* ================ POST /upload: SDRAM 缓存 → dual_bank 烧写 ================ */
 static struct {
     void *fd;
-    u32  recv_total;                     /* 已收文件字节(含 32B 头) */
+    u32  recv_total;                     /* 已收文件字节(含双层头) */
+    u32  burn_total;                     /* 已写入 flash 字节 */
     u32  file_size;                      /* 头声明长度 */
     u16  data_crc;
     u16  calc_crc;
     u8   head_ok;
-    u8   crc_skip;                       /* CRC 跳过文件头 32B */
+    u8   crc_skip;                       /* CRC 跳过文件头 64B */
+    u8   resp_hdr;                       /* 已发 text/plain 响应头 */
 } upl;
 
-static const char *upload_finish_page(const char *msg)
-{
-    static char page[640];
-    snprintf(page, sizeof(page),
-        "<html><meta charset=utf-8><body>%s <a href=/>返回</a></body></html>", msg);
-    return page;
-}
+#define OTA_RESP_HDR \
+    "HTTP/1.0 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n"
 
 static void ota_ui_resume(void)
 {
@@ -572,62 +625,343 @@ static void ota_ui_resume(void)
 #endif
 }
 
+static void ota_send_line(int conn, const char *line)
+{
+    if (!upl.resp_hdr) {
+        send(conn, OTA_RESP_HDR, strlen(OTA_RESP_HDR), 0);
+        upl.resp_hdr = 1;
+    }
+    send(conn, line, strlen(line), 0);
+}
+
+static void ota_send_err(int conn, const char *msg)
+{
+    char line[192];
+    snprintf(line, sizeof(line), "ERR %s\n", msg);
+    ota_send_line(conn, line);
+}
+
+static void ota_send_burn_pct(int conn, u32 burned, u32 total)
+{
+    char line[24];
+    u32 pct = total ? (burned * 100u / total) : 0;
+    if (pct > 100) {
+        pct = 100;
+    }
+    snprintf(line, sizeof(line), "B%u\n", (unsigned)pct);
+    ota_send_line(conn, line);
+}
+
+/* 申请 OTA 缓存: 先目标大小, 失败则对半降级(4K 对齐)。
+ * 不用 xPortGetFreeHeapSize: 本工程链入的是杰理自定义堆, 该符号未导出。 */
+static u8 *ota_cache_alloc(u32 *out_size)
+{
+    u32 try_sz = OTA_CACHE_TARGET;
+    while (try_sz >= OTA_CACHE_MIN) {
+        u8 *p = (u8 *)malloc(try_sz);
+        if (p) {
+            *out_size = try_sz;
+            printf("[ota-http] cache %u KB%s\n",
+                   (unsigned)(try_sz / 1024),
+                   try_sz == OTA_CACHE_TARGET ? " (target)" : " (fallback)");
+            return p;
+        }
+        printf("[ota-http] malloc %u KB fail, halve\n", (unsigned)(try_sz / 1024));
+        try_sz = (try_sz / 2) & ~0xFFFu;
+    }
+    *out_size = 0;
+    return NULL;
+}
+
+/* 头解析后尽量把缓存扩到整包, 避免边收边烧堵死 TCP */
+static int ota_cache_grow(u8 **cache, u32 *cap, u32 need)
+{
+    u32 ncap;
+    u8 *p;
+
+    if (!cache || !*cache || !cap || *cap >= need) {
+        return 0;
+    }
+    ncap = (need + 0xFFFu) & ~0xFFFu;
+    if (ncap < need) {
+        ncap = need;
+    }
+    p = (u8 *)realloc(*cache, ncap);
+    if (!p) {
+        printf("[ota-http] grow cache %u→%u KB fail, keep %u KB (spill mode)\n",
+               (unsigned)(*cap / 1024), (unsigned)(ncap / 1024),
+               (unsigned)(*cap / 1024));
+        return -1;
+    }
+    printf("[ota-http] grow cache %u→%u KB (fit file)\n",
+           (unsigned)(*cap / 1024), (unsigned)(ncap / 1024));
+    *cache = p;
+    *cap = ncap;
+    return 0;
+}
+
+/* 烧写间隙非阻塞抽 TCP → spill, 防止对端发送窗口耗尽断链 */
+static u8 *ota_spill;
+static u32 ota_spill_cap;
+static u32 ota_spill_fill;
+
+static void ota_spill_free(void)
+{
+    if (ota_spill) {
+        free(ota_spill);
+        ota_spill = NULL;
+    }
+    ota_spill_cap = 0;
+    ota_spill_fill = 0;
+}
+
+static int ota_spill_ensure(void)
+{
+    if (ota_spill) {
+        return 0;
+    }
+    ota_spill = (u8 *)malloc(OTA_SPILL_SIZE);
+    if (!ota_spill) {
+        printf("[ota-http] spill malloc %u KB fail\n",
+               (unsigned)(OTA_SPILL_SIZE / 1024));
+        return -1;
+    }
+    ota_spill_cap = OTA_SPILL_SIZE;
+    ota_spill_fill = 0;
+    printf("[ota-http] spill %u KB ready\n", (unsigned)(OTA_SPILL_SIZE / 1024));
+    return 0;
+}
+
+/* 对刚收到的文件字节做 CRC(跳过双头 64B), 并累加 recv_total */
+static void ota_account_bytes(const u8 *data, int len)
+{
+    int cs = 0;
+    int left;
+    int po;
+
+    if (len <= 0) {
+        return;
+    }
+    while (len > cs && upl.crc_skip) {
+        cs++;
+        upl.crc_skip--;
+    }
+    if (len > cs) {
+        left = len - cs;
+        po = cs;
+        while (left > 0) {
+            u16 chunk = left > 4096 ? 4096 : (u16)left;
+            upl.calc_crc = calc_crc16_with_init_val(upl.calc_crc,
+                                                    (u8 *)(data + po), chunk);
+            po += chunk;
+            left -= chunk;
+        }
+    }
+    upl.recv_total += len;
+}
+
+static void ota_tcp_drain(int conn)
+{
+    int r;
+    u32 remain;
+    u32 space;
+    u32 want;
+
+    if (conn < 0 || !ota_spill || ota_spill_fill >= ota_spill_cap) {
+        return;
+    }
+    if (!upl.file_size || upl.recv_total >= upl.file_size) {
+        return;
+    }
+    while (ota_spill_fill < ota_spill_cap && upl.recv_total < upl.file_size) {
+        remain = upl.file_size - upl.recv_total;
+        space = ota_spill_cap - ota_spill_fill;
+        want = remain < space ? remain : space;
+        r = recv(conn, ota_spill + ota_spill_fill, (int)want, MSG_DONTWAIT);
+        if (r <= 0) {
+            break;
+        }
+        ota_account_bytes(ota_spill + ota_spill_fill, r);
+        ota_spill_fill += (u32)r;
+        wdt_clear();
+    }
+}
+
+/* 把 cache[0..fill) 写入 flash; report=1 时推送烧录进度。
+ * 每写一块穿插 TCP drain, 避免长 erase/program 期间连接被掐。 */
+static int ota_flush_cache(int conn, u8 *cache, u32 fill, int report)
+{
+    u32 off = 0;
+    if (!fill) {
+        return 0;
+    }
+    if (!upl.fd) {
+        upl.fd = net_fopen(CONFIG_UPGRADE_OTA_FILE_NAME, "w");
+        if (!upl.fd) {
+            return -1;
+        }
+    }
+    /* 分块烧写路径才需要 spill; 整包烧(report=1 且已收完)可不抽 */
+    if (conn >= 0 && upl.recv_total < upl.file_size) {
+        (void)ota_spill_ensure();
+    }
+    while (off < fill) {
+        u32 n = fill - off;
+        if (n > OTA_BURN_CHUNK) {
+            n = OTA_BURN_CHUNK;
+        }
+        int wret = net_fwrite(upl.fd, cache + off, (int)n, 0);
+        if (wret != (int)n) {
+            printf("[ota-http] net_fwrite fail @%u ret=%d\n",
+                   upl.burn_total, wret);
+            return -2;
+        }
+        off += n;
+        upl.burn_total += n;
+        if (report && upl.file_size) {
+            ota_send_burn_pct(conn, upl.burn_total, upl.file_size);
+        }
+        ota_tcp_drain(conn);
+        wdt_clear();
+    }
+    return 0;
+}
+
+/* 先消化 spill, 再写 cache; 缓存满则刷 flash */
+static int ota_cache_feed(int conn, u8 *cache, u32 cap, u32 *fill,
+                          const u8 *data, int len)
+{
+    int off = 0;
+
+    /* spill 优先并入主缓存, 保持字节序 */
+    while (ota_spill_fill) {
+        u32 space = cap - *fill;
+        u32 n = ota_spill_fill;
+        if (n > space) {
+            n = space;
+        }
+        memcpy(cache + *fill, ota_spill, n);
+        *fill += n;
+        if (n < ota_spill_fill) {
+            memmove(ota_spill, ota_spill + n, ota_spill_fill - n);
+        }
+        ota_spill_fill -= n;
+        if (*fill >= cap) {
+            int fr = ota_flush_cache(conn, cache, *fill, 0);
+            if (fr) {
+                return fr;
+            }
+            *fill = 0;
+        }
+    }
+
+    while (off < len) {
+        u32 space = cap - *fill;
+        u32 n = (u32)(len - off);
+        if (n > space) {
+            n = space;
+        }
+        memcpy(cache + *fill, data + off, n);
+        *fill += n;
+        off += (int)n;
+        if (*fill >= cap) {
+            int fr = ota_flush_cache(conn, cache, *fill, 0);
+            if (fr) {
+                return fr;
+            }
+            *fill = 0;
+        }
+    }
+    return 0;
+}
+
+/* 喂文件字节: 入缓存 + CRC/计数(spill 里已 account 过的不再重复) */
+static int ota_feed_file(int conn, u8 *cache, u32 cap, u32 *fill,
+                         const u8 *data, int len)
+{
+    int fr;
+
+    if (len <= 0) {
+        return 0;
+    }
+    fr = ota_cache_feed(conn, cache, cap, fill, data, len);
+    if (fr) {
+        return fr;
+    }
+    ota_account_bytes(data, len);
+    return 0;
+}
+
 static void http_handle_upload(int conn, const char *boundary,
                                const char *residue, int residue_len)
 {
-    /* 大缓冲放静态: 原栈上 window+recvbuf≈1.5KB, 叠加 get_current_boot_info
-     * 内部打印易撑破 prov_http 4K 栈 → 返回后 misalign_err */
-    static u8 window[512] __attribute__((aligned(4)));
-    static u8 recvbuf[1024] __attribute__((aligned(4)));
+    static u8 window[4096] __attribute__((aligned(4)));
+    static u8 recvbuf[8192] __attribute__((aligned(4)));
     static u8 head64[64] __attribute__((aligned(4)));
+    (void)boundary;                      /* 已知 file_size 后按精确长度收, 不再扫边界 */
 
-    /* part 头结束 "\r\n\r\n" 之后的字节才是文件内容 */
     const char *body = NULL;
     for (int i = 0; i + 4 <= residue_len; i++) {
-        if (residue[i] == '\r' && residue[i+1] == '\n' &&
-            residue[i+2] == '\r' && residue[i+3] == '\n') {
+        if (residue[i] == '\r' && residue[i + 1] == '\n' &&
+            residue[i + 2] == '\r' && residue[i + 3] == '\n') {
             body = residue + i + 4;
             break;
         }
     }
     if (!body) {
-        goto bad_req;                    /* part 头 > 首包: 极罕见, 拒绝 */
+        goto bad_req;
     }
     int slen = residue_len - (int)(body - residue);
 
-    /* 先挂起 UI, 再开 OTA: 避免 LVGL/EMI 与 norflash 并发 */
+    {
+        int on = 1;
+        int rcv = 64 * 1024;             /* 烧写间隙靠 drain+大窗撑住对端 */
+        int to_ms = 15000;
+        setsockopt(conn, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+        setsockopt(conn, SOL_SOCKET, SO_RCVBUF, &rcv, sizeof(rcv));
+        setsockopt(conn, SOL_SOCKET, SO_RCVTIMEO, &to_ms, sizeof(to_ms));
+    }
+
     g_ui_suspend = 1;
 #if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
     disp_disable_update();
 #endif
-    os_time_dly(20);                     /* ~200ms 等 lcd_test 停刷 */
+    os_time_dly(5);
 
     memset(&upl, 0, sizeof(upl));
-    upl.crc_skip = 64;                    /* CRC 覆盖载荷 [64B 双头之后, 文件尾) */
-    upl.fd = net_fopen(CONFIG_UPGRADE_OTA_FILE_NAME, "w");
-    if (!upl.fd) {
+    upl.crc_skip = 64;
+
+    u32 cache_cap = 0;
+    u8 *cache = ota_cache_alloc(&cache_cap);
+    if (!cache) {
         ota_ui_resume();
-        http_send(conn, HTML_HDR_200,
-                  upload_finish_page("OTA 忙(其他升级进行中), 稍后再试。"));
+        ota_send_err(conn, "SDRAM 缓存申请失败");
         return;
     }
-    printf("[ota-http] upload start\n");
+    u32 cache_fill = 0;
 
-    /* 滑动尾窗: 只投喂能排除结束边界(\r\n--BOUNDARY--)的数据 */
+    if (net_update_request()) {
+        free(cache);
+        ota_ui_resume();
+        ota_send_err(conn, "OTA 忙(其他升级进行中)");
+        return;
+    }
+    printf("[ota-http] upload start (cache %u KB)\n", (unsigned)(cache_cap / 1024));
+
     const u8 *stream = (const u8 *)body;
     int wlen = 0;
-    int keep = (int)strlen(boundary) + 8;
     int head_got = 0;
-    int done = 0;
+    int fail_fr = 0;
+    u32 last_log = 0;
     struct BootInfo bi;
     memset(&bi, 0, sizeof(bi));
     int biret = get_current_boot_info(&bi);
-    int ctx_ok = 0;                       /* 已过首次 4K 落盘(update ctx 有效) */
     printf("[ota-http] boot info ret=%d ver=%u base=0x%08x len=0x%08x\n",
            biret, bi.version, bi.baseAddress, bi.codeLength);
 
-    while (!done) {
-        while (wlen < keep) {            /* 窗口不足: 补数据 */
+    /* ---- 阶段1: 滑窗只用于凑齐 64B 双层头 ---- */
+    while (head_got < 64) {
+        while (wlen < 64 && head_got + wlen < 64) {
             int r;
             if (slen > 0) {
                 r = slen > (int)sizeof(window) - wlen ? (int)sizeof(window) - wlen : slen;
@@ -636,152 +970,247 @@ static void http_handle_upload(int conn, const char *boundary,
                 slen -= r;
                 wlen += r;
             } else {
-                r = recv(conn, recvbuf, sizeof(recvbuf), 0);
+                r = recv(conn, window + wlen, (int)sizeof(window) - wlen, 0);
                 if (r <= 0) {
-                    done = 2;            /* 对端断开 */
-                    break;
+                    free(cache);
+                    ota_spill_free();
+                    ota_ui_resume();
+                    ota_send_err(conn, "收头时连接断开/超时");
+                    return;
                 }
-                stream = recvbuf;
-                slen = r;
+                wlen += r;
             }
             wdt_clear();
         }
-        if (done == 2) {
-            break;
-        }
+        int need = 64 - head_got;
+        int t = wlen < need ? wlen : need;
+        memcpy(head64 + head_got, window, t);
+        head_got += t;
+        memmove(window, window + t, wlen - t);
+        wlen -= t;
 
-        int emit = wlen - keep;          /* 窗口中确定不属于结束边界的部分 */
-        if (emit > 0) {
-            /* 文件前 64B: 外层头(32B,校验一次) + 内层 app_core 头(诊断) */
-            if (head_got < 64) {
-                int t = (64 - head_got) < emit ? (64 - head_got) : emit;
-                memcpy(head64 + head_got, window, t);
-                head_got += t;
-                if (head_got >= 32 && !upl.head_ok) {
-                    upl.head_ok = (jl_file_head_valid_check(head64) == 0);
-                    if (!upl.head_ok) {
-                        upload_fail_head:
-                        net_fclose(upl.fd, 1);
-                        upl.fd = NULL;
-                        ota_ui_resume();
-                        http_send(conn, HTML_HDR_200,
-                                  upload_finish_page("升级文件头校验失败, 请上传 update-ota.ufw。"));
-                        return;
-                    }
-                    JL_FILE_HEAD_PLAIN *h = (JL_FILE_HEAD_PLAIN *)head64;
-                    upl.file_size = h->length;   /* 外层头: 整包长度 */
-                    printf("[ota-http] head ok: len %u\n", upl.file_size);
-                }
-                if (head_got == 64) {
-                    /* 内层 app_core 头: dataCrc = 写镜像 CRC(包内约定), 内层长度须吻合 */
-                    JL_FILE_HEAD_PLAIN *h2 = (JL_FILE_HEAD_PLAIN *)(head64 + 32);
-                    printf("[ota-http] inner head: %.16s len %u addr 0x%x\n",
-                           h2->name, h2->length, h2->addr);
-                    if (h2->length != upl.file_size - 64 ||
-                        memcmp(h2->name, "app_core", 8) != 0) {
-                        net_fclose(upl.fd, 1);
-                        upl.fd = NULL;
-                        ota_ui_resume();
-                        http_send(conn, HTML_HDR_200,
-                                  upload_finish_page("升级文件内层头异常, 请用构建产出的 update-ota.ufw。"));
-                        return;
-                    }
-                    upl.data_crc = h2->data_crc;
-                }
+        if (head_got >= 32 && !upl.head_ok) {
+            upl.head_ok = (jl_file_head_valid_check(head64) == 0);
+            if (!upl.head_ok) {
+                free(cache);
+                ota_spill_free();
+                ota_ui_resume();
+                ota_send_err(conn, "文件头校验失败, 请上传 update-ota.ufw");
+                return;
             }
-            /* 投喂(文件流含 32B 头), CRC 跳过头 32B, 超出声明长度的丢弃 */
-            u32 want = upl.file_size > upl.recv_total ?
-                       (upl.file_size - upl.recv_total) : 0;
-            if (want == 0) {
-                done = 1;                /* 文件收满, 剩余全是尾边界 */
-            } else {
-                int feed = emit < (int)want ? emit : (int)want;
-                int wret = net_fwrite(upl.fd, (u8 *)window, feed, 0);
-                if (wret != feed) {
-                    /* 详细诊断页: 偏移/返回码/目标地址/回读/boot/双层头 */
-                    u32 tgt = 0;
-                    int rb = -1;
-                    if (ctx_ok) {
-                        tgt = get_target_udate_addr();
-                        u8 rbbuf[64];
-                        u32 rn = dual_bank_update_read_data(0, rbbuf, 64);
-                        rb = (rn != 64) ? -2 : memcmp(rbbuf, head64, 64);
-                    }
-                    char n1[17], n2[17], diag[420];
-                    memcpy(n1, head64 + 16, 16);  n1[16] = 0;
-                    memcpy(n2, head64 + 48, 16);  n2[16] = 0;
-                    JL_FILE_HEAD_PLAIN *h2 = (JL_FILE_HEAD_PLAIN *)(head64 + 32);
-                    snprintf(diag, sizeof(diag),
-                        "写入 flash 失败(offset=%u ret=%d)<br>"
-                        "tgt=%08x rb=%d (rb:0=首4K已落盘 1=未写入 -1=未到落盘 -2=读失败)<br>"
-                        "boot: ret=%d ver=%u base=%08x len=%08x<br>"
-                        "heads: [%s len=%u] [%s len=%u addr=%u]",
-                        upl.recv_total, wret, tgt, rb,
-                        biret, bi.version, bi.baseAddress, bi.codeLength,
-                        n1, upl.file_size, n2, h2->length, h2->addr);
-                    printf("[ota-http] net_fwrite fail @%u ret=%d tgt=0x%x rb=%d\n",
-                           upl.recv_total, wret, tgt, rb);
-                    net_fclose(upl.fd, 1);
-                    upl.fd = NULL;
-                    ota_ui_resume();
-                    http_send(conn, HTML_HDR_200, upload_finish_page(diag));
-                    return;
-                }
-                upl.recv_total += feed;
-                if (upl.recv_total >= 4096) {
-                    ctx_ok = 1;         /* 首 4K 已成功过, update ctx 有效 */
-                }
-                /* CRC: 跳过文件头 32B */
-                int cs = 0;
-                while (feed > cs && upl.crc_skip) {
-                    cs++;
-                    upl.crc_skip--;
-                }
-                if (feed > cs) {
-                    upl.calc_crc = calc_crc16_with_init_val(upl.calc_crc,
-                                                            window + cs, (u16)(feed - cs));
-                }
+            upl.file_size = ((JL_FILE_HEAD_PLAIN *)head64)->length;
+            printf("[ota-http] head ok: len %u\n", upl.file_size);
+            /* 尽量整包缓存, 避免边收边烧堵 TCP */
+            (void)ota_cache_grow(&cache, &cache_cap, upl.file_size);
+        }
+        if (head_got == 64) {
+            JL_FILE_HEAD_PLAIN *h2 = (JL_FILE_HEAD_PLAIN *)(head64 + 32);
+            printf("[ota-http] inner head: %.16s len %u addr 0x%x\n",
+                   h2->name, h2->length, h2->addr);
+            if (h2->length != upl.file_size - 64 ||
+                memcmp(h2->name, "app_core", 8) != 0) {
+                free(cache);
+                ota_spill_free();
+                ota_ui_resume();
+                ota_send_err(conn, "内层头异常, 请用构建产出的 update-ota.ufw");
+                return;
             }
-            memmove(window, window + emit, wlen - emit);
-            wlen -= emit;
-        } else {
-            /* 窗口全是"疑似边界": 再收一字节推进(理论上 keep>边界长, 不会卡死) */
-            int r = recv(conn, recvbuf, 1, 0);
-            if (r <= 0) {
-                done = 2;
-            } else if (wlen < (int)sizeof(window)) {
-                window[wlen++] = recvbuf[0];
-            }
+            upl.data_crc = h2->data_crc;
         }
     }
 
-    printf("[ota-http] recv %u / expect %u, crc %04x vs %04x\n",
+    /* 头 64B 已从流解析, 仍须计入文件流(recv_total/CRC 约定含双头) */
+    fail_fr = ota_feed_file(conn, cache, cache_cap, &cache_fill, head64, 64);
+    if (fail_fr) {
+        goto feed_fail;
+    }
+
+    if (wlen > 0) {
+        u32 remain = upl.file_size - upl.recv_total;
+        int feed = wlen < (int)remain ? wlen : (int)remain;
+        if (feed > 0) {
+            fail_fr = ota_feed_file(conn, cache, cache_cap, &cache_fill, window, feed);
+            if (fail_fr) {
+                goto feed_fail;
+            }
+            memmove(window, window + feed, wlen - feed);
+            wlen -= feed;
+        }
+    }
+    if (slen > 0 && upl.recv_total < upl.file_size) {
+        u32 remain = upl.file_size - upl.recv_total;
+        int feed = slen < (int)remain ? slen : (int)remain;
+        fail_fr = ota_feed_file(conn, cache, cache_cap, &cache_fill, stream, feed);
+        if (fail_fr) {
+            goto feed_fail;
+        }
+        stream += feed;
+        slen -= feed;
+    }
+
+    /* ---- 阶段2: 精确再收 (file_size - recv_total) 字节, 不再留 keep 尾巴 ---- */
+    while (upl.recv_total < upl.file_size || ota_spill_fill || cache_fill >= cache_cap) {
+        /* 先把 drain 进 spill 的字节并入主缓存(已计 recv_total) */
+        fail_fr = ota_cache_feed(conn, cache, cache_cap, &cache_fill, NULL, 0);
+        if (fail_fr) {
+            goto feed_fail;
+        }
+        if (upl.recv_total >= upl.file_size && !ota_spill_fill) {
+            break;
+        }
+        u32 remain = upl.file_size - upl.recv_total;
+        u32 space = cache_cap - cache_fill;
+        if (space == 0) {
+            fail_fr = ota_flush_cache(conn, cache, cache_fill, 0);
+            if (fail_fr) {
+                goto feed_fail;
+            }
+            cache_fill = 0;
+            space = cache_cap;
+            /* flush 期间可能又 drain 了 spill */
+            continue;
+        }
+        if (!remain) {
+            break;
+        }
+        u32 bulk = remain;
+        if (bulk > space) {
+            bulk = space;
+        }
+        if (bulk > sizeof(recvbuf)) {
+            bulk = sizeof(recvbuf);
+        }
+        int r = recv(conn, recvbuf, (int)bulk, 0);
+        if (r <= 0) {
+            printf("[ota-http] recv stall/timeout at %u/%u spill=%u\n",
+                   (unsigned)upl.recv_total, (unsigned)upl.file_size,
+                   (unsigned)ota_spill_fill);
+            /* 再试几次: STA/软AP 偶发空窗; 顺带再 drain */
+            int retry;
+            for (retry = 0; retry < 12 && r <= 0; retry++) {
+                wdt_clear();
+                ota_tcp_drain(conn);
+                if (ota_spill_fill) {
+                    break;
+                }
+                os_time_dly(10);
+                r = recv(conn, recvbuf, (int)bulk, 0);
+            }
+            if (r <= 0 && !ota_spill_fill) {
+                free(cache);
+                ota_spill_free();
+                if (upl.fd) {
+                    net_fclose(upl.fd, 1);
+                    upl.fd = NULL;
+                }
+                ota_ui_resume();
+                ota_send_err(conn, "接收超时/中断, 请靠近路由器后重试");
+                return;
+            }
+            if (r <= 0) {
+                continue;                /* 仅 spill 有货, 下一轮并入 cache */
+            }
+        }
+        fail_fr = ota_feed_file(conn, cache, cache_cap, &cache_fill, recvbuf, r);
+        if (fail_fr) {
+            goto feed_fail;
+        }
+        if (upl.recv_total - last_log >= 128 * 1024 ||
+            upl.recv_total >= upl.file_size) {
+            last_log = upl.recv_total;
+            printf("[ota-http] recv %u / %u (%u%%)\n",
+                   (unsigned)upl.recv_total, (unsigned)upl.file_size,
+                   (unsigned)(upl.recv_total * 100u / upl.file_size));
+        }
+        wdt_clear();
+    }
+
+    /* 排空 multipart 尾(\r\n--boundary--), 不解析内容 */
+    {
+        int to_ms = 200;
+        setsockopt(conn, SOL_SOCKET, SO_RCVTIMEO, &to_ms, sizeof(to_ms));
+        for (int i = 0; i < 16; i++) {
+            int r = recv(conn, recvbuf, sizeof(recvbuf), 0);
+            if (r <= 0) {
+                break;
+            }
+            wdt_clear();
+        }
+    }
+
+    /* 收齐后把 spill 并入再 CRC 判定 */
+    fail_fr = ota_cache_feed(conn, cache, cache_cap, &cache_fill, NULL, 0);
+    if (fail_fr) {
+        goto feed_fail;
+    }
+
+    printf("[ota-http] recv %u / expect %u, crc %04x vs %04x, burned %u, cache_fill %u\n",
            (unsigned)upl.recv_total, (unsigned)upl.file_size,
-           upl.calc_crc, upl.data_crc);
-    if (done != 1 || !upl.head_ok || upl.recv_total != upl.file_size ||
+           upl.calc_crc, upl.data_crc,
+           (unsigned)upl.burn_total, (unsigned)cache_fill);
+
+    if (!upl.head_ok || upl.recv_total != upl.file_size ||
         upl.calc_crc != upl.data_crc) {
-        char diag[160];
+        char diag[128];
         snprintf(diag, sizeof(diag),
-                 "CRC 校验失败: done=%d recv=%u/%u crc=%04x/%04x, 请重试。",
-                 done, (unsigned)upl.recv_total, (unsigned)upl.file_size,
+                 "CRC失败 recv=%u/%u crc=%04x/%04x",
+                 (unsigned)upl.recv_total, (unsigned)upl.file_size,
                  upl.calc_crc, upl.data_crc);
-        net_fclose(upl.fd, 1);           /* 不烧写不复位 */
-        upl.fd = NULL;
+        if (upl.fd) {
+            net_fclose(upl.fd, 1);
+            upl.fd = NULL;
+        }
+        free(cache);
+        ota_spill_free();
         ota_ui_resume();
-        http_send(conn, HTML_HDR_200, upload_finish_page(diag));
+        ota_send_err(conn, diag);
+        return;
+    }
+
+    ota_send_line(conn, "U100\n");
+    if (upl.burn_total && upl.file_size) {
+        ota_send_burn_pct(conn, upl.burn_total, upl.file_size);
+    }
+    if (cache_fill) {
+        /* 收齐后再烧: recv_total 已满, drain 会自行跳过 */
+        fail_fr = ota_flush_cache(conn, cache, cache_fill, 1);
+        cache_fill = 0;
+        if (fail_fr) {
+            goto feed_fail;
+        }
+    }
+    free(cache);
+    cache = NULL;
+    ota_spill_free();
+
+    if (!upl.fd) {
+        ota_ui_resume();
+        ota_send_err(conn, "内部错误: 无 OTA 句柄");
         return;
     }
 
     printf("[ota-http] crc ok, burn boot info, reboot in 2s\n");
-    net_fclose(upl.fd, 0);               /* 烧 boot info + 2s 后复位 */
+    ota_send_burn_pct(conn, upl.file_size, upl.file_size);
+    ota_send_line(conn, "OK\n");
+    net_fclose(upl.fd, 0);
     upl.fd = NULL;
-    /* 成功后保持 UI 挂起, 即将复位 */
-    http_send(conn, HTML_HDR_200,
-              upload_finish_page("校验通过, 设备即将重启升级..."));
-    while (1) {                          /* 等复位 */
+    while (1) {
         wdt_clear();
         os_time_dly(100);
     }
+
+feed_fail:
+    if (upl.fd) {
+        net_fclose(upl.fd, 1);
+        upl.fd = NULL;
+    }
+    if (cache) {
+        free(cache);
+    }
+    ota_spill_free();
+    ota_ui_resume();
+    ota_send_err(conn, fail_fr == -1 ? "OTA 忙" : "写入 flash 失败");
+    return;
 
 bad_req:
     send(conn, "HTTP/1.0 400 Bad Request\r\nConnection: close\r\n\r\n", 46, 0);
@@ -793,7 +1222,7 @@ static void http_server_task(void *arg)
     (void)arg;
     int srv = socket(AF_INET, SOCK_STREAM, 0);
     if (srv < 0) {
-        printf("[prov] socket fail\n");
+        prov_log("[prov] socket fail\n");
         return;
     }
     struct sockaddr_in addr;
@@ -802,11 +1231,11 @@ static void http_server_task(void *arg)
     addr.sin_port = htons(PROV_HTTP_PORT);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(srv, (struct sockaddr *)&addr, sizeof(addr)) < 0 || listen(srv, 2) < 0) {
-        printf("[prov] bind/listen fail\n");
+        prov_log("[prov] bind/listen fail\n");
         close(srv);
         return;
     }
-    printf("[prov] http server on :%d\n", PROV_HTTP_PORT);
+    prov_log("[prov] http server on :%d\n", PROV_HTTP_PORT);
 
     static char req[4096];
     while (1) {
@@ -877,17 +1306,17 @@ hdr_done:
 void wifi_prov_run(void)
 {
     if (!prov_has_stored) {
-        printf("[prov] no stored wifi, goto AP\n");
+        prov_log("[prov] no stored wifi, goto AP\n");
         goto enter_ap;
     }
-    printf("[prov] stored '%s', connecting...\n", prov_stored_ssid);
+    prov_log("[prov] stored '%s', connecting...\n", prov_stored_ssid);
 
     for (int attempt = 1; attempt <= PROV_STA_ATTEMPTS; attempt++) {
         if (prov_wait_sta_once() == 0) {
-            printf("[prov] STA connected, DHCP ok\n");
+            prov_log("[prov] STA connected, DHCP ok\n");
             goto http_start;
         }
-        printf("[prov] attempt %d/%d failed\n", attempt, PROV_STA_ATTEMPTS);
+        prov_log("[prov] attempt %d/%d failed\n", attempt, PROV_STA_ATTEMPTS);
         if (attempt < PROV_STA_ATTEMPTS) {
             wifi_enter_sta_mode(prov_stored_ssid, prov_stored_pwd);
         }
@@ -900,13 +1329,13 @@ enter_ap:
         snprintf(prov_ap_ssid, sizeof(prov_ap_ssid), "WL82-%02x%02x%02x",
                  mac[3], mac[4], mac[5]);
     }
-    printf("[prov] enter AP: %s pwd %s\n", prov_ap_ssid, PROV_AP_PWD);
+    prov_log("[prov] enter AP: %s pwd %s\n", prov_ap_ssid, PROV_AP_PWD);
     prov_dhcp_ok = 0;
     wifi_enter_ap_mode(prov_ap_ssid, PROV_AP_PWD);
     for (int i = 0; i < 100 && !prov_ap_active; i++) {   /* 最长 10s */
         os_time_dly(10);
     }
-    printf("[prov] AP active, portal: http://192.168.1.1\n");
+    prov_log("[prov] AP active, portal: http://192.168.1.1\n");
 
 http_start:
     os_task_create(http_server_task, NULL, 11, 8192, 0, "prov_http");
@@ -918,7 +1347,7 @@ http_start:
             while (wait++ < 120) {       /* 60s */
                 if (prov_dhcp_ok ||
                     wifi_get_sta_connect_state() == WIFI_STA_NETWORK_STACK_DHCP_SUCC) {
-                    printf("[prov] portal wifi connected\n");
+                    prov_log("[prov] portal wifi connected\n");
                     portal_sta_req = 0;
                     break;
                 }
@@ -926,7 +1355,7 @@ http_start:
                 wdt_clear();
             }
             if (portal_sta_req) {        /* 仍未成功 */
-                printf("[prov] portal wifi failed 60s, back to AP\n");
+                prov_log("[prov] portal wifi failed 60s, back to AP\n");
                 portal_sta_req = 0;
                 prov_dhcp_ok = 0;
                 prov_ap_active = 0;
@@ -934,7 +1363,7 @@ http_start:
                 for (int i = 0; i < 100 && !prov_ap_active; i++) {
                     os_time_dly(10);
                 }
-                printf("[prov] AP re-active\n");
+                prov_log("[prov] AP re-active\n");
             }
         }
         os_time_dly(100);

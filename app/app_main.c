@@ -62,12 +62,12 @@ const struct task_info task_info_table[] = {
     {"usb_server",          20,     1024,	  64  },
     {"usb_msd0",             1,     512,	  128 },
     {"usb_msd1",             1,     512,	  128 },
-    /* BT 协议栈任务(demo_ble 同款优先级/栈) */
+    /* BT 协议栈任务(demo_edr 同款; btctrler.a 按名 task_create btencry) */
+    {"btencry",             14,     512,	  128 },
     {"btctrler",            19,     512,	  384 },
     {"btstack",             18,     768,	  384 },
     {"bt_app",              12,     1024,   0   },
-    {"wifi_app",            12,     1024,   0   },
-    /* WiFi 协议栈任务(demo_wifi 同款) */
+    {"wifi_app",            12,     2048,   0   },
     /* WiFi 协议栈任务(demo_wifi 同款, 库按名字 task_create, 缺一不可):
      * tasklet=收发主任务, RtmpMlmeTask=MLME 状态机, RtmpCmdQTask=命令队列,
      * wl_rx_irq_thread=RX 中断线程 */
@@ -76,15 +76,21 @@ const struct task_info task_info_table[] = {
     {"RtmpCmdQTask",        17,     300,    0   },
     {"wl_rx_irq_thread",     5,     256,    0   },
     /* 双备份升级任务(update.a 按名 task_create; 缺失→返回-14→U盘/WiFi 升级首包 fw_fail) */
+    {"update",              21,     512,    32  },
     {"dw_update",           10,     1024,   64  },
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
-    /* 音频库任务(demo_DevKitBoard 同款参数, audio_server 库按名字 task_create):
-     * audio_server=服务主任务, audio_mix=叠音, audio_decoder/audio_encoder=解码/编码 */
+    /* 音频库任务(demo_edr + DevKitBoard/DNS; 库按名字 task_create, 缺表项会创建失败) */
     {"audio_server",        16,     512,    64  },
     {"audio_mix",           28,     512,    0   },
     {"audio_decoder",       30,     1024,   64  },
     {"audio_encoder",       12,     384,    64  },
-    {"echo_deal",           11,     1024,   32  },   /* AEC 回采处理(demo_DevKitBoard 同款) */
+    {"echo_deal",           11,     1024,   32  },
+    {"aec_encoder",         13,     1024,   0   },
+    {"dns_encoder",         13,     512,    0   },
+    {"msbc_encoder",        13,     256,    0   },
+    {"sbc_encoder",         13,     512,    0   },
+    {"cvsd_encoder",        13,     512,    0   },
+    {"vir_dev_task",        13,     256,    0   },
 #endif
     {0, 0, 0, 0, 0},
 };
@@ -329,9 +335,9 @@ static void usb_mode_task(void *p)
 {
     os_time_dly(100);    /* 等 boot 日志打完 */
 #if MINI_USB_CDC_ENABLE
-    printf("[usb] CherryUSB CDC(log) + MSC 4MB RAM disk composite\n");
+    printf("[usb] CherryUSB CDC(log) + MSC 3MB RAM disk composite\n");
 #else
-    printf("[usb] CherryUSB MSC-only 4MB RAM disk on EP1\n");
+    printf("[usb] CherryUSB MSC-only 3MB RAM disk on EP1\n");
 #endif
     msc_only_init(CHERRYUSB_BUSID, JL82_HUSB_SIE_BASE);
 
@@ -377,7 +383,8 @@ void app_main()
     extern void bt_wifi_start_deferred(void);
     key_early_init();
     bt_wifi_start_deferred();
-#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
+#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT && !MINI_BT_SPEAKER_EN
+    /* 音箱模式走 A2DP/HFP, 不再跑 mic→DAC 回环自检(抢 audio 设备) */
     extern void audio_demo_start(void);
     audio_demo_start();
 #endif

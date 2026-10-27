@@ -23,14 +23,14 @@
 #define CONFIG_USBDEV_EP_NUM            2   /* MSC-only test: EP0 + EP1 */
 #define CONFIG_USBDEV_REQUEST_BUFFER_LEN 512
 #define CONFIG_USBDEV_ADVANCE_DESC      1   /* 使用描述符回调接口 */
-/* MSC 设备类: 4MB SDRAM 盘, IRQ-safe queue 唤醒专用 worker */
+/* MSC 设备类: 3MB SDRAM 盘, IRQ-safe queue 唤醒专用 worker */
 #define CONFIG_USBDEV_MSC_MAX_LUN       1
 #define CONFIG_USBDEV_MSC_MAX_BUFSIZE   4096   /* 单次处理最多 4 KiB */
 #define CONFIG_USBDEV_MSC_THREAD        1
 #define CONFIG_USBDEV_MSC_PRIO          4
 #define CONFIG_USBDEV_MSC_STACKSIZE     2048
 #define CONFIG_USBDEV_MSC_MANUFACTURER_STRING   "fw-mini-sdk"
-#define CONFIG_USBDEV_MSC_PRODUCT_STRING        "WL82 4MB RAM Disk"
+#define CONFIG_USBDEV_MSC_PRODUCT_STRING        "WL82 3MB RAM Disk"
 #define CONFIG_USBDEV_MSC_VERSION_STRING        "1.00"
 /* EP0 仍在中断上下文处理; MSC SCSI/data work 由专用线程执行 */
 

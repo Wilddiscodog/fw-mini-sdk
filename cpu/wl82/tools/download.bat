@@ -28,6 +28,10 @@ copy /b text.bin+data.bin+ram0_data.bin+cache_ram_data.bin app.bin
 
 
 set UI_RES=ui_res
+set AUDIO_RES=audlogo
+
+
+
 REM Chip KEY must ride an EXISTING template line: fixbat drops newly-added
 REM lines when download.bat already has accumulated multi-CR endings.
 set KEY_FILE=-key 0x7DF1.key

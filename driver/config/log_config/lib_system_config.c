@@ -66,6 +66,12 @@ const char log_tag_const_i_SYS_TMR AT(.LOG_TAG_CONST) = (FALSE);
 const char log_tag_const_w_SYS_TMR AT(.LOG_TAG_CONST) = (TRUE);
 const char log_tag_const_e_SYS_TMR AT(.LOG_TAG_CONST) = (TRUE);
 
+const char log_tag_const_v_USER_CFG AT(.LOG_TAG_CONST) = (FALSE);
+const char log_tag_const_d_USER_CFG AT(.LOG_TAG_CONST) = (FALSE);
+const char log_tag_const_i_USER_CFG AT(.LOG_TAG_CONST) = (TRUE);
+const char log_tag_const_w_USER_CFG AT(.LOG_TAG_CONST) = (TRUE);
+const char log_tag_const_e_USER_CFG AT(.LOG_TAG_CONST) = (TRUE);
+
 const char log_tag_const_v_WAIT_COMPLETION AT(.LOG_TAG_CONST) = (FALSE);
 const char log_tag_const_d_WAIT_COMPLETION AT(.LOG_TAG_CONST) = (FALSE);
 const char log_tag_const_i_WAIT_COMPLETION AT(.LOG_TAG_CONST) = (FALSE);

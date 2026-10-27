@@ -1,5 +1,5 @@
 /*
- * CherryUSB 设备 —— MSC(4MB RAM 盘, 虚拟U盘自动升级) [+ CDC 日志口, 宏控]
+ * CherryUSB 设备 —— MSC(3MB RAM 盘, 虚拟U盘自动升级) [+ CDC 日志口, 宏控]
  *
  * 端点规划:
  *   EP1(0x81 IN / 0x01 OUT) bulk 512 —— MSC(普通 DMA 模式, V0.8 验证配置)
@@ -86,7 +86,7 @@ static const uint8_t other_speed_config_descriptor_fs[] = {
 static const char *string_descriptors[] = {
     (const char[]){ 0x09, 0x04 }, /* Langid */
     "fw-mini-sdk",                /* Manufacturer */
-    "WL82 CDC-LOG + MSC 4MB",     /* Product */
+    "WL82 CDC-LOG + MSC 3MB",     /* Product */
     "WL82-0001",                  /* Serial Number */
 };
 #else
@@ -124,7 +124,7 @@ static const uint8_t other_speed_config_descriptor_fs[] = {
 static const char *string_descriptors[] = {
     (const char[]){ 0x09, 0x04 }, /* Langid */
     "fw-mini-sdk",                /* Manufacturer */
-    "WL82 MSC-only 4MB",          /* Product */
+    "WL82 MSC-only 3MB",          /* Product */
     "WL82-0001",                  /* Serial Number */
 };
 #endif
@@ -263,18 +263,32 @@ struct usbd_endpoint cdc_notify_ep = { .ep_addr = CDC1_INT_EP, .ep_cb = usbd_cdc
 struct usbd_interface intf0; /* CDC comm */
 struct usbd_interface intf1; /* CDC data */
 #else
+/* 供 bt_wifi 延后: 等主机 SET_CONFIGURATION 完成再启射频, 避免与 MSC 枚举撞车 → Win 代码10 */
+volatile u8 g_usb_host_configured;
+
 static void usbd_event_handler(uint8_t busid, uint8_t event)
 {
     (void)busid;
-    (void)event;                      /* MSC-only: MSC 类自行管理数据端点 */
+    switch (event) {
+    case USBD_EVENT_CONFIGURED:
+        g_usb_host_configured = 1;
+        printf("[usb] configured (MSC ready)\n");
+        break;
+    case USBD_EVENT_DISCONNECTED:
+        g_usb_host_configured = 0;
+        break;
+    default:
+        break;
+    }
 }
 #endif
 
 struct usbd_interface intf_msc;
 
-/* ---- 4MB RAM 盘(8192 扇区 × 512B)。放 SDRAM .bss: RAM0(.usb_h_bss) 容量不足,
- * 且设备栈为 CPU FIFO 搬运, 对缓冲无 DMA 属性要求 ---- */
-#define MSC_RAM_SECTORS  8192u
+/* ---- 3MB RAM 盘(6144 扇区 × 512B)。放 SDRAM .bss: RAM0(.usb_h_bss) 容量不足,
+ * 且设备栈为 CPU FIFO 搬运, 对缓冲无 DMA 属性要求。
+ * 可用数据区 ≈ 3MB - 97×512 ≈ 2.95MB, 够装当前 ~1.87MB update-ota.ufw ---- */
+#define MSC_RAM_SECTORS  6144u
 #define MSC_RAM_SIZE     (MSC_RAM_SECTORS * 512u)
 static uint8_t msc_ram_disk[MSC_RAM_SIZE];
 
@@ -287,7 +301,7 @@ static uint8_t msc_ram_disk[MSC_RAM_SIZE];
 #define MSC_ROOT_ENTRIES       512u
 #define MSC_DATA_START_SECTOR  (MSC_ROOT_START_SECTOR + MSC_ROOT_ENTRIES * 32u / 512u)
 
-/* ---- FAT16 格式化(4MB 盘, 1 扇区/簇, 固定根目录) ---- */
+/* ---- FAT16 格式化(3MB 盘, 1 扇区/簇, 固定根目录) ---- */
 static void msc_ram_put16(uint32_t off, uint16_t v)
 {
     msc_ram_disk[off] = (uint8_t)v;

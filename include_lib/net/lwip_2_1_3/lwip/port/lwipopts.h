@@ -258,7 +258,9 @@ extern void dns_set_server(unsigned int *dnsserver);
 */
 //#define LWIP_NOASSERT
 
-#define LWIP_DEBUG  1
+/* 预编译 lwip_2_1_3.a 已带 DEBUG 打印; 运行期靠 app/net/wifi_log_mute.c 按行过滤。
+ * 勿 #define LWIP_DEBUG(即使=0,#ifdef 仍为真); 自源码重编 lwip 时保持关闭。 */
+/* #define LWIP_DEBUG */
 
 #ifdef LWIP_DEBUG
 

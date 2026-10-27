@@ -20,7 +20,8 @@
 #include "lwip.h"
 #include "wifi/wifi_connect.h"
 #include "system/includes.h"
-#include "syscfg/syscfg_id.h"            /* NETWORK_SSID_INFO_CNT */
+#include "syscfg/syscfg_id.h"            /* NETWORK_SSID_INFO_CNT / CFG_BT_MAC_ADDR */
+#include "asm/sfc_norflash_api.h"        /* get_norflash_uuid */
 
 extern const u8 *bt_get_mac_addr(void);
 static char save_ssid_flag, request_connect_flag;
@@ -30,6 +31,17 @@ void wifi_prov_notify(enum WIFI_EVENT event);
 void wifi_prov_default_mode_setup(void);
 void wifi_prov_run(void);
 
+/* 0=关掉 WiFi 事件/吞吐刷屏(默认); 排障改 1 */
+#ifndef MINI_WIFI_VERBOSE_LOG
+#define MINI_WIFI_VERBOSE_LOG  0
+#endif
+#if MINI_WIFI_VERBOSE_LOG
+#define wifi_vlog(...)  printf(__VA_ARGS__)
+#define wifi_vputs(s)   puts(s)
+#else
+#define wifi_vlog(...)  ((void)0)
+#define wifi_vputs(s)   ((void)0)
+#endif
 
 #define AP_SSID "AC79_WIFI_DEMO_"      //配置 AP模式的SSID前缀
 #define AP_PWD  "12345678"                //配置 AP模式的密码
@@ -146,13 +158,19 @@ static void wifi_sta_save_ssid(void)
 #include "le_trans_data.h"
 #endif
 
+#if MINI_BT_SPEAKER_EN
+extern int app_music_bt_event_handler(struct sys_event *event);
+extern int bt_music_key_event_handler(struct key_event *key);
+extern void bt_ble_module_init(void);
+#endif
+
 static void bt_status_event_handler(struct bt_event *bt)
 {
     switch (bt->event) {
         case BT_STATUS_INIT_OK:
             printf("[bt] controller init ok\n");
 #if MINI_BT_BLE_TRANS_EN
-            bt_ble_init();          /* 设置 GAP 名/广播参数, 注册透传服务并开广播 */
+            bt_ble_init();          /* GAP 名/广播 + 透传服务 */
 #endif
             break;
         default:
@@ -160,14 +178,29 @@ static void bt_status_event_handler(struct bt_event *bt)
     }
 }
 
-/* 原厂 app 框架事件路由: sys_event 任务分发给 app_default_event_handler
- * (库内 weak 符号, 强定义接管; 实测 register_sys_event_handler 路径收不到
- *  BT_STATUS_INIT_OK, 蓝牙广播未启动即此因) */
+/* 原厂 app 框架事件路由: sys_event 分发给本强定义(库 weak) */
 void app_default_event_handler(struct sys_event *event)
 {
+#if MINI_BT_SPEAKER_EN
+    if (event->type == SYS_KEY_EVENT) {
+        bt_music_key_event_handler((struct key_event *)event->payload);
+        return;
+    }
+    if (event->type == SYS_BT_EVENT) {
+        if (event->from == BT_EVENT_FROM_CON) {
+            struct bt_event *bt = (struct bt_event *)event->payload;
+            if (bt->event == BT_STATUS_INIT_OK) {
+                bt_status_event_handler(bt); /* BLE 广播 */
+            }
+        }
+        app_music_bt_event_handler(event);   /* A2DP/HFP/可发现 */
+        return;
+    }
+#else
     if (event->type == SYS_BT_EVENT && event->from == BT_EVENT_FROM_CON) {
         bt_status_event_handler((struct bt_event *)event->payload);
     }
+#endif
 }
 
 void bt_module_init(void *p)
@@ -177,7 +210,7 @@ void bt_module_init(void *p)
     os_time_dly(200);   /* 等 boot 日志与 VM 就绪 */
 
 #if MINI_BT_BLE_TRANS_EN
-    /* BLE 地址由经典蓝牙地址派生(原厂同款), MAC 从 VM/syscfg 读取 */
+    /* BLE 地址由经典蓝牙地址派生(原厂同款) */
     u8 tmp_ble_addr[6];
     extern void lib_make_ble_address(u8 *ble_address, u8 *edr_address);
     extern int le_controller_set_mac(void *addr);
@@ -190,10 +223,15 @@ void bt_module_init(void *p)
            tmp_ble_addr[3], tmp_ble_addr[4], tmp_ble_addr[5]);
 #endif
 
+#if MINI_BT_SPEAKER_EN
+    printf("[bt] speaker(classic A2DP/HFP) + btstack_init\n");
+    bt_ble_module_init();   /* function_select + bredr 注册 + btstack_init */
+#else
     printf("[bt] register event + btstack_init\n");
     extern void lmp_set_sniff_disable(void);
-    lmp_set_sniff_disable();    /* demo_ble 同款: 纯 BLE 方案关 sniff */
-    btstack_init();     /* 创建 btctrler/btstack 任务, 完成后抛 BT_STATUS_INIT_OK */
+    lmp_set_sniff_disable();
+    btstack_init();
+#endif
     printf("[bt] btstack_init done\n");
 
     while (1) {
@@ -206,12 +244,54 @@ void bt_module_init(void *p)
 /* WiFi 最小闭环: 上电 → 事件回调注册 → wifi_on → 扫描 → 打印 AP 列表
  * (回调必须先于 wifi_on 注册: 库经 RPC 线程投递首事件, 空回调 = 跳 0 崩溃) */
 
-/* WiFi MAC 来源: 强定义覆盖库 weak 默认(无人提供该函数时, 库打印
- * "must defie macadd method" 并用零 MAC)。复用 bt_get_mac_addr:
- * VM 缺省时 UID 派生 */
+/* WiFi/BT MAC: SYSCFG(CFG_BT_MAC_ADDR) 损坏时库会每次随机 → AP 名 WL82-xxxxxx 乱跳。
+ * 上电先确保有一份可持久化的地址(Flash UUID 派生), 再交给协议栈。 */
+static void mini_ensure_stable_mac(void)
+{
+    u8 mac[6];
+    int n = syscfg_read(CFG_BT_MAC_ADDR, mac, 6);
+    if (n == 6) {
+        u8 z = 1, f = 1;
+        for (int i = 0; i < 6; i++) {
+            if (mac[i]) {
+                z = 0;
+            }
+            if (mac[i] != 0xff) {
+                f = 0;
+            }
+        }
+        if (!z && !f) {
+            return;                  /* 已有合法 MAC */
+        }
+    }
+    u8 *uid = get_norflash_uuid();
+    if (uid) {
+        mac[0] = 0x6c;
+        mac[1] = 0xcc;
+        mac[2] = 0xf0;
+        mac[3] = uid[0] ^ uid[5];
+        mac[4] = uid[1] ^ uid[4];
+        mac[5] = uid[2] ^ uid[3];
+    } else {
+        u32 t = (u32)jiffies;
+        mac[0] = 0x6c;
+        mac[1] = 0xcc;
+        mac[2] = 0xf0;
+        mac[3] = (u8)(t >> 16);
+        mac[4] = (u8)(t >> 8);
+        mac[5] = (u8)t;
+    }
+    mac[0] &= 0xfe;                  /* 单播 */
+    syscfg_write(CFG_BT_MAC_ADDR, mac, 6);
+    printf("[mac] SYSCFG miss/bad, saved %02x:%02x:%02x:%02x:%02x:%02x (UUID-derived)\n",
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
+/* WiFi MAC 来源: 强定义覆盖库 weak 默认。先 ensure 再读。 */
 int init_net_device_mac_addr(char *macaddr, char ap_mode)
 {
     (void)ap_mode;
+    mini_ensure_stable_mac();
     memcpy(macaddr, bt_get_mac_addr(), 6);
     return 0;
 }
@@ -238,7 +318,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         break;
 
     case WIFI_EVENT_MODULE_START:
-        puts("|network_user_callback->WIFI_EVENT_MODULE_START\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_MODULE_START\n");
 
         struct wifi_mode_info info;
         info.mode = NONE_MODE;
@@ -279,7 +359,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         break;
     case WIFI_EVENT_MODULE_STOP:
-        puts("|network_user_callback->WIFI_EVENT_MODULE_STOP\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_MODULE_STOP\n");
         break;
 
     case WIFI_EVENT_AP_START:
@@ -287,28 +367,28 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         wifi_set_sta_connect_best_ssid(0);
         wifi_set_store_ssid_cnt(NETWORK_SSID_INFO_CNT);
         wifi_rxfilter_cfg(1);            /* AP 默认不过滤, 扫描依赖广播 beacon */
-        printf("[wifi] AP active: best-ssid reconnect off, rxfilter=AP-open\n");
-        printf("|network_user_callback->WIFI_EVENT_AP_START,CH=%d\n", wifi_get_channel());
+        wifi_vlog("[wifi] AP active: best-ssid reconnect off, rxfilter=AP-open\n");
+        wifi_vlog("|network_user_callback->WIFI_EVENT_AP_START,CH=%d\n", wifi_get_channel());
 #ifdef USE_FTP_UPGRADE_DEMO
         extern void ftp_update_test(void);
         ftp_update_test();
 #endif //USE_FTP_UPGRADE_DEMO
         break;
     case WIFI_EVENT_AP_STOP:
-        puts("|network_user_callback->WIFI_EVENT_AP_STOP\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_AP_STOP\n");
         break;
 
     case WIFI_EVENT_STA_START:
-        puts("|network_user_callback->WIFI_EVENT_STA_START\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_STA_START\n");
         break;
     case WIFI_EVENT_MODULE_START_ERR:
-        puts("|network_user_callback->WIFI_EVENT_MODULE_START_ERR\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_MODULE_START_ERR\n");
         break;
     case WIFI_EVENT_STA_STOP:
-        puts("|network_user_callback->WIFI_EVENT_STA_STOP\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_STA_STOP\n");
         break;
     case WIFI_EVENT_STA_DISCONNECT:
-        puts("|network_user_callback->WIFI_STA_DISCONNECT\n");
+        wifi_vputs("|network_user_callback->WIFI_STA_DISCONNECT\n");
         /*wifi_rxfilter_cfg(0);*/
 
 #ifdef CONFIG_ASSIGN_MACADDR_ENABLE
@@ -328,14 +408,14 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 #endif
         break;
     case WIFI_EVENT_STA_SCAN_COMPLETED:
-        puts("|network_user_callback->WIFI_STA_SCAN_COMPLETED\n");
+        wifi_vputs("|network_user_callback->WIFI_STA_SCAN_COMPLETED\n");
 #ifdef CONFIG_AIRKISS_NET_CFG
         extern void airkiss_ssid_check(void);
         airkiss_ssid_check();
 #endif
         break;
     case WIFI_EVENT_STA_CONNECT_SUCC:
-        printf("|network_user_callback->WIFI_STA_CONNECT_SUCC,CH=%d\r\n", wifi_get_channel());
+        wifi_vlog("|network_user_callback->WIFI_STA_CONNECT_SUCC,CH=%d\r\n", wifi_get_channel());
         /*wifi_rxfilter_cfg(3);    //过滤not_my_bssid,如果需要使用扫描空中SSID就不要过滤*/
 #ifdef CONFIG_STATIC_IPADDR_ENABLE
         if (0 == compare_dhcp_ipaddr()) {
@@ -346,30 +426,30 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         break;
 
     case WIFI_EVENT_MP_TEST_START:
-        puts("|network_user_callback->WIFI_EVENT_MP_TEST_START\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_MP_TEST_START\n");
         break;
     case WIFI_EVENT_MP_TEST_STOP:
-        puts("|network_user_callback->WIFI_EVENT_MP_TEST_STOP\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_MP_TEST_STOP\n");
         break;
 
     case WIFI_EVENT_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID:
-        puts("|network_user_callback->WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID\n");
+        wifi_vputs("|network_user_callback->WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID\n");
         net.event = NET_CONNECT_TIMEOUT_NOT_FOUND_SSID;
         net_event_notify(NET_EVENT_FROM_USER, &net);
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_FAIL:
-        puts("|network_user_callback->WIFI_STA_CONNECT_ASSOCIAT_FAIL .....\n");
+        wifi_vputs("|network_user_callback->WIFI_STA_CONNECT_ASSOCIAT_FAIL .....\n");
         net.event = NET_CONNECT_ASSOCIAT_FAIL;
         net_event_notify(NET_EVENT_FROM_USER, &net);
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_TIMEOUT:
-        puts("|network_user_callback->WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT .....\n");
+        wifi_vputs("|network_user_callback->WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT .....\n");
         break;
 
     case WIFI_EVENT_STA_NETWORK_STACK_DHCP_SUCC:
-        puts("|network_user_callback->WIFI_EVENT_STA_NETWPRK_STACK_DHCP_SUCC\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_STA_NETWPRK_STACK_DHCP_SUCC\n");
 
 #ifdef USE_DevKitBoard_TEST_DEMO
         os_taskq_post("ui_main_task", 1, UI_MSG_WIFI_STA_CONNT_OK);
@@ -392,59 +472,59 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         net_event_notify(NET_EVENT_FROM_USER, &net);
         break;
     case WIFI_EVENT_STA_NETWORK_STACK_DHCP_TIMEOUT:
-        puts("|network_user_callback->WIFI_EVENT_STA_NETWPRK_STACK_DHCP_TIMEOUT\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_STA_NETWPRK_STACK_DHCP_TIMEOUT\n");
         break;
 
     case WIFI_EVENT_P2P_START:
-        puts("|network_user_callback->WIFI_EVENT_P2P_START\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_P2P_START\n");
         break;
     case WIFI_EVENT_P2P_STOP:
-        puts("|network_user_callback->WIFI_EVENT_P2P_STOP\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_P2P_STOP\n");
         break;
     case WIFI_EVENT_P2P_GC_DISCONNECTED:
-        puts("|network_user_callback->WIFI_EVENT_P2P_GC_DISCONNECTED\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_P2P_GC_DISCONNECTED\n");
         break;
     case WIFI_EVENT_P2P_GC_NETWORK_STACK_DHCP_SUCC:
-        puts("|network_user_callback->WIFI_EVENT_P2P_GC_NETWORK_STACK_DHCP_SUCC\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_P2P_GC_NETWORK_STACK_DHCP_SUCC\n");
         break;
     case WIFI_EVENT_P2P_GC_NETWORK_STACK_DHCP_TIMEOUT:
-        puts("|network_user_callback->WIFI_EVENT_P2P_GC_NETWORK_STACK_DHCP_TIMEOUT\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_P2P_GC_NETWORK_STACK_DHCP_TIMEOUT\n");
         break;
 
     case WIFI_EVENT_SMP_CFG_START:
-        puts("|network_user_callback->WIFI_EVENT_SMP_CFG_START\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_SMP_CFG_START\n");
         break;
     case WIFI_EVENT_SMP_CFG_STOP:
-        puts("|network_user_callback->WIFI_EVENT_SMP_CFG_STOP\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_SMP_CFG_STOP\n");
         break;
     case WIFI_EVENT_SMP_CFG_TIMEOUT:
-        puts("|network_user_callback->WIFI_EVENT_SMP_CFG_TIMEOUT\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_SMP_CFG_TIMEOUT\n");
         net.event = NET_EVENT_SMP_CFG_TIMEOUT;
         net_event_notify(NET_EVENT_FROM_USER, &net);
         break;
     case WIFI_EVENT_SMP_CFG_COMPLETED:
-        puts("|network_user_callback->WIFI_EVENT_SMP_CFG_COMPLETED\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_SMP_CFG_COMPLETED\n");
         net.event = NET_SMP_CFG_COMPLETED;
         net_event_notify(NET_EVENT_FROM_USER, &net);
         break;
 
     case WIFI_EVENT_PM_SUSPEND:
-        puts("|network_user_callback->WIFI_EVENT_PM_SUSPEND\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_PM_SUSPEND\n");
         break;
     case WIFI_EVENT_PM_RESUME:
-        puts("|network_user_callback->WIFI_EVENT_PM_RESUME\n");
+        wifi_vputs("|network_user_callback->WIFI_EVENT_PM_RESUME\n");
         break;
     case WIFI_EVENT_AP_ON_ASSOC:
         ;
         struct eth_addr *hwaddr = (struct eth_addr *)network_ctx;
-        printf("WIFI_EVENT_AP_ON_ASSOC hwaddr = %02x:%02x:%02x:%02x:%02x:%02x \r\n\r\n",
+        wifi_vlog("WIFI_EVENT_AP_ON_ASSOC hwaddr = %02x:%02x:%02x:%02x:%02x:%02x \r\n\r\n",
                hwaddr->addr[0], hwaddr->addr[1], hwaddr->addr[2], hwaddr->addr[3], hwaddr->addr[4], hwaddr->addr[5]);
         break;
     case WIFI_EVENT_AP_ON_DISCONNECTED:
         struct ip4_addr ipaddr;
         hwaddr = (struct eth_addr *)network_ctx;
         dhcps_get_ipaddr(hwaddr->addr, &ipaddr);
-        printf("WIFI_EVENT_AP_ON_DISCONNECTED hwaddr = %02x:%02x:%02x:%02x:%02x:%02x, ipaddr = [%d.%d.%d.%d] \r\n\r\n",
+        wifi_vlog("WIFI_EVENT_AP_ON_DISCONNECTED hwaddr = %02x:%02x:%02x:%02x:%02x:%02x, ipaddr = [%d.%d.%d.%d] \r\n\r\n",
                hwaddr->addr[0], hwaddr->addr[1], hwaddr->addr[2], hwaddr->addr[3], hwaddr->addr[4], hwaddr->addr[5],
                ip4_addr1(&ipaddr), ip4_addr2(&ipaddr), ip4_addr3(&ipaddr), ip4_addr4(&ipaddr));
         break;
@@ -457,6 +537,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
 static void wifi_status(void *p)
 {
+#if MINI_WIFI_VERBOSE_LOG
     if (wifi_is_on()) {
         stats_display(); //LWIP stats
         printf("WIFI U= %d KB/s, D= %d KB/s\r\n", wifi_get_upload_rate() / 1024, wifi_get_download_rate() / 1024);
@@ -479,6 +560,9 @@ static void wifi_status(void *p)
             printf("Router_RSSI=%d,Quality=%d \r\n", wifi_get_rssi(), wifi_get_cqi()); //侦测路由器端信号质量
         }
     }
+#else
+    (void)p;
+#endif
 }
 
 /* WiFi 应用任务: 注册回调(必须先于 wifi_on: 库经 RPC 投递首事件, 空回调跳 0)
@@ -541,18 +625,30 @@ void bt_wifi_start(void)
     wifi_start();
 }
 
-/* 延后自启: app_main 里立刻 bt_wifi_start 会与 USB 枚举(~1s)撞车,
- * 日志截断、WiFi 异常; 按键晚启则正常。等 USB/系统 steadier 再拉起。 */
-#ifndef BT_WIFI_BOOT_DELAY_TICKS
-#define BT_WIFI_BOOT_DELAY_TICKS  500   /* 5s; os tick=10ms */
+/* 延后自启: 必须等 USB SET_CONFIGURATION 完成后再拉射频。
+ * 旧策略固定延后 5s, 但主机常在 5~8s 才配完 MSC, 与 BT/WiFi 初始化重叠 → Win 代码10。 */
+#ifndef BT_WIFI_USB_WAIT_TICKS
+#define BT_WIFI_USB_WAIT_TICKS  1500  /* 最长等 15s; tick=10ms */
+#endif
+
+#if (MINI_USB_MODE == MINI_USB_MODE_DEVICE) && !MINI_USB_CDC_ENABLE
+extern volatile u8 g_usb_host_configured;
+#else
+static volatile u8 g_usb_host_configured = 1; /* 非 MSC 设备模式: 不挡 */
 #endif
 
 static void bt_wifi_boot_task(void *p)
 {
     (void)p;
-    printf("[boot] BT/WiFi deferred %d ms...\n", BT_WIFI_BOOT_DELAY_TICKS * 10);
-    os_time_dly(BT_WIFI_BOOT_DELAY_TICKS);
-    printf("[boot] starting BT + WiFi now\n");
+    int waited = 0;
+    printf("[boot] wait USB configured (max %d ms)...\n", BT_WIFI_USB_WAIT_TICKS * 10);
+    while (waited < BT_WIFI_USB_WAIT_TICKS && !g_usb_host_configured) {
+        os_time_dly(1);
+        waited++;
+    }
+    mini_ensure_stable_mac();
+    printf("[boot] usb_cfg=%u waited=%dms, starting BT + WiFi\n",
+           (unsigned)g_usb_host_configured, waited * 10);
     bt_wifi_start();
     while (1) {
         os_time_dly(10000);

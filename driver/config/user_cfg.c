@@ -137,7 +137,7 @@ const char *bt_get_local_name(void)
 #ifndef CONFIG_RF_TEST_ENABLE
     const u8 *mac_addr;
     mac_addr = bt_get_mac_addr();
-    sprintf(edr_name, "JL-AC79XX-%02X%02X", mac_addr[4], mac_addr[5]);
+    sprintf(edr_name, "WL82-Speaker-%02X%02X", mac_addr[4], mac_addr[5]);
 #endif
     return edr_name;
 }

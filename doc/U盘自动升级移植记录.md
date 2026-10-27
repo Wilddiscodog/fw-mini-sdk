@@ -76,6 +76,10 @@ VM_START_ADDR : 0xff5000
 jl_isd.ufw(双备份全量镜像), 之后才能走虚拟U盘升级。** 升级文件用
 tools/update-ota.ufw, 不要用 jl_isd.ufw。
 
+**VM 保留**: `isd_config_rule.c` 中 `VM_OPT` 必须为 `1`, 否则 OTA
+`burn_boot_info` 会擦掉 `0xff5000` 的 32K VM(WiFi 已存 SSID/密码一并丢失)。
+改完后需重新 `make` 生成 `update-ota.ufw` 再升级才生效。
+
 ## 4. 使用方法
 
 1. (仅首次)烧录 jl_isd.ufw 全量镜像。

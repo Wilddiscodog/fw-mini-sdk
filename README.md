@@ -1,8 +1,8 @@
 # fw-mini-sdk（AC7912BB / WL82 精简 SDK）
 
 当前版本: **V1.1.6**（`app/include/fw_version.h`，启动横幅打印）
-- USB **组合设备**（CherryUSB，高速口）：CDC 日志串口 + MSC 4MB 虚拟U盘
-  （VID=0xFFFF/PID=0x0003，Win10+/Linux 免驱）；拖入 `.UFW` 静默 3s 自动校验烧写复位
+- USB **组合设备**（CherryUSB，高速口）：CDC 日志串口 + MSC 3MB 虚拟U盘
+   （VID=0xFFFF/PID=0x0003，Win10+/Linux 免驱）；拖入 `.UFW` 静默 3s 自动校验烧写复位
 - USB **主机 MSC**（CherryUSB，U盘）可用，全速主机（`CONFIG_USBH_JL82_FORCE_FS=1`），插盘跑 1MB 读写基准
 - **LCD 240×320 JD9853（EMI 8 位并口）+ CST816 触摸 + LVGL 8.2.0 benchmark** 默认开启
 - **蓝牙 + WiFi**（原厂协议栈）：BT 开机自启；WiFi 按键2 触发，AP 配网 + 网页固件升级
@@ -63,12 +63,12 @@ C++ 开关说明：开启后自动加入全局构造调用（`cpp_run_init`）�
 | 功能 | 引脚 | 现象 |
 |---|---|---|
 | LCD 彩条自检 | EMI 8位并口 + 背光 PA6 | 开机 8s（与 USB 枚举解耦）后 8 色彩条循环，JD9853 240×320，2s/色 |
-| USB 组合设备（默认） | USB D+/D- | CDC 日志串口 + MSC 4MB 虚拟U盘；拖入 `.UFW` 静默 3s 自动升级复位 |
+| USB 组合设备（默认） | USB D+/D- | CDC 日志串口 + MSC 3MB 虚拟U盘；拖入 `.UFW` 静默 3s 自动升级复位 |
 | USB 主机(MSC) | USB D+/D-（需 VBUS 5V 供电） | `MINI_USB_MODE_HOST` 时 U盘枚举，跑 1MB 读写基准并打印速率 |
 | UART 收发 | PB3=TX, PB4=RX @115200 | 发什么回什么（回显） |
 | 硬件定时器 | 内部 TIMER5 | 1Hz 中断心跳 |
 | 蓝牙 | - | 开机自启（见 `app/bt_wifi_app.c`） |
-| WiFi 配网+网页升级 | 按键2 触发 | 读存储→STA 重试→失败转 AP，网页配网/上传固件（`app/net/wifi_prov.c`） |
+| WiFi 配网+网页升级 | 按键2 触发 | 读存储→STA 重试→失败转 AP；网页上传先入 SDRAM 缓存(目标 3MB)再烧录，带上传/烧录进度（`app/net/wifi_prov.c`） |
 | 调试打印 | PB2 @1000000 | 日志输出（CDC 串口打开时镜像走 CDC 日志口） |
 
 > SPI(W25Qxx)/软件I2C扫描/PWM 呼吸灯/ADC 采样/时钟树打印等演示任务在 `app_main.c`

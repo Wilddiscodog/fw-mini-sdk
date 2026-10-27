@@ -183,29 +183,32 @@ const struct gpcnt_platform_data gpcnt_data = {
 #endif
 
 /*============================ 内置音频: MIC + DAC (MINI_AUDIO_SUPPORT) =========
- * 结构对齐原厂 demo_DevKitBoard(已编译参考): dac_data/adc_data 数值同款;
- * xiaolu-R2 差异: 功放 PA MUTE 引脚原理图未标定 → pa_auto_mute=0(不控制 MUTE,
- * 功放常开), 定位到 MUTE 脚后改 1 + 填 pa_mute_port。 */
+ * 原理图接线(与芯片 pad 名对照):
+ *   PH8=MIC1N, PH9=MIC1P  → 拾音(通话 MIC1 差分; 相对 ladc.h「PH8=P/PH9=N」板级对调)
+ *   PH6=MIC3P, PH5=MIC3N  → 功放回采(与 ladc.h 一致)
+ *   PH7 高电平 = 功放使能(pa_mute_value=0 → MUTE 拉低, 开声拉高)
+ * 差分仍开 LADC_CH_MIC1_P_N|MIC3_P_N(两脚都进 ADC); MIC1 板级对调仅极性反相。 */
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
 #include "asm/audio.h"
 #include "server/audio_dev.h"           /* audio_platform_data + audio_dev_ops */
 static const struct dac_platform_data dac_data = {
     .sw_differ          = 0,
-    .pa_auto_mute       = 0,            /* TODO: xiaolu 功放 MUTE 脚定位后改 1 */
-    .pa_mute_port       = IO_PORTB_02,  /* TODO: 按本板硬件改 */
-    .pa_mute_value      = 0,
+    .pa_auto_mute       = 1,
+    .pa_mute_port       = IO_PORTH_07,
+    .pa_mute_value      = 0,            /* MUTE=低; 播放/通话 unmute → PH7 高=功放开 */
     .differ_output      = 0,
-    .hw_channel         = 0x05,         /* 原厂同款 DAC 模拟通道 */
+    .hw_channel         = 0x05,
     .ch_num             = 4,
     .vcm_init_delay_ms  = 1000,
     .mute_delay_ms      = 200,
 };
 static const struct adc_platform_data adc_data = {
-    .mic_channel        = LADC_CH_MIC1_P_N,   /* 内置 MIC1 差分 */
-    .mic_ch_num         = 1,
-    .linein_channel     = LADC_CH_AUX0,       /* AEC 回采通道(AEC_ADC_CHANNEL=0, 原厂同款;
-                                               * DAC 回采的物理路由需上板确认, 详见音频记录) */
-    .linein_ch_num      = 1,
+    /* MIC1 差分(PH8/PH9) + MIC3 差分(PH5/PH6); 通道号见 app_config */
+    .mic_channel        = LADC_CH_MIC1_P_N | LADC_CH_MIC3_P_N,
+    .mic_ch_num         = 2,
+    .all_channel_open   = 1,
+    .linein_channel     = 0,
+    .linein_ch_num      = 0,
     .isel               = 2,
     .dump_num           = 480,
 };

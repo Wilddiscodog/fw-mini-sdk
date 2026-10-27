@@ -18,7 +18,8 @@ Debug information verbosity: lower values indicate higher urgency
 4:RT_DEBUG_INFO
 5:RT_DEBUG_LOUD
 */
-const u8 RTDebugLevel = 2;
+/* 0=关库内 WiFi 日志，避免刷屏影响 USB/OTA 等判断；排障时再改 1/2 */
+const u8 RTDebugLevel = 0;
 
 const char WL_TX_DEBUG = 0; //WIFI底层发送数据FIFO繁忙打印
 const char WL_RX_DEBUG = 0; //WIFI底层接收FIFO塞满导致丢包打印
@@ -28,9 +29,9 @@ const char WL_TX_ERR_RATIO_DEBUG_SEC = 0; //统计每秒TX数据包成功/失败
 const char WL_RX_ERR_RATIO_DEBUG_SEC = 0; //统计每秒RX数据包成功/失败/和错误率的情况,配置每隔多少秒打印一次
 const u16 WL_RX_BACK_GROUND_ERR_CNT_PER_SECOND = 10; //硬件少了寄存器统计接收正确包,所以统计正确包和误报率不准,人工设定一个当前环境干扰每秒钟的本底错误包作为弥补,一开始需要先观察打印确认
 
-const u8 WL_TX_PEND_DEBUG_SEC = 2; //WIFI底层FIFO塞满导致连续多少秒都发送不出数据时打印, 一般认为是干扰严重/wifi板TX性能差/CPU被挡等因素导致
+const u8 WL_TX_PEND_DEBUG_SEC = 0; //0=关闭; >0 为连续塞满 N 秒才打印
 
-const char WL_RX_PEND_DEBUG_SEC = 2; //统计WIFI底层连续多少秒都接收不到空中包时打印,一般认为是进了屏蔽房/加了MAC层过滤/板子硬件性能太差/CPU太繁忙来接收线程来不及取数因素导致
+const char WL_RX_PEND_DEBUG_SEC = 0; //0=关闭; >0 为连续无收包 N 秒才打印
 const char WL_RX_OVERFLOW_DEBUG = 0; //统计WIFI底层接收FIFO塞满导致丢包打印,一般认为对端发送太猛/空中干扰太强/CPU太繁忙来接收线程来不及取数因素导致, 使能后如果出现丢包打印每秒丢多少个数据包
 
 #if defined CONFIG_NO_SDRAM_ENABLE
@@ -736,13 +737,10 @@ int get_stored_pmk(char *password, char *ssid, int ssidlength, char *output)
     }
 
     memcpy(output, info.pmk, sizeof(info.pmk));
-    printf("stored pmk_info match[%s] [%s],,,\n", ssid, password);
     return 1;
 }
 void set_stored_pmk(char *password, char *ssid, int ssidlength, char *output)
 {
-    printf("pmk_info not match, store... [%s] [%s],,,\n", ssid, password);
-
     struct pmk_info info;
     info.crc = CRC16(password, strlen(password));
     info.crc += CRC16(ssid, ssidlength);
@@ -1366,6 +1364,6 @@ const unsigned long wl_rfd_ram_lut [256][2] = {
 /*-----------------------------------------------------------*/
 const char log_tag_const_v_WEBSOCKET AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(FALSE);
 const char log_tag_const_d_WEBSOCKET AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(FALSE);
-const char log_tag_const_i_WEBSOCKET AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(TRUE);
-const char log_tag_const_w_WEBSOCKET AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(TRUE);
+const char log_tag_const_i_WEBSOCKET AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(FALSE);
+const char log_tag_const_w_WEBSOCKET AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(FALSE);
 const char log_tag_const_e_WEBSOCKET AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(TRUE);

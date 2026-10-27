@@ -281,10 +281,12 @@ BTBOX_MIN_VER=1.2.4.f;
 ############################################################################
 */
 [RESERVED_CONFIG]
-//#升级之后需要保留VM数据，在生成升级文件时需要设置VM_OPT=1
+/* 升级保留 VM(WiFi SSID/密码、部分 BT 配对等落在此区)。
+ * VM_OPT=0: 整包烧录/OTA 会擦 VM → 升级后 wifi_get_mode_stored_info 变 never stored;
+ * VM_OPT=1: 生成升级文件时标记保留, dual_bank burn_boot_info 不碰 0xff5000 区。 */
 VM_ADR=0; [设置VM]
 VM_LEN=32K;
-VM_OPT=0;
+VM_OPT=1;
 
 BTIF_ADR=AUTO; [设置资源]
 BTIF_LEN=0x1000;
