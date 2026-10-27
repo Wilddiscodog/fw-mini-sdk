@@ -48,8 +48,8 @@ q32DSP(0)-&gt;EMU_CON |= BIT(3);                   /* 使能栈溢出异常 */
 
 </section>
 <section class="card" id="cache">
-<h2 id="cache">Cache 与性能</h2>
-<ul><li>I-Cache 8 way, sdk_ld 以 FREE_IACHE_WAY 回收若干 way 作为 cache_ram 数据区</li><li>movable region(LTO 插件): sdk_ld 的 .movable.slot/stub 机制用于代码搬移到 RAM 执行</li><li>PC 限界(pc_rang_limit)与写限界(dev_write_range_limit)调试接口(debug.c)</li></ul>
+<h2 id="cache">Cache 与 MMU</h2>
+<ul><li><b>I-Cache / D-Cache 各 8 way</b>(corex2 系统单元 CACHE_CON/DCACHE_WAY/ICACHE_WAY, csfr.h), 行长 32B(CACHE_LINE_COUNT); sdk_ld 以 FREE_DACHE_WAY/FREE_IACHE_WAY(≤7) 回收 way 作 cache_ram(0x1F20000+)</li><li><b>D-Cache way 在 CPU 与 PRP(外设总线主)间分配</b>: dcache_way_use_select(cpu_way, prp_way); 另支持写直通区域 dcache_cwt_set 与 flush_dcache/flushinv_dcache(cache.h)</li><li><b>非缓存别名窗口(免 MMU)</b>: NO_CACHE_ADDR() 把 ≥0x4000000 地址 +0x4000000 得 0x8000000 段非缓存视图; DMA 与 CPU 双视图一致用 __asm_csync/ssync 屏障【实测: USB/EMI 路径】</li><li><b>MMU 可选(CONFIG_MMU_ENABLE)</b>: 使能时 RAM0 起址放 2 张 TLB 表(每核一张, SDRAM 配置 0x2000×2=16KB); debug.c 异常源含 prp/c0/c1 的 rd/wr MMU 错误——两核与 PRP 外设主都过 MMU, 越权访问触发异常(exception_analyze 解析)</li><li>movable region(LTO 插件): sdk_ld 的 .movable.slot/stub 机制用于代码搬移到 RAM 执行</li><li>PC 限界(pc_rang_limit)与写限界(dev_write_range_limit)调试接口(debug.c)</li></ul>
 
 </section>
 <div class="note">本章内容依据官方 SDK <code>include_lib/driver/cpu/wl82/asm/WL82.h</code>、<code>cpu/wl82/sdk_ld*.c</code> 与 <code>cpu/wl82/tools/isd_config_rule.c</code> 整理; 标注【实测】的条目来自 fw-mini-sdk 移植验证。</div>
@@ -60,7 +60,7 @@ q32DSP(0)-&gt;EMU_CON |= BIT(3);                   /* 使能栈溢出异常 */
         <a href="clock.html">时钟系统 →</a>
       </div>
     </main>
-    <aside class="toc"><div class="t">本页目录</div><a href="#cores">双核 pi32v2</a><a href="#mem">存储器映射</a><a href="#cache">Cache 与性能</a></aside>
+    <aside class="toc"><div class="t">本页目录</div><a href="#cores">双核 pi32v2</a><a href="#mem">存储器映射</a><a href="#cache">Cache 与 MMU</a></aside>
   </div>
 </div>
 </body>

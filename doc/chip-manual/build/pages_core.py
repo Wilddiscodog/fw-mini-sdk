@@ -130,11 +130,20 @@ q32DSP(0)->EMU_CON |= BIT(3);                   /* 使能栈溢出异常 */
             "默认 240MHz 源自 PLL3(SDRAM_PLL3_EN=1 时 USB2.0 可用); "
             "PSRAM 控制器(0x41500 区域)可外挂 PSRAM。"))
 
-    body += sec("cache", "Cache 与性能", ul([
-        "I-Cache 8 way, sdk_ld 以 FREE_IACHE_WAY 回收若干 way 作为 cache_ram 数据区",
-        "movable region(LTO 插件): sdk_ld 的 .movable.slot/stub 机制用于代码搬移到 RAM 执行",
-        "PC 限界(pc_rang_limit)与写限界(dev_write_range_limit)调试接口(debug.c)",
-    ]))
+    body += sec("cache", "Cache 与 MMU",
+        ul([
+            "<b>I-Cache / D-Cache 各 8 way</b>(corex2 系统单元 CACHE_CON/DCACHE_WAY/ICACHE_WAY, csfr.h), "
+            "行长 32B(CACHE_LINE_COUNT); sdk_ld 以 FREE_DACHE_WAY/FREE_IACHE_WAY(≤7) 回收 way 作 cache_ram(0x1F20000+)",
+            "<b>D-Cache way 在 CPU 与 PRP(外设总线主)间分配</b>: dcache_way_use_select(cpu_way, prp_way); "
+            "另支持写直通区域 dcache_cwt_set 与 flush_dcache/flushinv_dcache(cache.h)",
+            "<b>非缓存别名窗口(免 MMU)</b>: NO_CACHE_ADDR() 把 ≥0x4000000 地址 +0x4000000 得 0x8000000 段"
+            "非缓存视图; DMA 与 CPU 双视图一致用 __asm_csync/ssync 屏障【实测: USB/EMI 路径】",
+            "<b>MMU 可选(CONFIG_MMU_ENABLE)</b>: 使能时 RAM0 起址放 2 张 TLB 表(每核一张, "
+            "SDRAM 配置 0x2000×2=16KB); debug.c 异常源含 prp/c0/c1 的 rd/wr MMU 错误——"
+            "两核与 PRP 外设主都过 MMU, 越权访问触发异常(exception_analyze 解析)",
+            "movable region(LTO 插件): sdk_ld 的 .movable.slot/stub 机制用于代码搬移到 RAM 执行",
+            "PC 限界(pc_rang_limit)与写限界(dev_write_range_limit)调试接口(debug.c)",
+        ]))
     body += CHIP_NOTE
     page("cpu-mem.html", "CPU / Memory", "CPU 与存储系统",
          "双核 pi32v2、SDRAM/PSRAM/RAM0/Cache RAM、异常与调试单元", body)
