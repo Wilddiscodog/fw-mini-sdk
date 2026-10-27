@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flash 与安全加速器 — AC7912BB 参考手册</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-inner">
+  <a class="brand" href="index.html">
+    <span class="logo">AC7912BB<em>·WL82</em></span>
+    <span class="sub">芯片参考手册</span>
+  </a>
+  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html" class=active>Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+</div></nav>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="crumb">Flash &amp; Security</div>
+    <h1>Flash 与安全加速器</h1>
+    <p>SFC XIP、SFCENC 加密、VM 布局、AES/SHA/CRC/RAND/EFUSE</p>
+  </header>
+
+  <div class="layout">
+    <main class="main">
+<p>基址: <code class="rg">0x40200</code>(段基址 + (64×grp + adr)×4, 见 WL82.h)</p>
+<p>SFC = SPI NOR Flash 控制器(0x40000 区, XIP 取指), SFCENC 为配套加密引擎(0x40400 区)。烧录镜像经 isd_download 打包, 运行时读写走 <code>sfc_norflash_api.h</code>(norflash_read/write/ioctl 擦扇区)。</p>
+<section class="card" id="regs">
+<h2 id="regs">SFC 寄存器</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">CON</code></td><td><span class="rw rw">RW</span></td><td>接口模式(2/4 线)/时钟分频</td></tr>
+<tr><td><code class="rg">0x04</code></td><td><code class="rg">BAUD</code></td><td><span class="rw wo">WO</span></td><td>波特率(sfc_clk = hsb/(baud+1))</td></tr>
+<tr><td><code class="rg">0x08</code></td><td><code class="rg">CODE</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x0C</code></td><td><code class="rg">BASE_ADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+</tbody></table></div>
+
+</section>
+<section class="card" id="vm">
+<h2 id="vm">Flash 布局与 VM 区</h2>
+<ul><li>单备份: NEW_FLASH_FS=YES; 双备份: BR22_TWS_DB=YES + DB_UPDATE_DATA(OTA 载荷)</li><li>VM 参数区: 默认 Flash 尾部(16M flash 例: 0xFF5000~0xFFD000), syscfg_read/write API</li><li>预留区: BTIF(蓝牙配对)/EXIF(客户)/VM 均可在 isd_config_rule.c 配地址与 OPT(0 擦除/1 保留/2 保护)</li><li>SFCENC + 0x7DF1.key: 代码加密(isd_download -key), EFUSE 存用户 key</li></ul>
+
+</section>
+<section class="card" id="sec">
+<h2 id="sec">加密与杂凑加速器</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>模块</th><th>基址</th><th>说明</th></tr></thead><tbody>
+<tr><td>AES</td><td><code>0x41200</code></td><td>AES 硬件(IRQ 31), aes_hw.h</td></tr>
+<tr><td>DCP</td><td><code>0x41300</code></td><td>数据协处理(图像旋转/拷贝加速)</td></tr>
+<tr><td>SHA</td><td><code>0x11400 区</code></td><td>SHA1/256(IRQ 56), sha_hw.h【实测: hw cbc/sha demo 通过】</td></tr>
+<tr><td>CRC</td><td><code>0x13500</code></td><td>硬件 CRC16(CRC16()/calc_crc16_with_init_val 库内调用)</td></tr>
+<tr><td>RAND</td><td><code>0x13B00</code></td><td>硬件随机数</td></tr>
+<tr><td>EFUSE</td><td><code>0x13700</code></td><td>熔丝(芯片 ID/加密 key), asm/efuse.h</td></tr>
+</tbody></table></div>
+
+</section>
+<div class="note">依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测整理(标注【实测】)。</div>
+
+      <div class="footer">
+        <a href="sdmmc.html">← SD 卡</a>
+        <span class="src">依据 JieLi 官方 SDK 头文件整理 · AC7912BB (WL82 / AC791N) · 仅供开发参考</span>
+        <a href="display.html">显示接口 →</a>
+      </div>
+    </main>
+    <aside class="toc"><div class="t">本页目录</div><a href="#regs">SFC 寄存器</a><a href="#vm">Flash 布局与 VM 区</a><a href="#sec">加密与杂凑加速器</a></aside>
+  </div>
+</div>
+</body>
+</html>

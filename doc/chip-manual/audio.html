@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>音频系统 — AC7912BB 参考手册</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-inner">
+  <a class="brand" href="index.html">
+    <span class="logo">AC7912BB<em>·WL82</em></span>
+    <span class="sub">芯片参考手册</span>
+  </a>
+  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html" class=active>音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+</div></nav>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="crumb">Audio</div>
+    <h1>音频系统</h1>
+    <p>LADC/PLNK/IIS 采集 → SRC/EQ/ANC → DAC, audio_server 框架与 AEC 回采</p>
+  </header>
+
+  <div class="layout">
+    <main class="main">
+<div class="fig"><svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg" role="img"><defs><marker id="arw" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#5b6b8c"/></marker></defs><rect x="30" y="30" width="130" height="50" rx="9" fill="#f4ebfa" stroke="#7c2d92" stroke-width="1.4"/><text x="95.0" y="51.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">MIC ×4 差分</text><text x="95.0" y="68.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">LADC</text><rect x="30" y="100" width="130" height="50" rx="9" fill="#f4ebfa" stroke="#7c2d92" stroke-width="1.4"/><text x="95.0" y="121.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">PLNK0/1</text><text x="95.0" y="138.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">数字麦 PDM</text><rect x="30" y="170" width="130" height="50" rx="9" fill="#f4ebfa" stroke="#7c2d92" stroke-width="1.4"/><text x="95.0" y="191.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">IIS0/1</text><text x="95.0" y="208.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">外部codec</text><rect x="30" y="240" width="130" height="50" rx="9" fill="#f4ebfa" stroke="#7c2d92" stroke-width="1.4"/><text x="95.0" y="269.55" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="500" fill="#14264d">SPDIF</text><rect x="220" y="90" width="150" height="60" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="295.0" y="116.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">AUDIO 引擎</text><text x="295.0" y="133.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">0x12F00 · 23 寄存器</text><line x1="160" y1="55" x2="220" y2="120" stroke="#7c2d92" stroke-width="1.6" marker-end="url(#arw)"/><line x1="160" y1="125" x2="220" y2="120" stroke="#7c2d92" stroke-width="1.6" marker-end="url(#arw)"/><line x1="160" y1="195" x2="220" y2="120" stroke="#7c2d92" stroke-width="1.6" marker-end="url(#arw)"/><line x1="160" y1="265" x2="220" y2="120" stroke="#7c2d92" stroke-width="1.6" marker-end="url(#arw)"/><rect x="420" y="30" width="150" height="50" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="495.0" y="51.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">SRC 变采样</text><text x="495.0" y="68.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">0x14300</text><rect x="420" y="100" width="150" height="50" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="495.0" y="121.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">EQ/ANC</text><text x="495.0" y="138.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">0x1E000/0x1F000</text><rect x="420" y="170" width="150" height="50" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="495.0" y="191.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">SBC 编解码</text><text x="495.0" y="208.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">0x13D00</text><rect x="420" y="240" width="150" height="50" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="495.0" y="261.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">ALNK0/1</text><text x="495.0" y="278.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">音频链路中断</text><line x1="370" y1="120" x2="420" y2="55" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="370" y1="120" x2="420" y2="125" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="370" y1="120" x2="420" y2="195" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="370" y1="120" x2="420" y2="265" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><rect x="630" y="90" width="150" height="60" rx="9" fill="#f4ebfa" stroke="#7c2d92" stroke-width="1.4"/><text x="705.0" y="107.55" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">DAC</text><text x="705.0" y="124.55" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">hw_channel 0x05</text><text x="705.0" y="141.55" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">4 数字通道</text><line x1="570" y1="55" x2="630" y2="105" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="570" y1="125" x2="630" y2="120" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="570" y1="265" x2="630" y2="140" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><text x="450" y="315" text-anchor="middle" font-size="12" fill="#4a5568" font-weight="500" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif">服务化框架: audio_server.a — enc/dec 请求 + AEC/DNS/VAD(闭源 aec_enc.c)</text></svg><div class="figcap">音频子系统框图</div></div>
+<p>音频走 <b>server 框架</b>(liba/audio_server.a): 应用以 union audio_req 向 audio_server 发 ENC/DEC 请求; 采集源 mic/linein/plnk/iis/spdif, 播放走 DAC。AEC 回采=编码请求 aec_enable=1 + aec_s_attr(server/audio_dev.h), 回采通道 BIT(CONFIG_AEC_ADC_CHANNEL)。</p>
+<section class="card" id="dac">
+<h2 id="dac">DAC 播放</h2>
+<p>基址: <code class="rg">0x11900</code>(段基址 + (64×grp + adr)×4, 见 WL82.h)</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>参数</th><th>值(DevKitBoard 参考)</th><th>说明</th></tr></thead><tbody>
+<tr><td>hw_channel</td><td>0x05</td><td>DAC 模拟通道</td></tr>
+<tr><td>ch_num</td><td>4</td><td>数字通道数</td></tr>
+<tr><td>pa_auto_mute/pa_mute_port</td><td>1 / PB02</td><td>功放 MUTE 控制(按板改)</td></tr>
+<tr><td>vcm_init_delay_ms</td><td>1000</td><td>VCM 稳定等待</td></tr>
+<tr><td>fade/mute_delay</td><td>40 / 200 ms</td><td>模拟音量淡入淡出</td></tr>
+</tbody></table></div>
+<pre><code>/* 播放(Deckitboard_test/mic_test.c 同款) */
+req.dec.cmd = AUDIO_DEC_OPEN;  req.dec.dec_type = &quot;pcm&quot;;
+req.dec.sample_source = &quot;dac&quot;; req.dec.volume = 80;
+req.dec.vfs_ops = &amp;my_vfs_ops;          /* 数据源回调 */
+server_request(dec, AUDIO_REQ_DEC, &amp;req);
+req.dec.cmd = AUDIO_DEC_START; server_request(dec, AUDIO_REQ_DEC, &amp;req);</code></pre>
+
+</section>
+<section class="card" id="enc">
+<h2 id="enc">MIC 录音与 AEC</h2>
+<pre><code>req.enc.cmd = AUDIO_ENC_OPEN;
+req.enc.sample_source = &quot;mic&quot;;  req.enc.format = &quot;pcm&quot;;
+req.enc.sample_rate = 16000;    req.enc.channel = 1;
+req.enc.channel_bit_map = BIT(1);            /* 通话 MIC 通道 */
+/* AEC(参考 demo_edr/bt_decode.c): */
+struct aec_s_attr a = {0};
+a.EnableBit = AEC_EN|NLP_EN|ANS_EN;          /* AEC+NLP+ANS */
+a.wideband = 1;  a.hw_delay_offset = 50;     /* 16k 宽带 */
+req.enc.aec_attr = &amp;a;  req.enc.aec_enable = 1;
+req.enc.channel_bit_map |= BIT(CONFIG_AEC_ADC_CHANNEL);  /* 回采通道 */</code></pre>
+<div class="note">【实测】AEC 依赖链: audio_server.a + libaec.a + libdns.a + libjlsp.a + 源码 jl_math(flrfft/flrifft)。VAD 也走 enc(use_vad 字段)。</div>
+
+</section>
+<section class="card" id="regs">
+<h2 id="regs">AUDIO/ANA 寄存器(自动提取)</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">DAC_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x04</code></td><td><code class="rg">DAC_ADR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x08</code></td><td><code class="rg">DAC_LEN</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x0C</code></td><td><code class="rg">DAC_PNS</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x10</code></td><td><code class="rg">DAC_HRP</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x14</code></td><td><code class="rg">DAC_SWP</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x18</code></td><td><code class="rg">DAC_SWN</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x1C</code></td><td><code class="rg">RESERVED7</code></td><td><span class="rw ro">RO</span></td><td></td></tr>
+<tr><td><code class="rg">0x20</code></td><td><code class="rg">DAC_VL0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x24</code></td><td><code class="rg">DAC_VL1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x28</code></td><td><code class="rg">DAC_TM0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x2C</code></td><td><code class="rg">DAC_TM1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x30</code></td><td><code class="rg">DAC_DTV</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x34</code></td><td><code class="rg">DAC_DTB</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x38</code></td><td><code class="rg">RESERVEDe</code></td><td><span class="rw ro">RO</span></td><td></td></tr>
+<tr><td><code class="rg">0x3C</code></td><td><code class="rg">DAC_COP</code></td><td><span class="rw wo">WO</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x40</code></td><td><code class="rg">ADC_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x44</code></td><td><code class="rg">ADC_ADR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x48</code></td><td><code class="rg">ADC_LEN</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x4C</code></td><td><code class="rg">ADC_PNS</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x50</code></td><td><code class="rg">ADC_HWP</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x54</code></td><td><code class="rg">ADC_SRP</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+<tr><td><code class="rg">0x58</code></td><td><code class="rg">ADC_SRN</code></td><td><span class="rw rw">RW</span></td><td>(u16)</td></tr>
+</tbody></table></div>
+<div class="note">ANA 54 寄存器与 ALNK/PLNK/SRC/SBC/EQ/ANC 各自独立基址, 位域未公开, 全部经驱动 API 访问。</div>
+
+</section>
+<div class="note">依据官方 SDK <code>asm/ladc.h·dac.h·audio.h·usb.h·sdmmc.h</code>、<code>server/audio_server.h</code> 及 fw-mini-sdk 移植实测整理。</div>
+
+      <div class="footer">
+        <a href="adc.html">← ADC 采集</a>
+        <span class="src">依据 JieLi 官方 SDK 头文件整理 · AC7912BB (WL82 / AC791N) · 仅供开发参考</span>
+        <a href="usb.html">USB 双控 →</a>
+      </div>
+    </main>
+    <aside class="toc"><div class="t">本页目录</div><a href="#dac">DAC 播放</a><a href="#enc">MIC 录音与 AEC</a><a href="#regs">AUDIO/ANA 寄存器(自动提取)</a></aside>
+  </div>
+</div>
+</body>
+</html>

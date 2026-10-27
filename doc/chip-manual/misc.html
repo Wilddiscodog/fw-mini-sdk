@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>其他外设 — AC7912BB 参考手册</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-inner">
+  <a class="brand" href="index.html">
+    <span class="logo">AC7912BB<em>·WL82</em></span>
+    <span class="sub">芯片参考手册</span>
+  </a>
+  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html" class=active>其他外设</a></div>
+</div></nav>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="crumb">Misc</div>
+    <h1>其他外设</h1>
+    <p>WDT/RDEC/IR/CTMU/呼吸灯/FFT/烧录模式速览</p>
+  </header>
+
+  <div class="layout">
+    <main class="main">
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>外设</th><th>基址/头文件</th><th>说明</th></tr></thead><tbody>
+<tr><td>WDT</td><td>wdt.h</td><td>看门狗(见电源章)</td></tr>
+<tr><td>RDEC</td><td><code>0x12C00</code> · rdec.h</td><td>旋转编码器解码(多路)</td></tr>
+<tr><td>IRFLT</td><td><code>0x13200</code> · irflt.h</td><td>红外遥控接收滤波</td></tr>
+<tr><td>OSA</td><td><code>0x13400</code></td><td>LSB 时钟丢失监控(debug.c 初始化)</td></tr>
+<tr><td>CTMU</td><td><code>0x13C00</code> · ctmu.h</td><td>电容触摸(按键/滑动), IRQ 36</td></tr>
+<tr><td>PWM_LED</td><td>pwm_led.h</td><td>呼吸灯驱动(2 LED 独立 PWM)</td></tr>
+<tr><td>PLCNT</td><td>plcnt.h</td><td>PL 计数(功耗计数)</td></tr>
+<tr><td>SS</td><td><code>0x12B00</code></td><td>保密接口(生产测试)</td></tr>
+<tr><td>MBIST/MBISTW</td><td>0x41x00/0x15400 区</td><td>存储器内建自测</td></tr>
+<tr><td>FFT</td><td>IRQ 57</td><td>硬件 FFT 加速器(jl_math 之外的硬核)</td></tr>
+<tr><td>ENC</td><td><code>0x13000</code></td><td>编码加速(二维码 image_enc)</td></tr>
+<tr><td>uvc_device</td><td>uvc_device.h</td><td>USB 摄像头设备模式</td></tr>
+<tr><td>spdif</td><td>spdif.h</td><td>数字音频输出</td></tr>
+<tr><td>src</td><td><code>0x14300</code> · src.h</td><td>异步变采样(音频通路)</td></tr>
+</tbody></table></div>
+<section class="card" id="bootmode">
+<h2 id="bootmode">烧录与产线</h2>
+<ul><li>USB 烧录: 开机短接进入(isd_config DOWNLOAD_MODEL=usb), 工具 isd_download.exe</li><li>串口烧录: SERIAL 模式(UTRX 引脚), 烧录器/1拖8 需 TOOL_CONFIG 最低版本</li><li>双备份升级文件: db_update_data.bin(即 update-ota.ufw), 单备份用 jl_isd.ufw【实测】</li></ul>
+
+</section>
+<div class="note">依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测整理(标注【实测】)。</div>
+
+      <div class="footer">
+        <a href="wifi-bt.html">← WiFi / BT 射频</a>
+        <span class="src">依据 JieLi 官方 SDK 头文件整理 · AC7912BB (WL82 / AC791N) · 仅供开发参考</span>
+        <span></span>
+      </div>
+    </main>
+    <aside class="toc"><div class="t">本页目录</div><a href="#bootmode">烧录与产线</a></aside>
+  </div>
+</div>
+</body>
+</html>

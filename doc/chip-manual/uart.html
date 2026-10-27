@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UART 串口 ×3 — AC7912BB 参考手册</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-inner">
+  <a class="brand" href="index.html">
+    <span class="logo">AC7912BB<em>·WL82</em></span>
+    <span class="sub">芯片参考手册</span>
+  </a>
+  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html" class=active>UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+</div></nav>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="crumb">UART</div>
+    <h1>UART 串口 ×3</h1>
+    <p>UART0-2 寄存器、环形 DMA、调试口配置(含 putbyte 反汇编还原)</p>
+  </header>
+
+  <div class="layout">
+    <main class="main">
+<p>基址: <code class="rg">0x12000</code>(段基址 + (64×grp + adr)×4, 见 WL82.h)</p>
+<p>UART0/1/2(0x12000/0x12400 区), 11 个寄存器/组。支持中断+环形 DMA 收(RXSADR/RXEADR/RXCNT), 发送可查寻或 DMA(TXADR/TXCNT)。波特率 BAUD 寄存器与主频相关。</p>
+<section class="card" id="regs">
+<h2 id="regs">UART 寄存器(自动提取自 WL82.h)</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">CON0</code></td><td><span class="rw rw">RW</span></td><td>控制: bit0 使能 / bit13 启动发送 / bit15 发送完成【实测】; 9bit/校验等</td></tr>
+<tr><td><code class="rg">0x04</code></td><td><code class="rg">CON1</code></td><td><span class="rw rw">RW</span></td><td>中断使能与标志</td></tr>
+<tr><td><code class="rg">0x08</code></td><td><code class="rg">BAUD</code></td><td><span class="rw wo">WO</span></td><td>波特率分频(WO)</td></tr>
+<tr><td><code class="rg">0x0C</code></td><td><code class="rg">BUF</code></td><td><span class="rw rw">RW</span></td><td>发送/接收数据口</td></tr>
+<tr><td><code class="rg">0x10</code></td><td><code class="rg">OTCNT</code></td><td><span class="rw rw">RW</span></td><td>接收超时计数</td></tr>
+<tr><td><code class="rg">0x14</code></td><td><code class="rg">TXADR</code></td><td><span class="rw rw">RW</span></td><td>发送 DMA 起址</td></tr>
+<tr><td><code class="rg">0x18</code></td><td><code class="rg">TXCNT</code></td><td><span class="rw wo">WO</span></td><td>发送 DMA 计数</td></tr>
+<tr><td><code class="rg">0x1C</code></td><td><code class="rg">RXSADR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x20</code></td><td><code class="rg">RXEADR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x24</code></td><td><code class="rg">RXCNT</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x28</code></td><td><code class="rg">HRXCNT</code></td><td><span class="rw ro">RO</span></td><td>硬件接收计数(RO)</td></tr>
+</tbody></table></div>
+
+</section>
+<section class="card" id="poll">
+<h2 id="poll">查寻收发(裸机/异常路径)</h2>
+<pre><code>/* cpu.a 弱 putbyte 反汇编还原【实测】, UART0=0x12000 */
+JL_UART_TypeDef *u = JL_UART0;
+if (c == &#x27;\r&#x27;) return;                  /* \r 丢弃 */
+if (!(u-&gt;CON0 &amp; BIT(0))) return;         /* 未使能静默丢弃 */
+u-&gt;CON0 |= BIT(13);                      /* kick 发送 */
+u-&gt;BUF = c;                              /* 写数据口 */
+__asm_csync();
+while ((u-&gt;CON0 &amp; (BIT(15)|BIT(0))) == BIT(0));   /* 等 bit15=1 */</code></pre>
+<div class="warn">【实测】查询等待建议加有界超时(如 2 万拍), 串口时钟未就绪时 bit15 永不置位会死循环(fw-mini-sdk V0.9.1 教训)。</div>
+
+</section>
+<section class="card" id="api">
+<h2 id="api">驱动框架(uart_dev.h)</h2>
+<pre><code>/* 板级数据(board.c) + 设备表 {&quot;uart0&quot;,&amp;uart_dev_ops,...} */
+UART0_PLATFORM_DATA_BEGIN(uart0_data)
+    .tx_pin = IO_PORTB_02, .rx_pin = IO_PORTB_03,
+    .flags = UART_DEBUG,        /* 调试口 */
+    .baudrate = 1000000,
+UART0_PLATFORM_DATA_END();
+/* 应用层 dev_open(&quot;uart1&quot;) + dev_read/dev_write; 或 uart_open() 直拿 uart_bus_t */
+ut-&gt;putbyte(&#x27;x&#x27;);  ut-&gt;getbyte(&amp;c, 0);   /* 裸总线接口 */</code></pre>
+
+</section>
+<div class="note">依据官方 SDK <code>asm/uart.h·uart_dev.h·spi.h·iic.h·pwm.h</code> 与 <code>WL82.h</code> 整理。</div>
+
+      <div class="footer">
+        <a href="irq.html">← 中断系统</a>
+        <span class="src">依据 JieLi 官方 SDK 头文件整理 · AC7912BB (WL82 / AC791N) · 仅供开发参考</span>
+        <a href="spi.html">SPI 总线 →</a>
+      </div>
+    </main>
+    <aside class="toc"><div class="t">本页目录</div><a href="#regs">UART 寄存器(自动提取自 WL82.h)</a><a href="#poll">查寻收发(裸机/异常路径)</a><a href="#api">驱动框架(uart_dev.h)</a></aside>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LADC 采集 — AC7912BB 参考手册</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-inner">
+  <a class="brand" href="index.html">
+    <span class="logo">AC7912BB<em>·WL82</em></span>
+    <span class="sub">芯片参考手册</span>
+  </a>
+  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html" class=active>ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+</div></nav>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="crumb">ADC</div>
+    <h1>LADC 采集</h1>
+    <p>4 组差分 MIC + 4 路 AUX, ANA 前端, adkey 实测参数</p>
+  </header>
+
+  <div class="layout">
+    <main class="main">
+<p>基址: <code class="rg">0x13100</code>(段基址 + (64×grp + adr)×4, 见 WL82.h)</p>
+<p>LADC 逐次逼近 ADC, 硬件寄存器仅 2 个(0x13100 区), 通道/增益等由 ANA 模拟前端(0x11900 区, 54 寄存器)配置, 应用层全部经 <code>asm/adc_api.h</code> + audio 框架的 adc 驱动访问。</p>
+<section class="card" id="ch">
+<h2 id="ch">通道映射(ladc.h)</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>类型</th><th>通道</th><th>引脚</th></tr></thead><tbody>
+<tr><td>MIC 差分</td><td>LADC_CH_MIC0_P_N</td><td>PA2 / PA1</td></tr>
+<tr><td>MIC 差分</td><td>LADC_CH_MIC1_P_N</td><td>PH8 / PH9</td></tr>
+<tr><td>MIC 差分</td><td>LADC_CH_MIC2_P_N</td><td>PA4 / PA3</td></tr>
+<tr><td>MIC 差分</td><td>LADC_CH_MIC3_P_N</td><td>PH5 / PH6</td></tr>
+<tr><td>LINEIN(AUX)</td><td>LADC_CH_AUX0~3</td><td>PA0 / PH7 / PA5 / PH4</td></tr>
+</tbody></table></div>
+<p>模拟直通: ladc_mic_to_daclr()/ladc_linein_to_daclr(MIC/LINEIN 不经数字域直达 DAC)。</p>
+<div class="note">【实测】ADC 按键(adkey): PB01 挂电阻梯, 10bit 原始值 空闲 1014(3.13V)/按键1 162(0.5V)/按键2 0(0V), 10ms 扫描+中点阈值表匹配。</div>
+
+</section>
+<section class="card" id="api">
+<h2 id="api">ADC API</h2>
+<pre><code>/* adc_api.h */
+u32 adc_get_value(u32 ch);       /* 通道原始值 */
+adc_init();                      /* 早期初始化 */
+/* 录音路径: audio_server enc 请求 sample_source=&quot;mic&quot;/&quot;linein&quot;(详见音频章) */</code></pre>
+
+</section>
+<div class="note">依据官方 SDK <code>asm/ladc.h·dac.h·audio.h·usb.h·sdmmc.h</code>、<code>server/audio_server.h</code> 及 fw-mini-sdk 移植实测整理。</div>
+
+      <div class="footer">
+        <a href="mcpwm.html">← MCPWM</a>
+        <span class="src">依据 JieLi 官方 SDK 头文件整理 · AC7912BB (WL82 / AC791N) · 仅供开发参考</span>
+        <a href="audio.html">音频系统 →</a>
+      </div>
+    </main>
+    <aside class="toc"><div class="t">本页目录</div><a href="#ch">通道映射(ladc.h)</a><a href="#api">ADC API</a></aside>
+  </div>
+</div>
+</body>
+</html>

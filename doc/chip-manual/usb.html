@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>USB 双控制器 — AC7912BB 参考手册</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-inner">
+  <a class="brand" href="index.html">
+    <span class="logo">AC7912BB<em>·WL82</em></span>
+    <span class="sub">芯片参考手册</span>
+  </a>
+  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html" class=active>USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+</div></nav>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="crumb">USB</div>
+    <h1>USB 双控制器</h1>
+    <p>FUSB1.1 + HUSB2.0: MUSB 差异、EP RAM DMA 桥(0x16800)、EP3/4 大缓冲【实测逆向】</p>
+  </header>
+
+  <div class="layout">
+    <main class="main">
+<p>两个独立 USB 控制器共用 D+/D- 引脚(不可同时启动):</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>控制器</th><th>基址</th><th>规格</th><th>角色</th></tr></thead><tbody>
+<tr><td>USB0 (FUSB)</td><td><code>0x11800</code></td><td>全速 12Mbps</td><td>设备/主机(小缓冲)</td></tr>
+<tr><td>USB1 (HUSB)</td><td><code>0x12800</code></td><td>高速 480Mbps</td><td>设备/主机/OTG</td></tr>
+</tbody></table></div>
+<section class="card" id="regs">
+<h2 id="regs">HUSB 寄存器(USB1, 自动提取)</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x04</code></td><td><code class="rg">CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x08</code></td><td><code class="rg">EP0_CNT</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x0C</code></td><td><code class="rg">EP1_CNT</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x10</code></td><td><code class="rg">EP2_CNT</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x14</code></td><td><code class="rg">EP3_CNT</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x18</code></td><td><code class="rg">EP0_ADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x1C</code></td><td><code class="rg">EP1_TADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x20</code></td><td><code class="rg">EP1_RADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x24</code></td><td><code class="rg">EP2_TADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x28</code></td><td><code class="rg">EP2_RADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x2C</code></td><td><code class="rg">EP3_TADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x30</code></td><td><code class="rg">EP3_RADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x34</code></td><td><code class="rg">EP4_CNT</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x38</code></td><td><code class="rg">EP4_TADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x3C</code></td><td><code class="rg">EP4_RADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+</tbody></table></div>
+<div class="warn">【实测·重要】MUSB 兼容内核的三处 JL 差异(逆向 usb.a 得出): ① TXIS/RXIS 窗口读自动清除(写 1 清除无效); ② EP0 只有 FIFO 端口 0x16020, EP≥1 无 FIFO 端口——数据面走 RAM DMA 缓冲; ③ 无 FIFOSZ 寄存器, EP FIFO 容量硬件固定。</div>
+
+</section>
+<section class="card" id="dma">
+<h2 id="dma">EP 数据面 RAM DMA【实测逆向】</h2>
+<p>EP≥1 的收发不经 FIFO 端口, 而是桥接寄存器指向的 RAM 缓冲(<b>仅 RAM0 段</b>):</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>地址</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><code>0x16800</code></td><td>桥接配置</td><td>EP DMA 总开关/映射</td></tr>
+<tr><td><code>0x16804+4×ep</code></td><td>TXCNT(ep)</td><td>发送字节计数(必须先于 TXRDY 写, 否则发 0 长度包)</td></tr>
+<tr><td><code>0x16820+8×(ep-1)</code></td><td>TADDR(ep)</td><td>发送缓冲地址(RAM0!)</td></tr>
+<tr><td><code>0x16824+8×(ep-1)</code></td><td>RADDR(ep)</td><td>接收缓冲地址(RAM0!)</td></tr>
+<tr><td><code>0x16850 / 0x16854</code></td><td>EP3/EP4 大缓冲模式</td><td>TXCSR/RXCSR bit14 使能</td></tr>
+</tbody></table></div>
+<ul><li>EP1/2/5/6: 普通 DMA 模式, 缓冲需 64 字节对齐</li><li>EP3/4: 大缓冲模式, 计数打包 (dma_size&lt;&lt;16)|len|0x80000000, 8 字节对齐, 单次可搬 4096B</li><li>主机模式(MRX): 多包聚合, Inclusive/Exclusive 分组读</li><li>【实测】SDRAM 缓冲会静默丢数据——DMA 只能到 0x1C00000 RAM0 段</li></ul>
+
+</section>
+<section class="card" id="stack">
+<h2 id="stack">协议栈与实测结论</h2>
+<ul><li>官方栈(liba/lib_usb_syn.a + driver/usb): 多复合设备(CDC×n+MSC+UAC…), usb_epbuf_manager 用 lbuf 统一分发 EP 缓冲</li><li>fw-mini-sdk 换用 CherryUSB(port/jl82 适配上述 DMA 语义), MSC 4MB RAM 盘 + 虚拟U盘 OTA 实测通过</li><li>【实测】INT 端点需置 TXCSR.H bit14(CSRH bit6), 否则 clear-halt 死循环</li><li>【实测】主机 EP0 控制传输完成中断不触发, 需轮询 CSR0</li></ul>
+
+</section>
+<div class="note">依据官方 SDK <code>asm/ladc.h·dac.h·audio.h·usb.h·sdmmc.h</code>、<code>server/audio_server.h</code> 及 fw-mini-sdk 移植实测整理。</div>
+
+      <div class="footer">
+        <a href="audio.html">← 音频系统</a>
+        <span class="src">依据 JieLi 官方 SDK 头文件整理 · AC7912BB (WL82 / AC791N) · 仅供开发参考</span>
+        <a href="sdmmc.html">SD 卡 →</a>
+      </div>
+    </main>
+    <aside class="toc"><div class="t">本页目录</div><a href="#regs">HUSB 寄存器(USB1, 自动提取)</a><a href="#dma">EP 数据面 RAM DMA【实测逆向】</a><a href="#stack">协议栈与实测结论</a></aside>
+  </div>
+</div>
+</body>
+</html>

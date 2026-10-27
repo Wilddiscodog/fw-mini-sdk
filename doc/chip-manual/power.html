@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>电源管理 — AC7912BB 参考手册</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-inner">
+  <a class="brand" href="index.html">
+    <span class="logo">AC7912BB<em>·WL82</em></span>
+    <span class="sub">芯片参考手册</span>
+  </a>
+  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html" class=active>电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+</div></nav>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="crumb">Power</div>
+    <h1>电源管理</h1>
+    <p>电源域、P33 软关机、充电、RTC(LRCT)、看门狗</p>
+  </header>
+
+  <div class="layout">
+    <main class="main">
+<p>电源域: CORE(DVDD 1.2V 档)/IO(VDDIO 档)/DCDC14/模拟域, 档位由 isd_config 烧录(VDDIO=4→3.2V 等); P33 常供电域支持软关机与唤醒。</p>
+<section class="card" id="p33">
+<h2 id="p33">P33 与软关机</h2>
+<pre><code>/* asm/power_interface.h【实测: net_update 复位路径】 */
+if (get_power_keep_state() &amp; POWER_KEEP_RTC)
+    power_set_soft_poweroff(10);   /* 软关机 10ms 后上电唤醒(RTC 保时场景) */
+else
+    system_reset();                /* 普通复位 */</code></pre>
+
+</section>
+<section class="card" id="charge">
+<h2 id="charge">充电与电池</h2>
+<ul><li>charge.h: 充电电流/电压阈值平台数据(锂电池直充方案)</li><li>LRCT(0x13600 区, IRQ 44): RTC 计数与闹钟, 掉电域保持</li><li>LVD 低压检测、VCM/VDD 档位调试接口(p33.h)</li></ul>
+
+</section>
+<section class="card" id="wdt">
+<h2 id="wdt">看门狗</h2>
+<pre><code>#include &quot;asm/wdt.h&quot;
+wdt_close();            /* 关闭(调试) */
+__wdt_clear();          /* 清狗(异常路径必须调, cpu/wl82/debug.c) */</code></pre>
+
+</section>
+<div class="note">依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测整理(标注【实测】)。</div>
+
+      <div class="footer">
+        <a href="camera.html">← 摄像头与编解码</a>
+        <span class="src">依据 JieLi 官方 SDK 头文件整理 · AC7912BB (WL82 / AC791N) · 仅供开发参考</span>
+        <a href="wifi-bt.html">WiFi / BT 射频 →</a>
+      </div>
+    </main>
+    <aside class="toc"><div class="t">本页目录</div><a href="#p33">P33 与软关机</a><a href="#charge">充电与电池</a><a href="#wdt">看门狗</a></aside>
+  </div>
+</div>
+</body>
+</html>
