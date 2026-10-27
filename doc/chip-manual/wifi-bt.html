@@ -12,35 +12,106 @@
     <span class="logo">AC7912BB<em>·WL82</em></span>
     <span class="sub">芯片参考手册</span>
   </a>
-  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html" class=active>WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+  <div class="navlinks"><a class="nav-a" href="index.html">芯片总览</a><a class="nav-a" href="cpu-mem.html">CPU 与存储</a><a class="nav-a" href="cache-mmu.html">Cache / MMU</a><a class="nav-a" href="clock.html">时钟系统</a><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">基础外设<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">多媒体<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a></div></div><div class="nav-drop open-active"><button type="button" class="nav-drop-btn" aria-expanded="false">系统<span class="nav-drop-cur">WiFi / BT 射频</span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html" class=active>WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div><button type="button" class="nav-more-btn" aria-label="全部章节">☰</button><div class="nav-all-panel"><div class="nav-all-g">核心</div><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="cache-mmu.html">Cache / MMU</a><a href="clock.html">时钟系统</a><div class="nav-all-g">基础外设</div><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><div class="nav-all-g">多媒体</div><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><div class="nav-all-g">系统</div><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html" class=active>WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div>
 </div></nav>
+<script>
+(function(){
+  document.querySelectorAll('.nav-drop-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var drop = btn.parentElement;
+      var open = drop.classList.contains('open');
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      document.querySelector('.nav-all-panel') && document.querySelector('.nav-all-panel').classList.remove('open');
+      if (!open) drop.classList.add('open');
+      btn.setAttribute('aria-expanded', (!open).toString());
+    });
+  });
+  var more = document.querySelector('.nav-more-btn');
+  var panel = document.querySelector('.nav-all-panel');
+  if (more && panel) {
+    more.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      panel.classList.toggle('open');
+    });
+  }
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+    if (panel) panel.classList.remove('open');
+  });
+})();
+</script>
 
 <div class="wrap">
   <header class="hero">
     <div class="crumb">WiFi &amp; BT</div>
     <h1>WiFi/BT 射频集成</h1>
-    <p>片内 WiFi4+BT/BLE: 校准表、库任务、事件路由与 MAC(实测要点)</p>
+    <p>WL 寄存器表 + 库任务/事件/共存</p>
   </header>
 
   <div class="layout">
     <main class="main">
+<section class="card" id="inst">
+<h2 id="inst">射频集成</h2>
 <p>基址: <code class="rg">0x14000</code>(段基址 + (64×grp + adr)×4, 见 WL82.h)</p>
-<p>片内 2.4GHz 射频+基带: WiFi4(1T1R, 库 wl_wifi.a AP+STA / wl_wifi_sta.a 仅STA)+ 经典蓝牙/BLE(btctrler.a 控制器 + btstack.a 主机栈)。基带寄存器 JL_WL(0x14000 区, 31 个)与 RF 校准由闭源库管理。</p>
-<section class="card" id="cal">
-<h2 id="cal">RF 校准表</h2>
-<pre><code>/* board.c(wifi_calibration_param): 每台 MP 校准后烧写 */
+<p>WiFi4 1T1R（wl_wifi.a / wl_wifi_sta.a）+ 经典 BT/BLE（btctrler.a + btstack.a）。基带 JL_WL，校准闭源。</p>
+
+</section>
+<section class="card" id="regs">
+<h2 id="regs">WL 寄存器</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">WL_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x04</code></td><td><code class="rg">WL_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x08</code></td><td><code class="rg">WL_CON2</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x0C</code></td><td><code class="rg">WL_CON3</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x10</code></td><td><code class="rg">WL_CON4</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x14</code></td><td><code class="rg">WL_CON5</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x18</code></td><td><code class="rg">WL_CON6</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x1C</code></td><td><code class="rg">WL_CON7</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x20</code></td><td><code class="rg">LOFC_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x24</code></td><td><code class="rg">LOFC_RES</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x28</code></td><td><code class="rg">WL_ANL_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x2C</code></td><td><code class="rg">WL_ANL_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x30</code></td><td><code class="rg">WL_ANL_CON2</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x34</code></td><td><code class="rg">WL_ANL_CON3</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x38</code></td><td><code class="rg">WF_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x3C</code></td><td><code class="rg">WF_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x40</code></td><td><code class="rg">WF_CON2</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x44</code></td><td><code class="rg">WF_CON3</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x48</code></td><td><code class="rg">WF_CON4</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x4C</code></td><td><code class="rg">WF_CON5</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x50</code></td><td><code class="rg">WF_CON6</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x54</code></td><td><code class="rg">WF_CON7</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x58</code></td><td><code class="rg">WF_CON8</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x5C</code></td><td><code class="rg">WF_CON9</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x60</code></td><td><code class="rg">SD_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x64</code></td><td><code class="rg">SD_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x68</code></td><td><code class="rg">SD_CON2</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x6C</code></td><td><code class="rg">SD_CTU_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x70</code></td><td><code class="rg">SD_CTU_CNT</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x74</code></td><td><code class="rg">SD_CPTR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+<tr><td><code class="rg">0x78</code></td><td><code class="rg">SD_DPTR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
+</tbody></table></div>
+
+</section>
+<section class="card" id="init">
+<h2 id="init">接入要点</h2>
+<pre><code>/* 校准表 board.c */
 const struct wifi_calibration_param wifi_calibration_param = {
-    .xosc_l = 0xb, .xosc_r = 0xb,          /* 晶振频偏 */
-    .pa_trim_data[7], .mcs_dgain[20],      /* PA/数字增益 */
-};</code></pre>
+    .xosc_l = 0xb, .xosc_r = 0xb, /* + pa_trim / mcs_dgain */
+};
+wifi_set_event_callback(cb);  /* 必须先于 wifi_on() */
+wifi_on();</code></pre>
+<ul><li>task_info_table 须含 tasklet / RtmpMlmeTask / RtmpCmdQTask / wl_rx_irq_thread</li><li>BT_STATUS_INIT_OK 经 app_default_event_handler 强定义送达</li><li>MAC：强定义 init_net_device_mac_addr；BLE 地址由经典地址派生</li></ul>
 
 </section>
-<section class="card" id="coex">
-<h2 id="coex">协议栈接入要点【实测】</h2>
-<ul><li>WiFi 库按名字 task_create, task_info_table 必须含: tasklet(10/1400), RtmpMlmeTask(17/700), RtmpCmdQTask(17/300), wl_rx_irq_thread(5/256)</li><li>事件回调 wifi_set_event_callback 必须先于 wifi_on() 注册(空回调=首事件跳 0 崩溃)</li><li>BT_STATUS_INIT_OK 只经 app_default_event_handler 强定义送达(register_sys_event_handler 收不到)</li><li>WiFi MAC: 强定义 init_net_device_mac_addr(库内 weak); BLE 地址 lib_make_ble_address 由经典蓝牙地址派生</li><li>BT/WiFi 共存: rf_coexistence_config.h 配置时分参数</li><li>配网/OTA 应用层参考: wifi_prov.c(STA→AP 门户)+net_update.c(dual_bank OTA)</li></ul>
+<section class="card" id="note">
+<h2 id="note">共存【实测】</h2>
+<ul><li>rf_coexistence_config.h 时分参数</li><li>早期同时开 BT+WiFi 与 USB 可能冲日志/稳定性——可延后 wifi_on</li><li>配网/OTA：wifi_prov.c + net_update.c</li></ul>
 
 </section>
-<div class="note">依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测整理(标注【实测】)。</div>
+<div class="note">依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测（标注【实测】）。</div>
 
       <div class="footer">
         <a href="power.html">← 电源管理</a>
@@ -48,7 +119,7 @@ const struct wifi_calibration_param wifi_calibration_param = {
         <a href="misc.html">其他外设 →</a>
       </div>
     </main>
-    <aside class="toc"><div class="t">本页目录</div><a href="#cal">RF 校准表</a><a href="#coex">协议栈接入要点【实测】</a></aside>
+    <aside class="toc"><div class="t">本页目录</div><a href="#inst">射频集成</a><a href="#regs">WL 寄存器</a><a href="#init">接入要点</a><a href="#note">共存【实测】</a></aside>
   </div>
 </div>
 </body>

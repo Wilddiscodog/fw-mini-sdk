@@ -41,17 +41,23 @@
 typedef struct {
     u16 crc; u16 data_crc; u32 addr; u32 length;
     u8 attr; u8 res; u16 idx; char name[16];
-} JL_FILE_HEAD_PLAIN;
+} __attribute__((packed)) JL_FILE_HEAD_PLAIN;
 
 extern int jl_file_head_valid_check(void *head);             /* update.a(任务上下文) */
 extern uint16_t calc_crc16_with_init_val(uint16_t init_crc, uint8_t *ptr, uint16_t len);
 extern int init_net_device_mac_addr(char *macaddr, char ap_mode);
 extern void wifi_set_lan_setting_info(void);                 /* bt_wifi_app.c(AP IP/DHCP池) */
-/* 升级诊断(update.a): boot_info 状态 / 升级目标地址 / 升级区回读 */
-struct upl_boot_info { u32 code_len; u32 base; u16 ver; };
-extern int get_current_boot_info(void *info);
+/* 升级诊断: 用官方 BootInfo 布局, 避免栈上自拟结构与库写宽不一致 */
+#include "dual_bank_updata_api.h"
 extern u32 get_target_udate_addr(void);
 extern u32 dual_bank_update_read_data(u32 offset, u8 *read_buf, u32 read_len);
+
+/* OTA 期间挂起 LCD/LVGL 刷屏(EMI 高频写会与 flash/WiFi 抢总线 → misalign) */
+volatile u8 g_ui_suspend;
+#if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
+extern void disp_disable_update(void);
+extern void disp_enable_update(void);
+#endif
 
 /* ---- 状态(事件回调置位, 任务轮询) ---- */
 static volatile u8 prov_dhcp_ok;         /* STA: DHCP 成功 */
@@ -558,9 +564,23 @@ static const char *upload_finish_page(const char *msg)
     return page;
 }
 
+static void ota_ui_resume(void)
+{
+    g_ui_suspend = 0;
+#if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
+    disp_enable_update();
+#endif
+}
+
 static void http_handle_upload(int conn, const char *boundary,
                                const char *residue, int residue_len)
 {
+    /* 大缓冲放静态: 原栈上 window+recvbuf≈1.5KB, 叠加 get_current_boot_info
+     * 内部打印易撑破 prov_http 4K 栈 → 返回后 misalign_err */
+    static u8 window[512] __attribute__((aligned(4)));
+    static u8 recvbuf[1024] __attribute__((aligned(4)));
+    static u8 head64[64] __attribute__((aligned(4)));
+
     /* part 头结束 "\r\n\r\n" 之后的字节才是文件内容 */
     const char *body = NULL;
     for (int i = 0; i + 4 <= residue_len; i++) {
@@ -575,10 +595,18 @@ static void http_handle_upload(int conn, const char *boundary,
     }
     int slen = residue_len - (int)(body - residue);
 
+    /* 先挂起 UI, 再开 OTA: 避免 LVGL/EMI 与 norflash 并发 */
+    g_ui_suspend = 1;
+#if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
+    disp_disable_update();
+#endif
+    os_time_dly(20);                     /* ~200ms 等 lcd_test 停刷 */
+
     memset(&upl, 0, sizeof(upl));
     upl.crc_skip = 64;                    /* CRC 覆盖载荷 [64B 双头之后, 文件尾) */
     upl.fd = net_fopen(CONFIG_UPGRADE_OTA_FILE_NAME, "w");
     if (!upl.fd) {
+        ota_ui_resume();
         http_send(conn, HTML_HDR_200,
                   upload_finish_page("OTA 忙(其他升级进行中), 稍后再试。"));
         return;
@@ -587,18 +615,16 @@ static void http_handle_upload(int conn, const char *boundary,
 
     /* 滑动尾窗: 只投喂能排除结束边界(\r\n--BOUNDARY--)的数据 */
     const u8 *stream = (const u8 *)body;
-    u8 window[512];
     int wlen = 0;
-    int keep = strlen(boundary) + 8;
-    u8 head64[64];                        /* 前 64B = 外层 update_data 头 + 内层 app_core 头 */
+    int keep = (int)strlen(boundary) + 8;
     int head_got = 0;
     int done = 0;
-    u8 recvbuf[1024];
-    struct upl_boot_info bi = {0, 0, 0};
+    struct BootInfo bi;
+    memset(&bi, 0, sizeof(bi));
     int biret = get_current_boot_info(&bi);
     int ctx_ok = 0;                       /* 已过首次 4K 落盘(update ctx 有效) */
     printf("[ota-http] boot info ret=%d ver=%u base=0x%08x len=0x%08x\n",
-           biret, bi.ver, bi.base, bi.code_len);
+           biret, bi.version, bi.baseAddress, bi.codeLength);
 
     while (!done) {
         while (wlen < keep) {            /* 窗口不足: 补数据 */
@@ -637,6 +663,7 @@ static void http_handle_upload(int conn, const char *boundary,
                         upload_fail_head:
                         net_fclose(upl.fd, 1);
                         upl.fd = NULL;
+                        ota_ui_resume();
                         http_send(conn, HTML_HDR_200,
                                   upload_finish_page("升级文件头校验失败, 请上传 update-ota.ufw。"));
                         return;
@@ -654,6 +681,7 @@ static void http_handle_upload(int conn, const char *boundary,
                         memcmp(h2->name, "app_core", 8) != 0) {
                         net_fclose(upl.fd, 1);
                         upl.fd = NULL;
+                        ota_ui_resume();
                         http_send(conn, HTML_HDR_200,
                                   upload_finish_page("升级文件内层头异常, 请用构建产出的 update-ota.ufw。"));
                         return;
@@ -689,12 +717,13 @@ static void http_handle_upload(int conn, const char *boundary,
                         "boot: ret=%d ver=%u base=%08x len=%08x<br>"
                         "heads: [%s len=%u] [%s len=%u addr=%u]",
                         upl.recv_total, wret, tgt, rb,
-                        biret, bi.ver, bi.base, bi.code_len,
+                        biret, bi.version, bi.baseAddress, bi.codeLength,
                         n1, upl.file_size, n2, h2->length, h2->addr);
                     printf("[ota-http] net_fwrite fail @%u ret=%d tgt=0x%x rb=%d\n",
                            upl.recv_total, wret, tgt, rb);
                     net_fclose(upl.fd, 1);
                     upl.fd = NULL;
+                    ota_ui_resume();
                     http_send(conn, HTML_HDR_200, upload_finish_page(diag));
                     return;
                 }
@@ -738,6 +767,7 @@ static void http_handle_upload(int conn, const char *boundary,
                  upl.calc_crc, upl.data_crc);
         net_fclose(upl.fd, 1);           /* 不烧写不复位 */
         upl.fd = NULL;
+        ota_ui_resume();
         http_send(conn, HTML_HDR_200, upload_finish_page(diag));
         return;
     }
@@ -745,6 +775,7 @@ static void http_handle_upload(int conn, const char *boundary,
     printf("[ota-http] crc ok, burn boot info, reboot in 2s\n");
     net_fclose(upl.fd, 0);               /* 烧 boot info + 2s 后复位 */
     upl.fd = NULL;
+    /* 成功后保持 UI 挂起, 即将复位 */
     http_send(conn, HTML_HDR_200,
               upload_finish_page("校验通过, 设备即将重启升级..."));
     while (1) {                          /* 等复位 */
@@ -878,7 +909,7 @@ enter_ap:
     printf("[prov] AP active, portal: http://192.168.1.1\n");
 
 http_start:
-    os_task_create(http_server_task, NULL, 11, 4096, 0, "prov_http");
+    os_task_create(http_server_task, NULL, 11, 8192, 0, "prov_http");
     while (1) {
         /* 网页发起的 STA 切换: 60s 内没拿到 DHCP(密码错/超时/拒绝) → 自动回 AP,
          * 让用户能重新进后台。prov_http 任务独立存活, 回 AP 后门户恢复 192.168.1.1 */

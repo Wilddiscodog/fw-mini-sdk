@@ -57,17 +57,97 @@ body {
 .brand .logo em { color: #8fb3ff; font-style: normal; }
 .brand .sub { font-size: 12px; opacity: .75; }
 .navlinks {
-  display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none;
-  margin-left: auto;
+  display: flex; align-items: center; gap: 4px;
+  margin-left: auto; flex: 1; justify-content: flex-end;
+  min-width: 0; position: relative;
 }
-.navlinks::-webkit-scrollbar { display: none; }
-.navlinks a {
+.navlinks .nav-a {
   color: #cdd9f5; text-decoration: none; font-size: 13.5px;
-  padding: 6px 11px; border-radius: 8px; white-space: nowrap;
+  padding: 6px 10px; border-radius: 8px; white-space: nowrap;
   transition: background .15s, color .15s;
 }
-.navlinks a:hover { background: rgba(255, 255, 255, .13); color: #fff; }
-.navlinks a.active { background: rgba(255, 255, 255, .2); color: #fff; font-weight: 600; }
+.navlinks .nav-a:hover { background: rgba(255, 255, 255, .13); color: #fff; }
+.navlinks .nav-a.active { background: rgba(255, 255, 255, .2); color: #fff; font-weight: 600; }
+
+/* 分组下拉 */
+.nav-drop { position: relative; }
+.nav-drop-btn {
+  appearance: none; border: 0; cursor: pointer;
+  background: transparent; color: #cdd9f5;
+  font: inherit; font-size: 13.5px;
+  padding: 6px 10px; border-radius: 8px;
+  display: inline-flex; align-items: center; gap: 4px;
+  white-space: nowrap;
+}
+.nav-drop-btn:hover,
+.nav-drop.open .nav-drop-btn,
+.nav-drop.open-active .nav-drop-btn {
+  background: rgba(255, 255, 255, .16); color: #fff;
+}
+.nav-drop-btn .caret { font-size: 10px; opacity: .85; }
+.nav-drop-btn .nav-drop-cur {
+  max-width: 7.5em; overflow: hidden; text-overflow: ellipsis;
+  opacity: .9; font-weight: 600;
+}
+.nav-drop-btn .nav-drop-cur:empty { display: none; }
+.nav-drop-menu {
+  display: none; position: absolute; top: calc(100% + 6px); right: 0;
+  min-width: 168px; max-height: 70vh; overflow-y: auto;
+  background: #fff; color: var(--ink);
+  border-radius: 10px; box-shadow: 0 8px 28px rgba(16, 30, 70, .28);
+  border: 1px solid var(--line); padding: 6px; z-index: 60;
+}
+.nav-drop.open .nav-drop-menu { display: block; }
+.nav-drop-menu a {
+  display: block; padding: 8px 12px; border-radius: 7px;
+  color: var(--ink-2); text-decoration: none; font-size: 13.5px;
+  white-space: nowrap;
+}
+.nav-drop-menu a:hover { background: var(--accent-soft); color: var(--accent-2); }
+.nav-drop-menu a.active {
+  background: var(--accent-soft); color: var(--accent); font-weight: 600;
+}
+
+/* 全部章节（窄屏 / 备用） */
+.nav-more-btn {
+  appearance: none; border: 0; cursor: pointer;
+  background: rgba(255,255,255,.12); color: #fff;
+  font-size: 16px; line-height: 1;
+  width: 34px; height: 34px; border-radius: 8px;
+  display: none; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.nav-more-btn:hover { background: rgba(255,255,255,.22); }
+.nav-all-panel {
+  display: none; position: absolute; top: calc(100% + 8px); right: 0;
+  width: min(320px, 92vw); max-height: 75vh; overflow-y: auto;
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 10px 32px rgba(16, 30, 70, .3);
+  border: 1px solid var(--line); padding: 10px; z-index: 70;
+}
+.nav-all-panel.open { display: block; }
+.nav-all-g {
+  font-size: 11px; font-weight: 700; letter-spacing: .6px;
+  color: var(--ink-3); text-transform: uppercase;
+  padding: 10px 10px 4px; margin-top: 4px;
+}
+.nav-all-panel a {
+  display: block; padding: 7px 10px; border-radius: 7px;
+  color: var(--ink-2); text-decoration: none; font-size: 13.5px;
+}
+.nav-all-panel a:hover { background: var(--accent-soft); }
+.nav-all-panel a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .navlinks .nav-a,
+  .navlinks .nav-drop { display: none; }
+  .nav-more-btn { display: inline-flex; }
+}
+@media (min-width: 901px) and (max-width: 1100px) {
+  .navlinks .nav-a { padding: 6px 8px; font-size: 12.5px; }
+  .nav-drop-btn { font-size: 12.5px; padding: 6px 8px; }
+  .nav-drop-btn .nav-drop-cur { display: none; }
+}
 
 /* ---------- 布局 ---------- */
 .wrap { max-width: 1200px; margin: 0 auto; padding: 26px 20px 60px; }

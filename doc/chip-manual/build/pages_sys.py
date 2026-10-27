@@ -1,195 +1,350 @@
 # -*- coding: utf-8 -*-
-"""pages_sys.py — Flash加密 / 显示 / 摄像头 / 电源 / WiFi-BT / 其他"""
+"""pages_sys.py — Flash加密 / 显示 / 摄像头 / 电源 / WiFi-BT / 其他（加深）"""
 from gen_core import *
 import regs_wl82 as R
+import regs_bits as B
 
 CHIP_NOTE = callout("note",
-    "依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测整理(标注【实测】)。")
+    "依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测（标注【实测】）。")
 
 
 # ================================================================ SFC + 安全
 def build_sfc():
-    body = base_badge("SFC") + p(
-        "SFC = SPI NOR Flash 控制器(0x40000 区, XIP 取指), SFCENC 为配套加密引擎"
-        "(0x40400 区)。烧录镜像经 isd_download 打包, 运行时读写走 "
-        "<code>sfc_norflash_api.h</code>(norflash_read/write/ioctl 擦扇区)。")
-    body += sec("regs", "SFC 寄存器", sdk_regs("SFC", {
-        "CON": "接口模式(2/4 线)/时钟分频",
-        "BAUD": "波特率(sfc_clk = hsb/(baud+1))",
-        "BUF/ADR/CNT": "数据/地址/计数",
-    }))
-    body += sec("vm", "Flash 布局与 VM 区",
+    body = ""
+    body += sec("inst", "实例 / 基址",
+        table(["模块", "基址", "说明"], [
+            ("SFC", R.fmt_base("SFC"), "SPI NOR XIP"),
+            ("SFCENC", R.fmt_base("SFCENC") if R.base_of("SFCENC") else "0x40400", "加密引擎"),
+            ("AES", R.fmt_base("AES") if R.base_of("AES") else "0x41200", "IRQ 31"),
+            ("SHA", R.fmt_base("SHA") if R.base_of("SHA") else "—", "IRQ 56"),
+            ("CRC", R.fmt_base("CRC") if R.base_of("CRC") else "0x13500", "CRC16"),
+            ("RAND", R.fmt_base("RAND") if R.base_of("RAND") else "0x13B00", "硬件随机"),
+            ("EFUSE", R.fmt_base("EFUSE") if R.base_of("EFUSE") else "0x13700", "熔丝"),
+        ])
+        + p("运行时 API：<code>sfc_norflash_api.h</code>；"
+            "SFC 时钟 = HSB/(BAUD+1)。"))
+
+    body += sec("regs", "SFC 寄存器",
+        sdk_regs("SFC", {
+            "CON": "线宽/模式；BIT31=忙（cpu.h SFC_WAIT）",
+            "BAUD": "分频", "BUF": "数据", "ADR": "地址", "CNT": "计数",
+        }, bit_key="SFC.CON")
+        + callout("note", B.unpublished_note("SFC 其余位 / SFCENC")))
+
+    body += sec("init", "布局与读写",
         ul([
-            "单备份: NEW_FLASH_FS=YES; 双备份: BR22_TWS_DB=YES + DB_UPDATE_DATA(OTA 载荷)",
-            "VM 参数区: 默认 Flash 尾部(16M flash 例: 0xFF5000~0xFFD000), syscfg_read/write API",
-            "预留区: BTIF(蓝牙配对)/EXIF(客户)/VM 均可在 isd_config_rule.c 配地址与 OPT(0 擦除/1 保留/2 保护)",
-            "SFCENC + 0x7DF1.key: 代码加密(isd_download -key), EFUSE 存用户 key",
-        ]))
-    body += sec("sec", "加密与杂凑加速器", table(["模块", "基址", "说明"], [
-        ("AES", "<code>0x41200</code>", "AES 硬件(IRQ 31), aes_hw.h"),
-        ("DCP", "<code>0x41300</code>", "数据协处理(图像旋转/拷贝加速)"),
-        ("SHA", "<code>0x11400 区</code>", "SHA1/256(IRQ 56), sha_hw.h【实测: hw cbc/sha demo 通过】"),
-        ("CRC", "<code>0x13500</code>", "硬件 CRC16(CRC16()/calc_crc16_with_init_val 库内调用)"),
-        ("RAND", "<code>0x13B00</code>", "硬件随机数"),
-        ("EFUSE", "<code>0x13700</code>", "熔丝(芯片 ID/加密 key), asm/efuse.h"),
-    ]))
+            "单备份 NEW_FLASH_FS；双备份 BR22_TWS_DB + DB_UPDATE_DATA",
+            "VM 默认 Flash 尾（如 0xFF5000~0xFFD000），syscfg_read/write",
+            "SFCENC + 0x7DF1.key：isd_download -key；EFUSE 存用户 key",
+        ])
+        + code("""norflash_read(buf, addr, len);
+norflash_write(buf, addr, len);
+/* ioctl 擦扇区；XIP 取指时勿擦正在执行的 bank */"""))
+
+    body += sec("note", "加速器",
+        p("AES/DCP/SHA/CRC/RAND/EFUSE 均以 API 为准，硬件位域未公开。")
+        + callout("note", "【实测】hw cbc/sha demo 通过。"))
     body += CHIP_NOTE
     page("sfc-sec.html", "Flash & Security", "Flash 与安全加速器",
-         "SFC XIP、SFCENC 加密、VM 布局、AES/SHA/CRC/RAND/EFUSE", body)
+         "SFC 寄存器 + VM/加密 + AES/SHA 等", body)
 
 
 # ================================================================ 显示
 def build_display():
-    body = p("三条显示通路 + 端口域 LCDC(0x51000 区, LCD 复用引脚控制):")
-    body += table(["接口", "基址", "类型", "典型屏"], [
-        ("EMI", "<code>0x41400</code>", "8080 并口 8/16bit", "ILI9341/ILI9481/JD9853 SPI 屏控制器 IC"),
-        ("IMD", "<code>0x41D00 区</code>", "RGB 并口(SerDes 可扩展)", "RGB888/565 裸屏"),
-        ("PAP", "<code>0x12A00</code>", "并口(打印/低速)", "并口外设"),
-    ])
-    body += sec("emi", "EMI 8080 接口【实测逆向】",
-        p("闭源 cpu.a 的 emi.c 关键语义(反汇编参考工程 sdk.elf 还原):")
-        + ul([
-            "emi_write ≥5 字节 DMA 写要求缓冲 <b>4 字节对齐</b>, 否则返回 -22 且一个字节都不发"
-            "(错误串 'err in emi dma data address no align 4bytes')",
-            "&lt;5 字节的短写(命令字节)自动拷入内部 emi_buf(0x1C14DC8)再发, 无对齐要求",
-            "DMA 寄存器在基址 0x41400: [+8]=缓冲指针 [+12]=长度(结构体偏移, 见下表); <b>可读 SDRAM</b>(与 USB DMA 不同)",
-            "EMI_USE_SEND_SEM ioctl: 信号量异步模式(os_sem_pend 200tick 让出 CPU)——LCD 帧写入的推荐模式",
-            "中断 IRQ_EMI_IDX=27, emi_isr 完成后 post 信号量",
-        ]) + sdk_regs("EMI", {
-            "CON": "位宽(8/16bit)/采样沿/使能",
-            "BAUD": "HSB 分频(baudrate+1)",
-            "TW": "写脉冲宽度档",
-            "ADR": "DMA 缓冲地址(≥5B 写, 4 字节对齐)",
-            "CNT": "DMA 传输长度",
-        }) + code("""/* emi_platform_data(board.c) */
-static const struct emi_platform_data emi_data = {
-    .bits_mode = EMI_8BITS_MODE,      /* 8 位并口 */
-    .baudrate  = EMI_BAUD_DIV8,       /* clock = HSB/(baud+1) */
-    .colection = EMI_FALLING_COLT,    /* 下降沿采样 */
-    .tw        = EMI_BAUD_DIV6,       /* 写脉冲宽(慢屏加大) */
-    .th        = EMI_TWIDTH_NO_HALF,  .time_out = 1000,
-};
-dev_ioctl(hdl, EMI_USE_SEND_SEM, 0);  /* 异步信号量模式 */""")
-        + callout("warn", "【实测】写屏缓冲务必 aligned(4)(u16 fb[] 静态数组可能 2 对齐); "
-                  "屏驱动注册表 list_for_each_lcd_driver 取<b>第一个</b>注册项, "
-                  "多面板驱动同编时按链接顺序误选——只编一个面板驱动。"))
+    s = Svg(920, 340)
+    s.box(30, 40, 140, 70, ["UI 框架", "ui_platform /", "LVGL"], "cpu", fs=12)
+    s.box(220, 30, 150, 50, ["Framebuffer", "RGB565 / MONO"], "mem", fs=11)
+    s.box(220, 100, 150, 50, ["pi32v2 fill/copy", "DSP REP 加速"], "cpu", fs=11)
+    s.arrow(170, 75, 220, 55); s.arrow(170, 75, 220, 125)
+    s.box(420, 20, 150, 45, ["EMI 8080", R.fmt_base("EMI")], "peri", fs=11)
+    s.box(420, 80, 150, 45, ["IMD RGB", "+ IMR 旋转"], "peri", fs=11)
+    s.box(420, 140, 150, 45, ["PAP", R.fmt_base("PAP")], "peri", fs=11)
+    s.box(420, 200, 150, 45, ["DCP / IMB", "图像协处理"], "mem", fs=11)
+    s.arrow(370, 55, 420, 42); s.arrow(370, 125, 420, 100)
+    s.box(620, 50, 160, 70, ["LCD 面板", "ILI/JD/ST…", "REGISTER_LCD_DEV"], "ana", fs=11)
+    s.arrow(570, 42, 620, 75); s.arrow(570, 100, 620, 85)
+    s.box(620, 160, 160, 55, ["TE 同步", "lcd_te_driver"], "bus", fs=11)
+    s.text(30, 310, "LVGL: lv_port_disp → lcd_lvgl_full → EMI DMA；官方 sty UI: ui_core → br23_* → put_draw_context → LCD", 11)
 
-    body += sec("lcd", "LCD 框架与应用层",
-        ul([
-            "lcd_drive.c: REGISTER_LCD_INTERFACE + 面板 REGISTER_LCD_DEV(.lcd 段)",
-            "面板驱动原语: WriteCOM/WriteDAT_8/WriteDAT_DMA(lcd_send_map→dev_write(emi))",
-            "背光在 lcd_pdata.bl_pin(GPIO 或 PWM); 复位 rst_pin; 撕裂同步 te_pin",
-            "【实测】原厂 ili9481_init 第一行即开背光(背光=驱动被选中+EMI open 成功的判据)",
-            "LVGL/AWTK/摄像头合成走 te_driver 框架(TE 中步同步), 未移植时用 te_stub 桩",
+    body = ""
+    body += sec("arch", "显示架构",
+        fig(s.render(), "应用 UI → FB/加速填充 → EMI/IMD/PAP → 面板")
+        + p("两条应用栈并行存在于原厂 SDK："
+            "<b>① 自研 sty/UI</b>（<code>ui_platform.c</code> + res）；"
+            "<b>② LVGL</b>（官方补丁深度对接 <code>lcd_drive</code>）。"
+            "底层共用 EMI/IMD 与面板驱动注册表。"))
+
+    body += sec("inst", "总线与加速硬件",
+        table(["模块", "基址", "IRQ", "用途"], [
+            ("EMI", R.fmt_base("EMI"), "27", "8080 并口写屏（MCU 屏主流）"),
+            ("IMD", R.fmt_base("IMD") if R.base_of("IMD") else "—", "65", "RGB 屏；可挂 IMR"),
+            ("PAP", R.fmt_base("PAP"), "22", "低速并口"),
+            ("DCP", R.fmt_base("DCP") if R.base_of("DCP") else "0x41300", "—",
+             "数据协处理（旋转/拷贝类，位域未公开）"),
+            ("IMR", "asm/imr.h", "—", "图像旋转（IMD 路径）"),
+            ("IMB", "asm/imb.h", "—", "YUV 贴图/合成（摄像头叠加）"),
+            ("IMC", "asm/imc.h", "—", "视频 OSD/裁剪/预缩放命令"),
+            ("JPEG", R.fmt_base("JPG") if R.base_of("JPG") else "—", "55", "硬编解码喂显示/网络"),
         ]))
-    body += sec("pap", "PAP 并口寄存器", sdk_regs("PAP", {
-        "CON": "并口时序/使能", "BUF": "数据",
-    }) + callout("note", "IMD(RGB 屏)寄存器在 asm/WL82_imd.h 单独定义(带 IPPI/层混合), "
-              "配 RX801T 类 RGB 屏使用; LCDC(0x51000 区)管 LCD 复用引脚方向。"))
+
+    body += sec("regs", "EMI / PAP 寄存器",
+        sdk_regs("EMI", {
+            "CON": "位宽/采样沿/使能",
+            "BAUD": "HSB/(baud+1)",
+            "TW": "写脉冲宽",
+            "ADR": "DMA 缓冲（≥5B，4 字节对齐）",
+            "CNT": "DMA 长度",
+        })
+        + callout("note", B.unpublished_note("EMI CON"))
+        + sdk_regs("PAP", {"CON": "时序/使能", "BUF": "数据"}))
+
+    body += sec("emi", "EMI 写屏语义【实测】",
+        code("""static const struct emi_platform_data emi_data = {
+    .bits_mode = EMI_8BITS_MODE, .baudrate = EMI_BAUD_DIV8,
+    .colection = EMI_FALLING_COLT, .tw = EMI_BAUD_DIV6,
+    .th = EMI_TWIDTH_NO_HALF, .time_out = 1000,
+};
+dev_ioctl(hdl, EMI_USE_SEND_SEM, 0);  /* 异步推荐 */""")
+        + ul([
+            "≥5B DMA 写须 4 字节对齐，否则 -22 且不发",
+            "&lt;5B 短写进内部 emi_buf，无对齐要求",
+            "DMA <b>可读 SDRAM</b>（对比 USB 仅 RAM0）",
+            "面板 <code>REGISTER_LCD_DEV</code>：框架取<strong>第一个</strong>注册项",
+        ]))
+
+    body += sec("ui-plat", "官方 UI 平台（ui_platform.c）",
+        p("路径：<code>apps/common/ui/ui_driver/interface/ui_platform.c</code>（"
+            "<code>CONFIG_UI_ENABLE</code>）。"
+            "向 <code>ui_core_init</code> 注册 <code>br23_platform_api</code>：")
+        + table(["API", "作用"], [
+            ("load_style / load_window", "加载 .sty 窗口与控件树"),
+            ("open/get/put/close_draw_context", "申请/提交绘图上下文（FB 脏区）"),
+            ("fill_rect / draw_rect / draw_image / show_text", "填充、边框、图片(含 RLE+α)、文字"),
+            ("read/draw_point / invert_rect", "点读写与反色"),
+            ("open_device / close_device", "打开底层 lcd_interface"),
+        ])
+        + ul([
+            "资源：menu.res / str.res / ascii.res（及表盘 JL.sty 等）",
+            "支持控件旋转 90°/270°（sty 头 rotate → ui_core_set_rotate + mirror）",
+            "图片：可选 alpha 通道 + RLE 解码后 α 混合（get_mixed_pixel）",
+            "输出格式：OSD16(RGB565) 或 MONO",
+        ]))
+
+    body += sec("pi32", "ui_platform 中的 CPU/DSP 加速",
+        p("文件开头定义了 <code>pi32v2_fill_q15/q31</code>、"
+            "<code>pi32v2_copy_q7/q31</code>，用 pi32v2 <b>硬件循环 REP</b> "
+            "做成块填色/拷贝（DSP 风格内联汇编），在 "
+            "<code>br23_fill_rect</code> 热路径调用。")
+        + code("""#define USE_PI32V2_MATH  0      /* 默认关！改为 1 才走 DSP 路径 */
+#define PI32V2_MATH_DSP
+/* fill: pack 两个 RGB565 → 一次写 32bit；REP 循环 [%1++=4]=r8 */
+/* copy: REP 循环 load/store 字拷贝行缓冲 */
+#if USE_PI32V2_MATH
+    pi32v2_fill_q31(color32, p32, count);
+    pi32v2_copy_q31(_p32, __p32, width/2);  /* 后续行复制首行 */
+#else
+    while (count--) *p32++ = color32;       /* 纯 C */
+    memcpy(...);
+#endif""")
+        + table(["点", "说明"], [
+            ("加速本质", "不是独立 GPU，而是 <b>CPU0/1 的 pi32v2 SIMD/REP 指令</b>加速 FB 内存填充与行复制"),
+            ("默认状态", "<code>USE_PI32V2_MATH=0</code> → 量产默认走 C/memcpy；打开后对齐要求更严"
+             "（指针 4 字节对齐、width 偶数）"),
+            ("适用操作", "大面积 fill_rect、同色行复制；draw_image/α 混合仍多为标量循环"),
+            ("与 EMI DMA 关系", "CPU 加速的是<strong>合成进 FB</strong>；"
+             "刷屏另走 EMI DMA（可并行：双缓冲/信号量）"),
+            ("LVGL 侧", "官方 <code>lv_port_disp.c</code> 中 <code>gpu_fill</code> 被注释掉，"
+             "<b>未</b>把 pi32v2_fill 接到 LVGL；LVGL 绘制仍为软件光栅"),
+        ])
+        + callout("note", "若要给 LVGL 加速填充，需自行实现 "
+                  "<code>gpu_fill_cb</code> 调 pi32v2_*，并保证色格式/对齐与 "
+                  "RGB565 FB 一致；刷屏仍建议双 buffer + EMI DMA。"))
+
+    body += sec("lvgl", "LVGL 深度绑定（官方补丁）",
+        p("原厂路径：<code>apps/common/example/third_party/lvgl/LVGL补丁/</code>；"
+            "fw-mini-sdk：<code>third/lvgl</code> + <code>third/lvgl_port</code>（同款对接思路）。")
+        + table(["层级", "文件/符号", "绑定点"], [
+            ("任务", "lvgl_main_task / late_initcall",
+             "lv_init → tick(1ms) → port_disp/indev → demo → lv_task_handler 循环"),
+            ("显示", "lv_port_disp.c",
+             "双缓冲各 LCD_W×10 行；flush_cb → <code>lcd_lvgl_full(xs,xe,ys,ye,buf)</code>"),
+            ("屏驱", "lcd_drive / user_lcd_init",
+             "与 sty UI 共用面板驱动与 EMI；只初始化屏时可单独调 user_lcd_init"),
+            ("TE", "lcd_te_driver",
+             "撕裂同步；摄像头合成等同框架；无 TE 时用 stub"),
+            ("输入", "lv_port_indev.c",
+             "触摸 FT6236/GT911/CST816 等板级实现"),
+            ("FS", "lv_port_fs.c", "对接杰理 FS（可选）"),
+            ("配置", "lv_conf.h + 板级 LCD_W/H",
+             "与 isd/屏驱动分辨率必须一致"),
+        ])
+        + code("""/* 官方 lv_main.c 骨架 */
+lv_init();
+sys_timer_add(NULL, lv_tick_inc_1ms, 1);
+lv_port_disp_init();   /* → user_lcd_init + 双缓冲 */
+lv_port_indev_init();
+lv_demo_widgets();     /* 或 benchmark/music */
+while (1) { lv_task_handler(); }
+
+/* flush → 硬件 */
+lcd_lvgl_full(area->x1, area->x2, area->y1, area->y2, (u16 *)color_p);
+lv_disp_flush_ready(disp_drv);""")
+        + ul([
+            "深度绑定含义：LVGL <b>不</b>另起一套总线驱动，flush 直接进原厂 "
+            "<code>lcd_lvgl_full</code>→EMI；屏参/背光/复位与 sty 工程共用",
+            "官方示例默认双 partial buffer（10 行×2），注释写明应用 DMA 与绘制并行——"
+            "对应 EMI_USE_SEND_SEM 异步路径",
+            "【实测 fw-mini-sdk】JD9853 + EMI8 + CST816；OTA 前须挂起 LVGL/EMI，"
+            "否则与 Flash/WiFi 抢总线易 misalign",
+            "任务优先级示例 11（低于 audio_decoder=30，高于部分网络）；"
+            "重 UI 时可 #C1lvgl 与 BT#C0 错开",
+        ]))
+
+    body += sec("note", "选型与约束",
+        ul([
+            "MCU 屏 → EMI；RGB 屏 → IMD(+IMR)；视频 OSD → IMC；贴图 → IMB",
+            "sty UI 适合表盘/资源包产品；LVGL 适合自定义控件与开源生态",
+            "两者勿同时高频刷同一 EMI，除非分时/挂起一方",
+            "写屏缓冲 aligned(4)；多面板驱动勿同编",
+        ]))
     body += CHIP_NOTE
-    page("display.html", "Display", "显示接口",
-         "EMI 8080(实测逆向)/IMD RGB/PAP + LCD 驱动框架与背光策略", body)
+    page("display.html", "Display", "显示与 UI",
+         "EMI/IMD、ui_platform pi32v2 加速、LVGL 官方绑定", body)
 
 
 # ================================================================ 摄像头
 def build_camera():
-    body = p("DVP 摄像头输入 → ISP → JPEG 硬件编解码 → 显示/网络, 全链硬件加速:")
-    body += table(["模块", "基址/中断", "说明"], [
-        ("ISC0/ISC1", "0x41A00/0x41B00 区 · IRQ 59/64", "两路 DVP 并口摄像头(xclk 由 IO 输出通道提供)"),
-        ("ISP", "isp_dev.h/isp_alg.h", "3A/降噪/宽动态算法参数(闭源库)"),
-        ("IMC/IMR/IMB", "imc_driver.h 等", "图像拷贝/旋转/缩放(硬件 2D)"),
-        ("JPEG", "0x40900 区 · IRQ 55", "编码 jpeg_encoder.h + 解码 jpeg_decoder.h, ABR 码率自适应"),
-        ("OSD", "osd.h", "字符/图层叠加"),
-        ("ENC(0x13000)", "image_enc.h", "二维码识别等编码加速"),
-    ])
-    body += code("""/* DevKitBoard camera 平台数据示例 */
-static const struct camera_platform_data camera0_data = {
-    .xclk_gpio = IO_PORTH_02,   /* xclk 由 output channel 驱动 */
-    .reset_gpio = ..., .pwr_gpio = ...,
+    body = ""
+    body += sec("inst", "模块",
+        table(["模块", "基址/IRQ", "说明"], [
+            ("ISC0/1", "%s / %s · 59/64" % (
+                R.fmt_base("ISC0") if R.base_of("ISC0") else "0x41A00",
+                R.fmt_base("ISC1") if R.base_of("ISC1") else "0x41B00"), "双 DVP"),
+            ("JPEG", R.fmt_base("JPG") if R.base_of("JPG") else "0x40900 · 55", "编解码"),
+            ("ISP/IMC", "闭源 API", "3A / 2D"),
+            ("ENC", R.fmt_base("ENC") if R.base_of("ENC") else "0x13000", "图像编码加速"),
+        ]))
+
+    body += sec("regs", "关键寄存器",
+        (sdk_regs("ISC0") if R.regtable("ISC0") else callout("note", "ISC 结构体见 WL82.h / 驱动头"))
+        + (sdk_regs("JPG") if R.regtable("JPG") else "")
+        + callout("note", "位域未公开；经 camera / jpeg_* API。"))
+
+    body += sec("init", "平台数据",
+        code("""static const struct camera_platform_data camera0_data = {
+    .xclk_gpio = IO_PORTH_02,
     .interface_mode = CAMERA_INTERFACE_MODE_DVP,
     .clk_edge = CAMERA_CLK_EDGE_1, .fmt = CAMERA_FMT_YUV422,
-};""")
-    body += callout("note", "参考例程: apps/demo/demo_DevKitBoard/camera_lcd_demo.c "
-              "(UVC→LCD), user_video_rec.c(录像), simple_avi_unpkg.c。")
+};"""))
+
+    body += sec("note", "参考",
+        p("demo：camera_lcd_demo.c、user_video_rec.c。"))
     body += CHIP_NOTE
     page("camera.html", "Camera & Codec", "摄像头与图像编解码",
-         "双 DVP ISC、ISP、JPEG 编解码、2D 加速、OSD", body)
+         "ISC/JPEG 基址 + 平台流程", body)
 
 
 # ================================================================ 电源
 def build_power():
-    body = p("电源域: CORE(DVDD 1.2V 档)/IO(VDDIO 档)/DCDC14/模拟域, "
-             "档位由 isd_config 烧录(VDDIO=4→3.2V 等); P33 常供电域支持软关机与唤醒。")
-    body += sec("p33", "P33 与软关机",
-        code("""/* asm/power_interface.h【实测: net_update 复位路径】 */
-if (get_power_keep_state() & POWER_KEEP_RTC)
-    power_set_soft_poweroff(10);   /* 软关机 10ms 后上电唤醒(RTC 保时场景) */
+    body = ""
+    body += sec("inst", "电源域",
+        p("CORE DVDD / IO VDDIO / DCDC14 / 模拟域；档位 isd_config 烧录。"
+            "P33 常电域：软关机与唤醒。相关：JL_POWER / JL_P33 / LRCT。")
+        + base_badge("POWER")
+        + (sdk_regs("POWER", {
+            "CON": "电源控制（位域未公开，经 power_* API）",
+        }) if R.regtable("POWER") else ""))
+
+    body += sec("regs", "P33 / 关键",
+        (sdk_regs("P33") if R.regtable("P33") else p("P33 经 SPI 窗口访问（p33.h 宏）。"))
+        + callout("note", B.unpublished_note("POWER/P33")))
+
+    body += sec("init", "软关机 / WDT / RTC",
+        code("""if (get_power_keep_state() & POWER_KEEP_RTC)
+    power_set_soft_poweroff(10);
 else
-    system_reset();                /* 普通复位 */"""))
-    body += sec("charge", "充电与电池", ul([
-        "charge.h: 充电电流/电压阈值平台数据(锂电池直充方案)",
-        "LRCT(0x13600 区, IRQ 44): RTC 计数与闹钟, 掉电域保持",
-        "LVD 低压检测、VCM/VDD 档位调试接口(p33.h)",
-    ]))
-    body += sec("wdt", "看门狗", code("""#include \"asm/wdt.h\"
-wdt_close();            /* 关闭(调试) */
-__wdt_clear();          /* 清狗(异常路径必须调, cpu/wl82/debug.c) */"""))
+    system_reset();
+__wdt_clear();   /* 异常路径必调 */"""))
+
+    body += sec("note", "其它",
+        ul([
+            "charge.h 充电流压阈值",
+            "LRCT RTC 闹钟（IRQ 44）",
+            "power_interface.h：SYS_SLEEP_* / POWER_KEEP_* 标志",
+        ]))
     body += CHIP_NOTE
-    page("power.html", "Power", "电源管理", "电源域、P33 软关机、充电、RTC(LRCT)、看门狗", body)
+    page("power.html", "Power", "电源管理", "域、P33、WDT、充电", body)
 
 
 # ================================================================ WiFi / BT
 def build_wifibt():
-    body = base_badge("WL") + p(
-        "片内 2.4GHz 射频+基带: WiFi4(1T1R, 库 wl_wifi.a AP+STA / wl_wifi_sta.a 仅STA)"
-        "+ 经典蓝牙/BLE(btctrler.a 控制器 + btstack.a 主机栈)。"
-        "基带寄存器 JL_WL(0x14000 区, 31 个)与 RF 校准由闭源库管理。")
-    body += sec("cal", "RF 校准表", code("""/* board.c(wifi_calibration_param): 每台 MP 校准后烧写 */
+    body = ""
+    body += sec("inst", "射频集成",
+        base_badge("WL")
+        + p("WiFi4 1T1R（wl_wifi.a / wl_wifi_sta.a）+ 经典 BT/BLE"
+            "（btctrler.a + btstack.a）。基带 JL_WL，校准闭源。"))
+
+    body += sec("regs", "WL 寄存器",
+        sdk_regs("WL") if R.regtable("WL") else callout("warn", "WL 结构体未公开完整位。")
+        + callout("note", B.unpublished_note("WL")))
+
+    body += sec("init", "接入要点",
+        code("""/* 校准表 board.c */
 const struct wifi_calibration_param wifi_calibration_param = {
-    .xosc_l = 0xb, .xosc_r = 0xb,          /* 晶振频偏 */
-    .pa_trim_data[7], .mcs_dgain[20],      /* PA/数字增益 */
-};"""))
-    body += sec("coex", "协议栈接入要点【实测】",
+    .xosc_l = 0xb, .xosc_r = 0xb, /* + pa_trim / mcs_dgain */
+};
+wifi_set_event_callback(cb);  /* 必须先于 wifi_on() */
+wifi_on();""")
+        + ul([
+            "task_info_table 须含 tasklet / RtmpMlmeTask / RtmpCmdQTask / wl_rx_irq_thread",
+            "BT_STATUS_INIT_OK 经 app_default_event_handler 强定义送达",
+            "MAC：强定义 init_net_device_mac_addr；BLE 地址由经典地址派生",
+        ]))
+
+    body += sec("note", "共存【实测】",
         ul([
-            "WiFi 库按名字 task_create, task_info_table 必须含: tasklet(10/1400), "
-            "RtmpMlmeTask(17/700), RtmpCmdQTask(17/300), wl_rx_irq_thread(5/256)",
-            "事件回调 wifi_set_event_callback 必须先于 wifi_on() 注册(空回调=首事件跳 0 崩溃)",
-            "BT_STATUS_INIT_OK 只经 app_default_event_handler 强定义送达(register_sys_event_handler 收不到)",
-            "WiFi MAC: 强定义 init_net_device_mac_addr(库内 weak); BLE 地址 lib_make_ble_address 由经典蓝牙地址派生",
-            "BT/WiFi 共存: rf_coexistence_config.h 配置时分参数",
-            "配网/OTA 应用层参考: wifi_prov.c(STA→AP 门户)+net_update.c(dual_bank OTA)",
+            "rf_coexistence_config.h 时分参数",
+            "早期同时开 BT+WiFi 与 USB 可能冲日志/稳定性——可延后 wifi_on",
+            "配网/OTA：wifi_prov.c + net_update.c",
         ]))
     body += CHIP_NOTE
     page("wifi-bt.html", "WiFi & BT", "WiFi/BT 射频集成",
-         "片内 WiFi4+BT/BLE: 校准表、库任务、事件路由与 MAC(实测要点)", body)
+         "WL 寄存器表 + 库任务/事件/共存", body)
 
 
 # ================================================================ 其他
 def build_misc():
-    body = table(["外设", "基址/头文件", "说明"], [
-        ("WDT", "wdt.h", "看门狗(见电源章)"),
-        ("RDEC", "<code>0x12C00</code> · rdec.h", "旋转编码器解码(多路)"),
-        ("IRFLT", "<code>0x13200</code> · irflt.h", "红外遥控接收滤波"),
-        ("OSA", "<code>0x13400</code>", "LSB 时钟丢失监控(debug.c 初始化)"),
-        ("CTMU", "<code>0x13C00</code> · ctmu.h", "电容触摸(按键/滑动), IRQ 36"),
-        ("PWM_LED", "pwm_led.h", "呼吸灯驱动(2 LED 独立 PWM)"),
-        ("PLCNT", "plcnt.h", "PL 计数(功耗计数)"),
-        ("SS", "<code>0x12B00</code>", "保密接口(生产测试)"),
-        ("MBIST/MBISTW", "0x41x00/0x15400 区", "存储器内建自测"),
-        ("FFT", "IRQ 57", "硬件 FFT 加速器(jl_math 之外的硬核)"),
-        ("ENC", "<code>0x13000</code>", "编码加速(二维码 image_enc)"),
-        ("uvc_device", "uvc_device.h", "USB 摄像头设备模式"),
-        ("spdif", "spdif.h", "数字音频输出"),
-        ("src", "<code>0x14300</code> · src.h", "异步变采样(音频通路)"),
-    ])
-    body += sec("bootmode", "烧录与产线",
+    body = ""
+    body += sec("inst", "外设速览",
+        table(["外设", "基址", "说明"], [
+            ("WDT", "— / wdt.h", "看门狗"),
+            ("RDEC", R.fmt_base("RDEC") if R.base_of("RDEC") else "0x12C00", "旋转编码"),
+            ("IRFLT", R.fmt_base("IRFLT") if R.base_of("IRFLT") else "0x13200", "红外滤波"),
+            ("OSA", R.fmt_base("OSA") if R.base_of("OSA") else "0x13400", "LSB clk 丢失"),
+            ("CTMU", R.fmt_base("CTMU") if R.base_of("CTMU") else "0x13C00", "电容触摸"),
+            ("SS", R.fmt_base("SS") if R.base_of("SS") else "0x12B00", "保密接口"),
+            ("FFT", "csfr JL_FFT / IRQ57", "FFT 加速"),
+            ("SRC", R.fmt_base("SRC") if R.base_of("SRC") else "0x14300", "变采样"),
+            ("ENC", R.fmt_base("ENC") if R.base_of("ENC") else "0x13000", "图像编码"),
+        ]))
+
+    body += sec("regs", "示例：OSA / FFT",
+        (sdk_regs("OSA") if R.regtable("OSA") else "")
+        + p("FFT 在 csfr.h：") + sdk_csfr_regs("FFT", {"CON": "控制", "CADR": "地址"})
+        + callout("note", "多数 misc 外设位域未公开，以对应 *.h API 为准。"))
+
+    body += sec("init", "常用",
+        code("""JL_OSA->CON = 0x6D;  /* LSB clk 监控，见 debug.c */
+request_irq(IRQ_OSA_IDX, …);
+wdt_close();  __wdt_clear();"""))
+
+    body += sec("note", "烧录",
         ul([
-            "USB 烧录: 开机短接进入(isd_config DOWNLOAD_MODEL=usb), 工具 isd_download.exe",
-            "串口烧录: SERIAL 模式(UTRX 引脚), 烧录器/1拖8 需 TOOL_CONFIG 最低版本",
-            "双备份升级文件: db_update_data.bin(即 update-ota.ufw), 单备份用 jl_isd.ufw【实测】",
+            "USB/串口烧录由 isd_config DOWNLOAD_MODEL 决定",
+            "双备份：db_update_data.bin / update-ota.ufw；单备份 jl_isd.ufw【实测】",
         ]))
     body += CHIP_NOTE
-    page("misc.html", "Misc", "其他外设", "WDT/RDEC/IR/CTMU/呼吸灯/FFT/烧录模式速览", body)
+    page("misc.html", "Misc", "其他外设", "速览表 + OSA/FFT 寄存器 + 烧录", body)
 
 
 if __name__ == "__main__":

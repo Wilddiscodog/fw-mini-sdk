@@ -12,6 +12,7 @@ import pages_sys
 
 pages_core.build_index()
 pages_core.build_cpumem()
+pages_core.build_cache_mmu()
 pages_core.build_clock()
 pages_core.build_gpio()
 pages_core.build_irq()

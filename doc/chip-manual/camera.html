@@ -12,36 +12,98 @@
     <span class="logo">AC7912BB<em>·WL82</em></span>
     <span class="sub">芯片参考手册</span>
   </a>
-  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html" class=active>摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+  <div class="navlinks"><a class="nav-a" href="index.html">芯片总览</a><a class="nav-a" href="cpu-mem.html">CPU 与存储</a><a class="nav-a" href="cache-mmu.html">Cache / MMU</a><a class="nav-a" href="clock.html">时钟系统</a><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">基础外设<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a></div></div><div class="nav-drop open-active"><button type="button" class="nav-drop-btn" aria-expanded="false">多媒体<span class="nav-drop-cur">摄像头与编解码</span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html" class=active>摄像头与编解码</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">系统<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div><button type="button" class="nav-more-btn" aria-label="全部章节">☰</button><div class="nav-all-panel"><div class="nav-all-g">核心</div><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="cache-mmu.html">Cache / MMU</a><a href="clock.html">时钟系统</a><div class="nav-all-g">基础外设</div><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><div class="nav-all-g">多媒体</div><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html" class=active>摄像头与编解码</a><div class="nav-all-g">系统</div><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div>
 </div></nav>
+<script>
+(function(){
+  document.querySelectorAll('.nav-drop-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var drop = btn.parentElement;
+      var open = drop.classList.contains('open');
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      document.querySelector('.nav-all-panel') && document.querySelector('.nav-all-panel').classList.remove('open');
+      if (!open) drop.classList.add('open');
+      btn.setAttribute('aria-expanded', (!open).toString());
+    });
+  });
+  var more = document.querySelector('.nav-more-btn');
+  var panel = document.querySelector('.nav-all-panel');
+  if (more && panel) {
+    more.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      panel.classList.toggle('open');
+    });
+  }
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+    if (panel) panel.classList.remove('open');
+  });
+})();
+</script>
 
 <div class="wrap">
   <header class="hero">
     <div class="crumb">Camera &amp; Codec</div>
     <h1>摄像头与图像编解码</h1>
-    <p>双 DVP ISC、ISP、JPEG 编解码、2D 加速、OSD</p>
+    <p>ISC/JPEG 基址 + 平台流程</p>
   </header>
 
   <div class="layout">
     <main class="main">
-<p>DVP 摄像头输入 → ISP → JPEG 硬件编解码 → 显示/网络, 全链硬件加速:</p>
-<div class="tbl-wrap"><table class="tbl "><thead><tr><th>模块</th><th>基址/中断</th><th>说明</th></tr></thead><tbody>
-<tr><td>ISC0/ISC1</td><td>0x41A00/0x41B00 区 · IRQ 59/64</td><td>两路 DVP 并口摄像头(xclk 由 IO 输出通道提供)</td></tr>
-<tr><td>ISP</td><td>isp_dev.h/isp_alg.h</td><td>3A/降噪/宽动态算法参数(闭源库)</td></tr>
-<tr><td>IMC/IMR/IMB</td><td>imc_driver.h 等</td><td>图像拷贝/旋转/缩放(硬件 2D)</td></tr>
-<tr><td>JPEG</td><td>0x40900 区 · IRQ 55</td><td>编码 jpeg_encoder.h + 解码 jpeg_decoder.h, ABR 码率自适应</td></tr>
-<tr><td>OSD</td><td>osd.h</td><td>字符/图层叠加</td></tr>
-<tr><td>ENC(0x13000)</td><td>image_enc.h</td><td>二维码识别等编码加速</td></tr>
+<section class="card" id="inst">
+<h2 id="inst">模块</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>模块</th><th>基址/IRQ</th><th>说明</th></tr></thead><tbody>
+<tr><td>ISC0/1</td><td>0x41A00 / 0x41B00 · 59/64</td><td>双 DVP</td></tr>
+<tr><td>JPEG</td><td>0x41900</td><td>编解码</td></tr>
+<tr><td>ISP/IMC</td><td>闭源 API</td><td>3A / 2D</td></tr>
+<tr><td>ENC</td><td>0x13000</td><td>图像编码加速</td></tr>
 </tbody></table></div>
-<pre><code>/* DevKitBoard camera 平台数据示例 */
-static const struct camera_platform_data camera0_data = {
-    .xclk_gpio = IO_PORTH_02,   /* xclk 由 output channel 驱动 */
-    .reset_gpio = ..., .pwr_gpio = ...,
+
+</section>
+<section class="card" id="regs">
+<h2 id="regs">关键寄存器</h2>
+<div class="note">ISC 结构体见 WL82.h / 驱动头</div>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x04</code></td><td><code class="rg">CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x08</code></td><td><code class="rg">CON2</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x0C</code></td><td><code class="rg">YUVLINE</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x10</code></td><td><code class="rg">YDCVAL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x14</code></td><td><code class="rg">UDCVAL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x18</code></td><td><code class="rg">VDCVAL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x1C</code></td><td><code class="rg">YPTR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x20</code></td><td><code class="rg">UPTR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x24</code></td><td><code class="rg">VPTR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x28</code></td><td><code class="rg">BADDR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x2C</code></td><td><code class="rg">BCNT</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x30</code></td><td><code class="rg">MCUCNT</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x34</code></td><td><code class="rg">PRECNT</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x38</code></td><td><code class="rg">HQTBLADR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x3C</code></td><td><code class="rg">HQTBLDAT</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x40</code></td><td><code class="rg">PTR_NUM</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x44</code></td><td><code class="rg">HAS_PTR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x48</code></td><td><code class="rg">MCU_BUF</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+</tbody></table></div>
+<div class="note">位域未公开；经 camera / jpeg_* API。</div>
+
+</section>
+<section class="card" id="init">
+<h2 id="init">平台数据</h2>
+<pre><code>static const struct camera_platform_data camera0_data = {
+    .xclk_gpio = IO_PORTH_02,
     .interface_mode = CAMERA_INTERFACE_MODE_DVP,
     .clk_edge = CAMERA_CLK_EDGE_1, .fmt = CAMERA_FMT_YUV422,
 };</code></pre>
-<div class="note">参考例程: apps/demo/demo_DevKitBoard/camera_lcd_demo.c (UVC→LCD), user_video_rec.c(录像), simple_avi_unpkg.c。</div>
-<div class="note">依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测整理(标注【实测】)。</div>
+
+</section>
+<section class="card" id="note">
+<h2 id="note">参考</h2>
+<p>demo：camera_lcd_demo.c、user_video_rec.c。</p>
+
+</section>
+<div class="note">依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测（标注【实测】）。</div>
 
       <div class="footer">
         <a href="display.html">← 显示接口</a>
@@ -49,7 +111,7 @@ static const struct camera_platform_data camera0_data = {
         <a href="power.html">电源管理 →</a>
       </div>
     </main>
-    <aside class="toc"><div class="t">本页目录</div></aside>
+    <aside class="toc"><div class="t">本页目录</div><a href="#inst">模块</a><a href="#regs">关键寄存器</a><a href="#init">平台数据</a><a href="#note">参考</a></aside>
   </div>
 </div>
 </body>

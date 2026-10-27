@@ -9,9 +9,9 @@
 # ================ LCD / LVGL 开关 ================
 #   MINI_LCD_SUPPORT=0  关闭 EMI 8080 并口 LCD(JD9853 + CST816 触摸, xiaolu-R2)
 #   ⚠ USB 排查期(V0.9.x)保持 0: 实测彩条真实刷 EMI 后 USB 不再枚举, 待隔离
-#   MINI_LVGL_SUPPORT=1 启用 LVGL(需 lvgl v8.2.0 源码 + tools/apply_lvgl_patch.bat)
+#   MINI_LVGL_SUPPORT=1 启用 LVGL(third/lvgl/lvgl 已内置 v8.2.0; 改配置后 make clean)
 MINI_LCD_SUPPORT  ?= 1
-MINI_LVGL_SUPPORT ?= 0
+MINI_LVGL_SUPPORT ?= 1
 
 # ================= C++ 支持开关 =================
 #   make MINI_CXX_SUPPORT=1   启用 C++ 运行时(全局对象构造/new-delete/STL, -fno-exceptions -fno-rtti)
@@ -41,6 +41,9 @@ endif
 
 ifeq ($(OS), Windows_NT)
 # 工具链与构建工具路径已写死, 直接 make / make clean 即可(无需手动设置 PATH)
+# 强制 cmd: 若 PATH 里有 Git Bash, 默认 SHELL=bash 会让 rm/echo 配方行为错乱
+SHELL := cmd.exe
+.SHELLFLAGS := /c
 TOOL_DIR  := C:/JL/pi32/bin
 UTILS_DIR := D:/fw-mini-sdk/tools/utils
 CC    := clang.exe
@@ -48,7 +51,6 @@ CXX   := clang.exe
 LD    := pi32v2-lto-wrapper.exe
 AR    := llvm-ar.exe
 MKDIR := mkdir_win -p
-RM    := rm -rf
 
 SYS_LIB_DIR := C:/JL/pi32/pi32v2-lib/r3
 SYS_INC_DIR := C:/JL/pi32/pi32v2-include
@@ -99,7 +101,7 @@ CFLAGS := \
 	-Wuninitialized \
 	-Wno-invalid-noreturn \
 	-fno-common \
-	-Oz \
+	-O2 \
 	-g \
 	-fallow-pointer-null \
 	-fprefer-gnu-section \
@@ -382,17 +384,22 @@ c_SRC_FILES += ../../../app/jl_math/nn_function_vec.c
 INCLUDES    += -I../../../app/jl_math
 endif
 
-# LVGL: 需先获取 lvgl v8.2.0 源码到 third/lvgl/lvgl 并运行 tools/apply_lvgl_patch.bat
+# LVGL 8.2.0: 源码在 third/lvgl/lvgl (无 .git, 随仓库推送); lcd_test 跑 demos/benchmark
 ifeq ($(MINI_LVGL_SUPPORT),1)
 LVGL_DIR  := ../../../third/lvgl/lvgl
 rwildcard = $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
 LVGL_C_SRC += $(call rwildcard, $(LVGL_DIR)/src/, *.c)
+LVGL_C_SRC += $(call rwildcard, $(LVGL_DIR)/demos/benchmark/, *.c)
 c_SRC_FILES += $(LVGL_C_SRC)
 c_SRC_FILES += ../../../third/lvgl_port/driver/lv_port_disp.c
-c_SRC_FILES += ../../../third/lvgl_port/lv_mian/lv_main.c
-INCLUDES    += -I$(LVGL_DIR) -I$(LVGL_DIR)/src -I../../../third/lvgl_port/driver
+INCLUDES    += -I../../../third/lvgl -I$(LVGL_DIR) -I$(LVGL_DIR)/src
+INCLUDES    += -I$(LVGL_DIR)/demos -I$(LVGL_DIR)/demos/benchmark
+INCLUDES    += -I../../../third/lvgl_port/driver -I../../../driver/lcd/include
 DEFINES     += -DLV_CONF_INCLUDE_SIMPLE
 endif
+
+# CoreMark: 源码仍在 third/coremark, 暂不编入(按键跑分已关)
+# MINI_COREMARK_SUPPORT ?= 0
 
 
 c_OBJS    := $(c_SRC_FILES:%.c=%.c.o)
@@ -437,8 +444,14 @@ pre_build:
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../cpu/wl82/tools/isd_config_rule.c -o ../../../cpu/wl82/tools/isd_config.ini
 
 clean:
+ifeq ($(OS),Windows_NT)
+	-@if exist $(subst /,\,$(OUT_ELF)) del /q /f $(subst /,\,$(OUT_ELF))
+	-@if exist $(subst /,\,$(BUILD_DIR)) rd /s /q $(subst /,\,$(BUILD_DIR))
+	@echo [ok] cleaned objs and sdk.elf
+else
 	$(QUITE) $(RM) $(OUT_ELF)
 	$(QUITE) $(RM) $(BUILD_DIR)
+endif
 
 
 ifeq ($(LINK_AT), 1)

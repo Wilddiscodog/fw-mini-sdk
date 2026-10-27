@@ -12,25 +12,57 @@
     <span class="logo">AC7912BB<em>·WL82</em></span>
     <span class="sub">芯片参考手册</span>
   </a>
-  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html" class=active>USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+  <div class="navlinks"><a class="nav-a" href="index.html">芯片总览</a><a class="nav-a" href="cpu-mem.html">CPU 与存储</a><a class="nav-a" href="cache-mmu.html">Cache / MMU</a><a class="nav-a" href="clock.html">时钟系统</a><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">基础外设<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a></div></div><div class="nav-drop open-active"><button type="button" class="nav-drop-btn" aria-expanded="false">多媒体<span class="nav-drop-cur">USB 双控</span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html" class=active>USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">系统<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div><button type="button" class="nav-more-btn" aria-label="全部章节">☰</button><div class="nav-all-panel"><div class="nav-all-g">核心</div><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="cache-mmu.html">Cache / MMU</a><a href="clock.html">时钟系统</a><div class="nav-all-g">基础外设</div><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><div class="nav-all-g">多媒体</div><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html" class=active>USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><div class="nav-all-g">系统</div><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div>
 </div></nav>
+<script>
+(function(){
+  document.querySelectorAll('.nav-drop-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var drop = btn.parentElement;
+      var open = drop.classList.contains('open');
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      document.querySelector('.nav-all-panel') && document.querySelector('.nav-all-panel').classList.remove('open');
+      if (!open) drop.classList.add('open');
+      btn.setAttribute('aria-expanded', (!open).toString());
+    });
+  });
+  var more = document.querySelector('.nav-more-btn');
+  var panel = document.querySelector('.nav-all-panel');
+  if (more && panel) {
+    more.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      panel.classList.toggle('open');
+    });
+  }
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+    if (panel) panel.classList.remove('open');
+  });
+})();
+</script>
 
 <div class="wrap">
   <header class="hero">
     <div class="crumb">USB</div>
     <h1>USB 双控制器</h1>
-    <p>FUSB1.1 + HUSB2.0: MUSB 差异、EP RAM DMA 桥(0x16800)、EP3/4 大缓冲【实测逆向】</p>
+    <p>寄存器、EP RAM DMA 桥、RAM0 约束【实测】</p>
   </header>
 
   <div class="layout">
     <main class="main">
-<p>两个独立 USB 控制器共用 D+/D- 引脚(不可同时启动):</p>
-<div class="tbl-wrap"><table class="tbl "><thead><tr><th>控制器</th><th>基址</th><th>规格</th><th>角色</th></tr></thead><tbody>
-<tr><td>USB0 (FUSB)</td><td><code>0x11800</code></td><td>全速 12Mbps</td><td>设备/主机(小缓冲)</td></tr>
-<tr><td>USB1 (HUSB)</td><td><code>0x12800</code></td><td>高速 480Mbps</td><td>设备/主机/OTG</td></tr>
+<section class="card" id="inst">
+<h2 id="inst">双控制器</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>控制器</th><th>基址</th><th>规格</th><th>IRQ</th></tr></thead><tbody>
+<tr><td>USB0 FUSB</td><td>0x11800</td><td>FS 12Mbps</td><td>8/9 SOF/CTRL</td></tr>
+<tr><td>USB1 HUSB</td><td>0x12700</td><td>HS 480Mbps</td><td>53/54</td></tr>
 </tbody></table></div>
+<div class="warn">共用 D+/D-，不可同时启动。高速 USB 需 USB PLL3=480 MHz；官方配套 <code>SYS_CLK=240M</code> + <code>SDRAM_PLL3_EN=1</code>（SDR=PLL3/2=240M）。详见 <a href="clock.html#usb240">时钟章</a>。</div>
+
+</section>
 <section class="card" id="regs">
-<h2 id="regs">HUSB 寄存器(USB1, 自动提取)</h2>
+<h2 id="regs">HUSB 寄存器(USB1)</h2>
 <div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
 <tr><td><code class="rg">0x00</code></td><td><code class="rg">CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
 <tr><td><code class="rg">0x04</code></td><td><code class="rg">CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
@@ -49,28 +81,30 @@
 <tr><td><code class="rg">0x38</code></td><td><code class="rg">EP4_TADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
 <tr><td><code class="rg">0x3C</code></td><td><code class="rg">EP4_RADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
 </tbody></table></div>
-<div class="warn">【实测·重要】MUSB 兼容内核的三处 JL 差异(逆向 usb.a 得出): ① TXIS/RXIS 窗口读自动清除(写 1 清除无效); ② EP0 只有 FIFO 端口 0x16020, EP≥1 无 FIFO 端口——数据面走 RAM DMA 缓冲; ③ 无 FIFOSZ 寄存器, EP FIFO 容量硬件固定。</div>
+<div class="note">USB CON 细位（按 MUSB 语义 + JL 差异） 寄存器位域未在 SDK 头文件公开，请以驱动 API / ioctl 为准。</div>
 
 </section>
 <section class="card" id="dma">
-<h2 id="dma">EP 数据面 RAM DMA【实测逆向】</h2>
-<p>EP≥1 的收发不经 FIFO 端口, 而是桥接寄存器指向的 RAM 缓冲(<b>仅 RAM0 段</b>):</p>
+<h2 id="dma">EP DMA 桥与流程【实测】</h2>
 <div class="tbl-wrap"><table class="tbl "><thead><tr><th>地址</th><th>名称</th><th>说明</th></tr></thead><tbody>
-<tr><td><code>0x16800</code></td><td>桥接配置</td><td>EP DMA 总开关/映射</td></tr>
-<tr><td><code>0x16804+4×ep</code></td><td>TXCNT(ep)</td><td>发送字节计数(必须先于 TXRDY 写, 否则发 0 长度包)</td></tr>
-<tr><td><code>0x16820+8×(ep-1)</code></td><td>TADDR(ep)</td><td>发送缓冲地址(RAM0!)</td></tr>
-<tr><td><code>0x16824+8×(ep-1)</code></td><td>RADDR(ep)</td><td>接收缓冲地址(RAM0!)</td></tr>
-<tr><td><code>0x16850 / 0x16854</code></td><td>EP3/EP4 大缓冲模式</td><td>TXCSR/RXCSR bit14 使能</td></tr>
+<tr><td>0x16800</td><td>桥配置</td><td>EP DMA 总开关</td></tr>
+<tr><td>0x16804+4×ep</td><td>TXCNT</td><td>先于 TXRDY 写长度</td></tr>
+<tr><td>0x16820+8×(ep-1)</td><td>TADDR</td><td>TX 缓冲（须 RAM0）</td></tr>
+<tr><td>0x16824+8×(ep-1)</td><td>RADDR</td><td>RX 缓冲（须 RAM0）</td></tr>
+<tr><td>0x16850/54</td><td>EP3/4 大缓冲</td><td>TXCSR/RXCSR bit14</td></tr>
 </tbody></table></div>
-<ul><li>EP1/2/5/6: 普通 DMA 模式, 缓冲需 64 字节对齐</li><li>EP3/4: 大缓冲模式, 计数打包 (dma_size&lt;&lt;16)|len|0x80000000, 8 字节对齐, 单次可搬 4096B</li><li>主机模式(MRX): 多包聚合, Inclusive/Exclusive 分组读</li><li>【实测】SDRAM 缓冲会静默丢数据——DMA 只能到 0x1C00000 RAM0 段</li></ul>
+<pre><code>/* 设备 OUT→应用（示意） */
+flushinv_dcache(rx_buf, len);          /* 或 NO_CACHE_ADDR */
+/* 硬件写入 RADDR 后读 RXCOUNT；缓冲必须在 0x1C00000 RAM0 */</code></pre>
+<ul><li>EP≥1 无 FIFO 端口，仅 RAM DMA；TXIS/RXIS 读清（非 W1C）</li><li>EP1/2/5/6：64B 对齐；EP3/4 大缓冲：8B 对齐，单次可达 4096B</li><li>【实测】SDRAM 缓冲静默丢数</li></ul>
 
 </section>
-<section class="card" id="stack">
-<h2 id="stack">协议栈与实测结论</h2>
-<ul><li>官方栈(liba/lib_usb_syn.a + driver/usb): 多复合设备(CDC×n+MSC+UAC…), usb_epbuf_manager 用 lbuf 统一分发 EP 缓冲</li><li>fw-mini-sdk 换用 CherryUSB(port/jl82 适配上述 DMA 语义), MSC 4MB RAM 盘 + 虚拟U盘 OTA 实测通过</li><li>【实测】INT 端点需置 TXCSR.H bit14(CSRH bit6), 否则 clear-halt 死循环</li><li>【实测】主机 EP0 控制传输完成中断不触发, 需轮询 CSR0</li></ul>
+<section class="card" id="note">
+<h2 id="note">协议栈</h2>
+<ul><li>官方 lib_usb_syn.a；fw-mini-sdk 用 CherryUSB port/jl82</li><li>【实测】INT 端点需 TXCSR.H bit14；主机 EP0 完成中断不触发→轮询 CSR0</li></ul>
 
 </section>
-<div class="note">依据官方 SDK <code>asm/ladc.h·dac.h·audio.h·usb.h·sdmmc.h</code>、<code>server/audio_server.h</code> 及 fw-mini-sdk 移植实测整理。</div>
+<div class="note">依据官方 SDK <code>asm/ladc.h·dac.h·audio.h·usb.h·sdmmc.h</code>、<code>server/audio_server.h</code> 及 fw-mini-sdk 移植实测。</div>
 
       <div class="footer">
         <a href="audio.html">← 音频系统</a>
@@ -78,7 +112,7 @@
         <a href="sdmmc.html">SD 卡 →</a>
       </div>
     </main>
-    <aside class="toc"><div class="t">本页目录</div><a href="#regs">HUSB 寄存器(USB1, 自动提取)</a><a href="#dma">EP 数据面 RAM DMA【实测逆向】</a><a href="#stack">协议栈与实测结论</a></aside>
+    <aside class="toc"><div class="t">本页目录</div><a href="#inst">双控制器</a><a href="#regs">HUSB 寄存器(USB1)</a><a href="#dma">EP DMA 桥与流程【实测】</a><a href="#note">协议栈</a></aside>
   </div>
 </div>
 </body>

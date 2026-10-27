@@ -57,19 +57,20 @@ static int cst816_write_reg(u8 reg, u8 dat)
 static int cst816_read_regs(u8 reg, u8 *buf, u8 len)
 {
     int err = 0;
+    /* IIC_IOCTL_START 只拿一次(mutex + gpio_port_lock); 中间 repeat-start
+     * 只用 TX_WITH_START_BIT。再调一次 START 会自旋锁自锁 → wdt_timout_err */
     err |= dev_ioctl(iic, IIC_IOCTL_START, 0);
     err |= dev_ioctl(iic, IIC_IOCTL_TX_WITH_START_BIT, CST816_ADDR_W);
     err |= dev_ioctl(iic, IIC_IOCTL_TX, reg);
-    err |= dev_ioctl(iic, IIC_IOCTL_START, 0);
     err |= dev_ioctl(iic, IIC_IOCTL_TX_WITH_START_BIT, CST816_ADDR_R);
     for (u8 i = 0; i < len; i++) {
         if (i < len - 1) {
-            err |= dev_ioctl(iic, IIC_IOCTL_RX, (u32)&buf[i]);          /* ACK 续读 */
+            err |= dev_ioctl(iic, IIC_IOCTL_RX, (u32)&buf[i]);               /* ACK 续读 */
         } else {
-            err |= dev_ioctl(iic, IIC_IOCTL_RX_WITH_NOACK, (u32)&buf[i]); /* NACK 结束 */
+            err |= dev_ioctl(iic, IIC_IOCTL_RX_WITH_STOP_BIT, (u32)&buf[i]); /* NACK+STOP */
         }
     }
-    dev_ioctl(iic, IIC_IOCTL_STOP, 0);
+    dev_ioctl(iic, IIC_IOCTL_STOP, 0);  /* 释放 mutex / gpio_port_lock */
     return err;
 }
 

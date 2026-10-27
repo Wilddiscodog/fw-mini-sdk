@@ -19,8 +19,10 @@
  * MINI_LVGL_SUPPORT=1 LVGL 8.2.0(需先按 README 获取 lvgl 源码到 third/lvgl/lvgl) */
 #if MINI_LCD_SUPPORT
 #define CONFIG_UI_ENABLE
-/* 面板选择（lcd_config.h 依此决定 LCD_W/H），与官方 demo_ui 同名宏 */
-#define TCFG_LCD_ILI9341_ENABLE         1
+/* xiaolu-R2: 只编 lcd_jd9853.c(Makefile); 必须打开本宏, 否则 REGISTER_LCD_DEV
+ * 被裁掉 → "err no lcd_dev" 后 draw_lvgl 空指针 axi_rd_inv 复位 */
+#define TCFG_LCD_JD9853_ENABLE          1
+#define TCFG_LCD_ILI9341_ENABLE         0
 #define TCFG_LCD_ST7789S_ENABLE         0
 #define TCFG_LCD_ST7789V_ENABLE         0
 #define TCFG_LCD_ST7735S_ENABLE         0
@@ -68,13 +70,12 @@
 #define SYSVDD_VOL_SEL_LEVEL                    SYSVDD_VOL_SEL_126V
 
 #define CONFIG_DEBUG_ENABLE
-/* 日志镜像到 USB CDC 口(组合设备的串口, 打开串口即实时输出; UART0 仍保留)。
- * V0.9.x USB 枚举排查期曾关闭(putbyte 不覆盖), 枚举已稳定, 2026-10-25 重开。 */
-#define CONFIG_USB_DEBUG_ENABLE
+/* 日志镜像到 USB CDC: 会改写 putbyte, 与 UART0 抢路径易影响正常串口日志。
+ * 暂关; 需要 CDC 日志时再打开本宏, 并建议 MINI_USB_CDC_ENABLE=1。 */
+/* #define CONFIG_USB_DEBUG_ENABLE */
 
-/* USB 设备形态开关: 1=CDC(日志)+MSC 组合设备; 0=MSC-only(EP1, V0.8 验证配置)。
- * ⚠ 同上排查期暂时 0。CDC 代码在 cdc_acm_msc_app.c 内保留, 宏开即回。 */
-#define MINI_USB_CDC_ENABLE    1
+/* USB 设备形态: 1=CDC+MSC 组合; 0=MSC-only。暂关 CDC(与上项配套)。 */
+#define MINI_USB_CDC_ENABLE    0
 
 /* ================ 内置音频(MIC 录音 + DAC 播放, MINI_AUDIO_SUPPORT) =================
  * Makefile 注入 -DMINI_AUDIO_SUPPORT=$(var), 默认 0(不编译不入链接)。
@@ -119,12 +120,13 @@
 #endif
 #define CONFIG_DEBUG_LIB(x)         (x & LIB_DEBUG)
 
-/* ================ xiaolu-R2 手表屏/触摸(JD9853 8bit并口 + CST816 IIC) =================
- * 触摸引脚: PH0/PH1(iic0), PH3=TP_INT, PH4=TP_RST; 屏走 EMI 8080-8bit(board.c)
- * ⚠ USB 排查期(V0.9.x)暂时关闭: 屏驱动(CST816 触摸轮询/JD9853)全裁, 待 USB
- *   基线稳定后随 MINI_LCD_SUPPORT 一起回开。升级屏显状态色随 LCD 宏自动变空操作。 */
-#define TCFG_LCD_JD9853_ENABLE      0
+/* ================ xiaolu-R2 触摸(CST816 IIC, PH0/1 + PH3 INT / PH4 RST) ================
+ * 面板宏 TCFG_LCD_JD9853_ENABLE 已放在上方 MINI_LCD_SUPPORT 块。 */
+#if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
+#define TCFG_TOUCH_CST816_ENABLE    1
+#else
 #define TCFG_TOUCH_CST816_ENABLE    0
+#endif
 
 /* ================ ADC 按键(原厂 key_driver/adkey 框架, PB01 电阻梯) ================
  * 实测: 空闲 raw=1014(3.13V), 按键1 raw=162(500mV), 按键2 raw=0(0mV)。

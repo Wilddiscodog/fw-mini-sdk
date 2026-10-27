@@ -4,7 +4,7 @@
 - USB **组合设备**（CherryUSB，高速口）：CDC 日志串口 + MSC 4MB 虚拟U盘
   （VID=0xFFFF/PID=0x0003，Win10+/Linux 免驱）；拖入 `.UFW` 静默 3s 自动校验烧写复位
 - USB **主机 MSC**（CherryUSB，U盘）可用，全速主机（`CONFIG_USBH_JL82_FORCE_FS=1`），插盘跑 1MB 读写基准
-- **LCD 240×320 JD9853（EMI 8 位并口）+ CST816 触摸** 默认开启（彩条自检，LVGL 可选）
+- **LCD 240×320 JD9853（EMI 8 位并口）+ CST816 触摸 + LVGL 8.2.0 benchmark** 默认开启
 - **蓝牙 + WiFi**（原厂协议栈）：BT 开机自启；WiFi 按键2 触发，AP 配网 + 网页固件升级
 - **内置音频**可选（MIC+DAC 回环自检 + AEC 回采，`MINI_AUDIO_SUPPORT` 默认关）
 
@@ -174,16 +174,14 @@ WL82 显示外设：**EMI**(8080 并口时序)/PAP/LCDC/IMD(硬件图层)。8 �
 apps/common/ui 与 LVGL 补丁；**只编一个面板驱动**——框架取第一个注册项，多面板会按
 链接顺序误选）。
 
-- 开关：`MINI_LCD_SUPPORT`（Makefile，默认 1）/ `MINI_LVGL_SUPPORT`（默认 0）
+- 开关：`MINI_LCD_SUPPORT`（默认 1）/ `MINI_LVGL_SUPPORT`（默认 1）
 - 板级：`board.c` 的 `emi_data`（时序）+ `ui_cfg_data`（RST/RS/BL/TE 引脚）——按硬件调整
-- 上电现象：`lcd_test_task` 延迟 8s（EMI 高频刷屏历史上会干扰 USB 枚举，此为时序解耦）
-  后跑 8 色彩条循环（240×320 JD9853，2s/色）
-- 触摸 CST816（IIC，INT=PH3/RST=PH4）已入编译；TE 撕裂同步仍为桩（`lcd_te_stub.c`），
-  需要时从官方 `apps/common/ui/lcd_driver/te_driver/` 补齐。
-- LVGL 启用三步：
+- 上电现象：`lcd_test_task` 延迟 8s 后跑 **LVGL `lv_demo_benchmark`**；`MINI_LVGL_SUPPORT=0` 时退回彩条自检
+- 触摸 CST816（IIC，INT=PH3/RST=PH4）已入编译；TE 撕裂同步仍为桩（`lcd_te_stub.c`）
+- LVGL 源码：`third/lvgl/lvgl`（v8.2.0，**已去掉 `.git`**，可随本仓库全量推送）。若需重拉：
   1. `git clone --branch v8.2.0 --depth 1 https://github.com/lvgl/lvgl.git third\lvgl\lvgl`
-  2. `tools\apply_lvgl_patch.bat`（覆盖杰理适配文件 + 放置 lv_conf.h）
-  3. `make clean && make MINI_LVGL_SUPPORT=1`（LCD 任务自动切到 LVGL 主循环）
+  2. 删掉 `third\lvgl\lvgl\.git`（或直接跑 `tools\apply_lvgl_patch.bat`，脚本会删 `.git` 并覆盖补丁）
+  3. `make clean && make`
 
 ## 与官方 SDK 的关系
 

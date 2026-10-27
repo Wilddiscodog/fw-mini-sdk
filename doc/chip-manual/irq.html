@@ -12,8 +12,36 @@
     <span class="logo">AC7912BB<em>·WL82</em></span>
     <span class="sub">芯片参考手册</span>
   </a>
-  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html" class=active>中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+  <div class="navlinks"><a class="nav-a" href="index.html">芯片总览</a><a class="nav-a" href="cpu-mem.html">CPU 与存储</a><a class="nav-a" href="cache-mmu.html">Cache / MMU</a><a class="nav-a" href="clock.html">时钟系统</a><div class="nav-drop open-active"><button type="button" class="nav-drop-btn" aria-expanded="false">基础外设<span class="nav-drop-cur">中断系统</span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="gpio.html">GPIO 与复用</a><a href="irq.html" class=active>中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">多媒体<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">系统<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div><button type="button" class="nav-more-btn" aria-label="全部章节">☰</button><div class="nav-all-panel"><div class="nav-all-g">核心</div><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="cache-mmu.html">Cache / MMU</a><a href="clock.html">时钟系统</a><div class="nav-all-g">基础外设</div><a href="gpio.html">GPIO 与复用</a><a href="irq.html" class=active>中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><div class="nav-all-g">多媒体</div><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><div class="nav-all-g">系统</div><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div>
 </div></nav>
+<script>
+(function(){
+  document.querySelectorAll('.nav-drop-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var drop = btn.parentElement;
+      var open = drop.classList.contains('open');
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      document.querySelector('.nav-all-panel') && document.querySelector('.nav-all-panel').classList.remove('open');
+      if (!open) drop.classList.add('open');
+      btn.setAttribute('aria-expanded', (!open).toString());
+    });
+  });
+  var more = document.querySelector('.nav-more-btn');
+  var panel = document.querySelector('.nav-all-panel');
+  if (more && panel) {
+    more.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      panel.classList.toggle('open');
+    });
+  }
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+    if (panel) panel.classList.remove('open');
+  });
+})();
+</script>
 
 <div class="wrap">
   <header class="hero">
@@ -24,8 +52,13 @@
 
   <div class="layout">
     <main class="main">
+<section class="card" id="inst">
+<h2 id="inst">控制器</h2>
+<p>每核独立中断控制器（q32DSP ICFG/IPND/ILAT，见 <a href="cache-mmu.html">cache-mmu</a>）。源编号在 <code>asm/hwi.h</code>；软中断 SOFT0-4=120~124。异常入口 IRQ_EXCEPTION_IDX=1 → exception_analyze。</p>
+
+</section>
 <section class="card" id="tbl">
-<h2 id="tbl">中断源总表(hwi.h)</h2>
+<h2 id="tbl">中断源总表</h2>
 <div class="tbl-wrap"><table class="tbl "><thead><tr><th>编号</th><th>名称</th><th>说明</th></tr></thead><tbody>
 <tr><td>0</td><td>SDTAP</td><td>调试 tap</td></tr>
 <tr><td>1</td><td>EXCEPTION</td><td>CPU 异常(debug.c 解析)</td></tr>
@@ -78,18 +111,22 @@
 <tr><td>65</td><td>IMD</td><td>RGB LCD</td></tr>
 <tr><td>120-124</td><td>SOFT0-4</td><td>软中断(IPI)</td></tr>
 </tbody></table></div>
-<p>request_irq 原型: <code>request_irq(irq_idx, priority(0-7), handler, cpu)</code>(cpu=0/1 指定注册核; 0xff=当前核)。irq_info_table(app_main.c)可把指定中断强制绑核。</p>
-<pre><code>/* 实例(闭源 emi 驱动内反汇编): EMI 中断=27, 优先级 3 */
+
+</section>
+<section class="card" id="init">
+<h2 id="init">注册</h2>
+<pre><code>request_irq(irq_idx, priority/*0-7*/, handler, cpu);
+/* cpu=0/1 绑核；0xff=当前核。irq_info_table 可强制绑核 */
 request_irq(IRQ_EMI_IDX /*27*/, 3, emi_isr, 1);
-/* fw-mini-sdk: HUSB 中断经 usb_dc_jl82.c/usb_hc_jl82.c 注册(IRQ_USB1_CTRL_IDX=54) */</code></pre>
+request_irq(IRQ_USB1_CTRL_IDX /*54*/, …);</code></pre>
 
 </section>
 <section class="card" id="note">
 <h2 id="note">工程注记【实测】</h2>
-<ul><li>HUSB 主机模式 EP0 完成中断实测不触发——主机控制传输走 CSR0 轮询(usb_ctrl_transfer 同款)</li><li>HUSB 设备模式 TXIS 窗口读即清除, 不能像标准 MUSB 写 1 清(W1C 无效)</li><li>双核各自的中断控制器, sys_event 任务在 CPU0; WiFi 库线程(tasklet 等)由 task_info_table 按名字创建</li></ul>
+<ul><li>HUSB 主机 EP0 完成中断不触发 → CSR0 轮询</li><li>HUSB 设备 TXIS 读清（非 MUSB W1C）</li><li>sys_event 在 CPU0；WiFi 库线程由 task_info_table 按名创建</li></ul>
 
 </section>
-<div class="note">本章内容依据官方 SDK <code>include_lib/driver/cpu/wl82/asm/WL82.h</code>、<code>cpu/wl82/sdk_ld*.c</code> 与 <code>cpu/wl82/tools/isd_config_rule.c</code> 整理; 标注【实测】的条目来自 fw-mini-sdk 移植验证。</div>
+<div class="note">本章内容依据官方 SDK <code>include_lib/driver/cpu/wl82/asm/WL82.h</code>、<code>csfr.h</code>、<code>cpu/wl82/sdk_ld*.c</code> 与 <code>cpu/wl82/tools/isd_config_rule.c</code> 整理; 标注【实测】的条目来自 fw-mini-sdk 移植验证。</div>
 
       <div class="footer">
         <a href="gpio.html">← GPIO 与复用</a>
@@ -97,7 +134,7 @@ request_irq(IRQ_EMI_IDX /*27*/, 3, emi_isr, 1);
         <a href="uart.html">UART 串口 →</a>
       </div>
     </main>
-    <aside class="toc"><div class="t">本页目录</div><a href="#tbl">中断源总表(hwi.h)</a><a href="#note">工程注记【实测】</a></aside>
+    <aside class="toc"><div class="t">本页目录</div><a href="#inst">控制器</a><a href="#tbl">中断源总表</a><a href="#init">注册</a><a href="#note">工程注记【实测】</a></aside>
   </div>
 </div>
 </body>

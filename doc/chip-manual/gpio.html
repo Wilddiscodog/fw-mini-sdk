@@ -12,55 +12,97 @@
     <span class="logo">AC7912BB<em>·WL82</em></span>
     <span class="sub">芯片参考手册</span>
   </a>
-  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html" class=active>GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+  <div class="navlinks"><a class="nav-a" href="index.html">芯片总览</a><a class="nav-a" href="cpu-mem.html">CPU 与存储</a><a class="nav-a" href="cache-mmu.html">Cache / MMU</a><a class="nav-a" href="clock.html">时钟系统</a><div class="nav-drop open-active"><button type="button" class="nav-drop-btn" aria-expanded="false">基础外设<span class="nav-drop-cur">GPIO 与复用</span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="gpio.html" class=active>GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">多媒体<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">系统<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div><button type="button" class="nav-more-btn" aria-label="全部章节">☰</button><div class="nav-all-panel"><div class="nav-all-g">核心</div><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="cache-mmu.html">Cache / MMU</a><a href="clock.html">时钟系统</a><div class="nav-all-g">基础外设</div><a href="gpio.html" class=active>GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><div class="nav-all-g">多媒体</div><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><div class="nav-all-g">系统</div><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div>
 </div></nav>
+<script>
+(function(){
+  document.querySelectorAll('.nav-drop-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var drop = btn.parentElement;
+      var open = drop.classList.contains('open');
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      document.querySelector('.nav-all-panel') && document.querySelector('.nav-all-panel').classList.remove('open');
+      if (!open) drop.classList.add('open');
+      btn.setAttribute('aria-expanded', (!open).toString());
+    });
+  });
+  var more = document.querySelector('.nav-more-btn');
+  var panel = document.querySelector('.nav-all-panel');
+  if (more && panel) {
+    more.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      panel.classList.toggle('open');
+    });
+  }
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+    if (panel) panel.classList.remove('open');
+  });
+})();
+</script>
 
 <div class="wrap">
   <header class="hero">
     <div class="crumb">GPIO</div>
     <h1>GPIO 与 IO 复用</h1>
-    <p>PORT A~H 寄存器、IOMAP 输入输出映射、唤醒源</p>
+    <p>PORT A~H 寄存器、IOMAP、唤醒</p>
   </header>
 
   <div class="layout">
     <main class="main">
+<section class="card" id="inst">
+<h2 id="inst">实例与基址</h2>
 <p>基址: <code class="rg">0x50000</code>(段基址 + (64×grp + adr)×4, 见 WL82.h)</p>
-<p>8 组端口(A~H), 每组 9 个寄存器, 结构完全一致(JL_PORT_FLASH_TypeDef): OUT/IN/DIR/DIE/PU/PD/HD0/HD/DIEH。SDK API 在 <code>asm/gpio.h</code>。</p>
+<p>8 组端口 PORTA~H（PORT 段），共用 <code>JL_PORT_FLASH_TypeDef</code>。API：<code>asm/gpio.h</code>。时钟：端口属常开域，无独立门控宏。</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>实例</th><th>基址(WL82.h)</th><th>说明</th></tr></thead><tbody>
+<tr><td>PORTA</td><td>0x50000</td><td>常用 GPIO / 部分模拟脚</td></tr>
+<tr><td>PORTB</td><td>0x50040</td><td>按键 / UART 等</td></tr>
+<tr><td>PORTC~H</td><td>见 WL82.h</td><td>复用外设、唤醒脚(Wu)</td></tr>
+</tbody></table></div>
+
+</section>
 <section class="card" id="regs">
 <h2 id="regs">端口寄存器(每组 ×9)</h2>
 <div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
-<tr><td><code class="rg">0x00</code></td><td><code class="rg">OUT</code></td><td><span class="rw rw">RW</span></td><td>输出锁存(写 0/1 控制引脚电平)</td></tr>
-<tr><td><code class="rg">0x04</code></td><td><code class="rg">IN</code></td><td><span class="rw ro">RO</span></td><td>输入采样(只读)</td></tr>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">OUT</code></td><td><span class="rw rw">RW</span></td><td>输出锁存</td></tr>
+<tr><td><code class="rg">0x04</code></td><td><code class="rg">IN</code></td><td><span class="rw ro">RO</span></td><td>输入采样(RO)</td></tr>
 <tr><td><code class="rg">0x08</code></td><td><code class="rg">DIR</code></td><td><span class="rw rw">RW</span></td><td>方向: 0=输出 1=输入</td></tr>
 <tr><td><code class="rg">0x0C</code></td><td><code class="rg">DIE</code></td><td><span class="rw rw">RW</span></td><td>数字输入使能(0=模拟)</td></tr>
-<tr><td><code class="rg">0x10</code></td><td><code class="rg">PU</code></td><td><span class="rw rw">RW</span></td><td>内部上拉使能</td></tr>
-<tr><td><code class="rg">0x14</code></td><td><code class="rg">PD</code></td><td><span class="rw rw">RW</span></td><td>内部下拉使能</td></tr>
-<tr><td><code class="rg">0x18</code></td><td><code class="rg">HD0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
-<tr><td><code class="rg">0x1C</code></td><td><code class="rg">HD</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x10</code></td><td><code class="rg">PU</code></td><td><span class="rw rw">RW</span></td><td>内部上拉</td></tr>
+<tr><td><code class="rg">0x14</code></td><td><code class="rg">PD</code></td><td><span class="rw rw">RW</span></td><td>内部下拉</td></tr>
+<tr><td><code class="rg">0x18</code></td><td><code class="rg">HD0</code></td><td><span class="rw rw">RW</span></td><td>强驱动档位 0</td></tr>
+<tr><td><code class="rg">0x1C</code></td><td><code class="rg">HD</code></td><td><span class="rw rw">RW</span></td><td>强驱动档位</td></tr>
 <tr><td><code class="rg">0x20</code></td><td><code class="rg">DIEH</code></td><td><span class="rw rw">RW</span></td><td>高耐压数字输入使能</td></tr>
 </tbody></table></div>
-<pre><code>/* gpio.h 常用 API */
-gpio_direction_output(IO_PORTA_06, 1);   /* 输出高 */
+<div class="warn">位域按「每 bit 对应一脚」操作，无独立命名位宏；用 gpio_* API 或直接掩码 PORT->DIR |= BIT(n)。</div>
+
+</section>
+<section class="card" id="init">
+<h2 id="init">推荐初始化</h2>
+<pre><code>/* 输出 / 输入 */
+gpio_direction_output(IO_PORTA_06, 1);
 gpio_direction_input(IO_PORTB_01);
 gpio_set_pull_up(IO_PORTB_01, 1);
-gpio_set_die(IO_PORTB_01, 1);            /* 数字输入使能(ADC 复用时关) */</code></pre>
+gpio_set_die(IO_PORTB_01, 1);     /* ADC 复用脚采样前关 DIE */
+gpio_set_hd(IO_PORTA_06, 1);      /* 需要时开强驱 */</code></pre>
 
 </section>
 <section class="card" id="iomap">
-<h2 id="iomap">IOMAP 输出通道复用</h2>
-<p>外设输出(时钟/PWM/PLNK SCLK 等)经 <code>JL_IOMAP</code>(0x51007 区)路由到任意 IO:output channel(CH0_PLNK0_SCLK_OUT / CH1_UART0_TX …)由 <code>gpio_output_channle()</code> 映射; 输入通道由 <code>gpio_uart_rx_input()/gpio_plnk_rx_input()</code> 反向映射。</p>
-<pre><code>/* DevKitBoard 例: PLNK0 数字麦重映射 PH2=DAT, PH3=SCLK */
-gpio_plnk_rx_input(IO_PORTH_02, 0, 0);
+<h2 id="iomap">IOMAP 复用</h2>
+<p>外设输出经 <code>JL_IOMAP</code> 路由；<code>gpio_output_channle()</code> / <code>gpio_uart_rx_input()</code> / <code>gpio_plnk_rx_input()</code>。</p>
+<pre><code>gpio_plnk_rx_input(IO_PORTH_02, 0, 0);
 gpio_output_channle(IO_PORTH_03, CH0_PLNK0_SCLK_OUT);
 JL_IOMAP-&gt;CON3 |= BIT(18);</code></pre>
 
 </section>
 <section class="card" id="wake">
-<h2 id="wake">唤醒与端口中断</h2>
-<ul><li>PORT 域 WAKEUP 寄存器(0x51003 区): 睡眠唤醒源(PORT_EDGE/LEVEL)</li><li>port_waked_up.h: 唤醒源回查 API</li><li>【实测】xiaolu-R2: PB1 兼长按复位(RESET=PB01_08_0, isd_config), PC1_Wu/PC0_Wu 等带 Wu 后缀引脚支持唤醒</li></ul>
+<h2 id="wake">唤醒与约束</h2>
+<ul><li>WAKEUP 寄存器(PORT 段): 边沿/电平唤醒</li><li>port_waked_up.h 回查唤醒源</li><li>【实测】PB1 可兼长按复位(isd_config RESET=PB01_…)；带 Wu 后缀脚支持唤醒</li></ul>
 
 </section>
-<div class="note">本章内容依据官方 SDK <code>include_lib/driver/cpu/wl82/asm/WL82.h</code>、<code>cpu/wl82/sdk_ld*.c</code> 与 <code>cpu/wl82/tools/isd_config_rule.c</code> 整理; 标注【实测】的条目来自 fw-mini-sdk 移植验证。</div>
+<div class="note">本章内容依据官方 SDK <code>include_lib/driver/cpu/wl82/asm/WL82.h</code>、<code>csfr.h</code>、<code>cpu/wl82/sdk_ld*.c</code> 与 <code>cpu/wl82/tools/isd_config_rule.c</code> 整理; 标注【实测】的条目来自 fw-mini-sdk 移植验证。</div>
 
       <div class="footer">
         <a href="clock.html">← 时钟系统</a>
@@ -68,7 +110,7 @@ JL_IOMAP-&gt;CON3 |= BIT(18);</code></pre>
         <a href="irq.html">中断系统 →</a>
       </div>
     </main>
-    <aside class="toc"><div class="t">本页目录</div><a href="#regs">端口寄存器(每组 ×9)</a><a href="#iomap">IOMAP 输出通道复用</a><a href="#wake">唤醒与端口中断</a></aside>
+    <aside class="toc"><div class="t">本页目录</div><a href="#inst">实例与基址</a><a href="#regs">端口寄存器(每组 ×9)</a><a href="#init">推荐初始化</a><a href="#iomap">IOMAP 复用</a><a href="#wake">唤醒与约束</a></aside>
   </div>
 </div>
 </body>

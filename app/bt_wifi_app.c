@@ -57,10 +57,9 @@ const struct adkey_platform_data adkey_data = {
     .key_value    = {2, 1, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY},
 };
 
-static volatile u8 key_bt_armed = 1;   /* 按键1 单击触发一次 BT 启动 */
-static volatile u8 key_wifi_armed = 1; /* 按键2 单击触发一次 WiFi 启动 */
-void bt_start(void);                   /* 定义在文件尾 */
-void wifi_start(void);                 /* 定义在文件尾 */
+/* BT/WiFi 开机自启; CoreMark/按键跑分已关 */
+void bt_start(void);
+void wifi_start(void);
 
 static void key_sys_event_handler(struct sys_event *event)
 {
@@ -70,17 +69,6 @@ static void key_sys_event_handler(struct sys_event *event)
     struct key_event *e = (struct key_event *)event->payload;
     if (e->action == KEY_EVENT_CLICK || e->action == KEY_EVENT_UP) {
         printf("[key] v=%d action=%d\n", e->value, e->action);
-        /* 阈值表修正后两键均可用: 按键1=仅蓝牙, 按键2=仅WiFi(单变量隔离共存因素) */
-        if (e->value == 1 && key_bt_armed) {
-            key_bt_armed = 0;
-            printf("[key] key1 -> bt start\n");
-            bt_start();
-        }
-        if (e->value == 2 && key_wifi_armed) {
-            key_wifi_armed = 0;
-            printf("[key] key2 -> wifi start\n");
-            wifi_start();
-        }
     }
 }
 
@@ -514,10 +502,16 @@ static void wifi_app_task(void *p)
 }
 #endif
 
-/* 外设启动入口: 按键1=蓝牙, 按键2=WiFi, 串口 'b'=双开(单变量隔离共存因素) */
+/* 外设启动入口: 开机自启 BT + WiFi; 按键1 另触发 LVGL benchmark */
 void bt_start(void)
 {
 #if MINI_BT_SUPPORT
+    static u8 started = 0;
+    if (started) {
+        printf("[bt] already started\n");
+        return;
+    }
+    started = 1;
     printf("[bt] creating bt_app task...\n");
     os_task_create(bt_module_init, NULL, 12, 1024, 0, "bt_app");
     printf("[bt] bt_app task created\n");
@@ -528,7 +522,7 @@ void wifi_start(void)
 {
 #if MINI_WIFI_SUPPORT
     static u8 started = 0;
-    if (started) {                       /* 上电已自启(app_main), 手动触发不再重复创建 */
+    if (started) {
         printf("[wifi] already started\n");
         return;
     }
@@ -541,6 +535,31 @@ void wifi_start(void)
 
 void bt_wifi_start(void)
 {
-    //bt_start();
+    bt_start();
+    /* BT 与 WiFi 错开, 减轻同时拉 RF/时钟 */
+    os_time_dly(100);
     wifi_start();
+}
+
+/* 延后自启: app_main 里立刻 bt_wifi_start 会与 USB 枚举(~1s)撞车,
+ * 日志截断、WiFi 异常; 按键晚启则正常。等 USB/系统 steadier 再拉起。 */
+#ifndef BT_WIFI_BOOT_DELAY_TICKS
+#define BT_WIFI_BOOT_DELAY_TICKS  500   /* 5s; os tick=10ms */
+#endif
+
+static void bt_wifi_boot_task(void *p)
+{
+    (void)p;
+    printf("[boot] BT/WiFi deferred %d ms...\n", BT_WIFI_BOOT_DELAY_TICKS * 10);
+    os_time_dly(BT_WIFI_BOOT_DELAY_TICKS);
+    printf("[boot] starting BT + WiFi now\n");
+    bt_wifi_start();
+    while (1) {
+        os_time_dly(10000);
+    }
+}
+
+void bt_wifi_start_deferred(void)
+{
+    os_task_create(bt_wifi_boot_task, NULL, 15, 1024, 0, "bt_wifi_boot");
 }

@@ -12,57 +12,222 @@
     <span class="logo">AC7912BB<em>·WL82</em></span>
     <span class="sub">芯片参考手册</span>
   </a>
-  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html" class=active>时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+  <div class="navlinks"><a class="nav-a" href="index.html">芯片总览</a><a class="nav-a" href="cpu-mem.html">CPU 与存储</a><a class="nav-a" href="cache-mmu.html">Cache / MMU</a><a class="nav-a active" href="clock.html">时钟系统</a><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">基础外设<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">多媒体<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">系统<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div><button type="button" class="nav-more-btn" aria-label="全部章节">☰</button><div class="nav-all-panel"><div class="nav-all-g">核心</div><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="cache-mmu.html">Cache / MMU</a><a href="clock.html" class=active>时钟系统</a><div class="nav-all-g">基础外设</div><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><div class="nav-all-g">多媒体</div><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><div class="nav-all-g">系统</div><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div>
 </div></nav>
+<script>
+(function(){
+  document.querySelectorAll('.nav-drop-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var drop = btn.parentElement;
+      var open = drop.classList.contains('open');
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      document.querySelector('.nav-all-panel') && document.querySelector('.nav-all-panel').classList.remove('open');
+      if (!open) drop.classList.add('open');
+      btn.setAttribute('aria-expanded', (!open).toString());
+    });
+  });
+  var more = document.querySelector('.nav-more-btn');
+  var panel = document.querySelector('.nav-all-panel');
+  if (more && panel) {
+    more.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      panel.classList.toggle('open');
+    });
+  }
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+    if (panel) panel.classList.remove('open');
+  });
+})();
+</script>
 
 <div class="wrap">
   <header class="hero">
     <div class="crumb">Clock</div>
     <h1>时钟系统</h1>
-    <p>PLL/PLL3 双锁相环、三总线下分频、SFC/USB 独立时钟</p>
+    <p>时钟树、isd 烧录、分频公式、JL_CLOCK 位域、运行时 API</p>
   </header>
 
   <div class="layout">
     <main class="main">
 <section class="card" id="tree">
-<h2 id="tree">时钟树</h2>
-<div class="fig"><svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img"><defs><marker id="arw" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#5b6b8c"/></marker></defs><rect x="30" y="40" width="150" height="60" rx="9" fill="#e8eefc" stroke="#2456d6" stroke-width="1.4"/><text x="105.0" y="66.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">PLL(系统)</text><text x="105.0" y="83.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">240/320MHz</text><rect x="30" y="150" width="150" height="60" rx="9" fill="#e8eefc" stroke="#2456d6" stroke-width="1.4"/><text x="105.0" y="176.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">PLL3(SDRAM)</text><text x="105.0" y="193.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">240MHz 固定</text><rect x="30" y="250" width="150" height="44" rx="9" fill="#f4ebfa" stroke="#7c2d92" stroke-width="1.4"/><text x="105.0" y="276.55" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="500" fill="#14264d">OSC0 24M / RTC 32K</text><rect x="250" y="30" width="150" height="50" rx="9" fill="#eef1f7" stroke="#8a94a6" stroke-width="1.4"/><text x="325.0" y="51.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">SYS_CLK</text><text x="325.0" y="68.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">÷HSB_DIV+1</text><rect x="250" y="100" width="150" height="50" rx="9" fill="#eef1f7" stroke="#8a94a6" stroke-width="1.4"/><text x="325.0" y="121.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">HSB</text><text x="325.0" y="138.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">240MHz</text><rect x="250" y="170" width="150" height="50" rx="9" fill="#eef1f7" stroke="#8a94a6" stroke-width="1.4"/><text x="325.0" y="191.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">LSB</text><text x="325.0" y="208.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">SYS÷(LSB_DIV+1)</text><rect x="250" y="240" width="150" height="44" rx="9" fill="#eef1f7" stroke="#8a94a6" stroke-width="1.4"/><text x="325.0" y="258.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">timer clk</text><text x="325.0" y="275.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">=LSB</text><rect x="470" y="30" width="170" height="50" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="555.0" y="51.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">SFC</text><text x="555.0" y="68.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">HSB÷(BAUD+1)</text><rect x="470" y="100" width="170" height="50" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="555.0" y="121.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">USB2.0(PLL3)</text><text x="555.0" y="138.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">480M</text><rect x="470" y="170" width="170" height="50" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="555.0" y="191.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">外设时钟门控</text><text x="555.0" y="208.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">clk_get/clk_set API</text><line x1="180" y1="70" x2="250" y2="55" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="180" y1="70" x2="250" y2="125" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="180" y1="180" x2="250" y2="195" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="400" y1="55" x2="470" y2="55" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="400" y1="125" x2="470" y2="125" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><text x="660" y="200" text-anchor="start" font-size="11" fill="#4a5568" font-weight="500" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif">isd_config_rule.c: SYS_CLK=240M / HSB_DIV=1 / LSB_DIV=2
-超频 396M 档: HSB_DIV=1, LSB_DIV=5(量产禁用)</text></svg><div class="figcap">AC7912BB 时钟树(isd_config_rule.c + clock.h)</div></div>
-<p>SDK 预设主频(clock.h): 320M/240M/192M/160M/120M/96M/48M/40M/24M…; SDR 最低 96M(SDRAM_CLK_MIN)。时钟/分频由 <code>isd_config.ini</code> 烧录进 uboot 参数(非运行时寄存器直写), 应用层用 clk_get()/clk_set() 修改。</p>
+<h2 id="tree">时钟树总览</h2>
+<div class="fig"><svg viewBox="0 0 940 420" xmlns="http://www.w3.org/2000/svg" role="img"><defs><marker id="arw" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#5b6b8c"/></marker></defs><rect x="20" y="30" width="130" height="55" rx="9" fill="#f4ebfa" stroke="#7c2d92" stroke-width="1.4"/><text x="85.0" y="53.7" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">OSC0</text><text x="85.0" y="69.7" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">通常 24MHz</text><rect x="20" y="110" width="130" height="50" rx="9" fill="#f4ebfa" stroke="#7c2d92" stroke-width="1.4"/><text x="85.0" y="131.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">RC 16M/250K</text><text x="85.0" y="147.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">启动/idle</text><rect x="20" y="190" width="130" height="50" rx="9" fill="#f4ebfa" stroke="#7c2d92" stroke-width="1.4"/><text x="85.0" y="211.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">RTC OSC</text><text x="85.0" y="227.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">32K 可选</text><rect x="200" y="40" width="150" height="70" rx="9" fill="#e8eefc" stroke="#2456d6" stroke-width="1.4"/><text x="275.0" y="63.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">系统 PLL</text><text x="275.0" y="79.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">192/320/480…</text><text x="275.0" y="95.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">CLK_CON2 选档</text><rect x="200" y="140" width="150" height="60" rx="9" fill="#e8eefc" stroke="#2456d6" stroke-width="1.4"/><text x="275.0" y="166.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">PLL2</text><text x="275.0" y="182.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">SDRAM 4ph 源</text><rect x="200" y="230" width="150" height="60" rx="9" fill="#e8eefc" stroke="#2456d6" stroke-width="1.4"/><text x="275.0" y="256.35" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">PLL3 / USB PLL</text><text x="275.0" y="271.35" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">SDRAM 8ph + HS USB</text><line x1="150" y1="55" x2="200" y2="70" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="150" y1="135" x2="200" y2="165" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="150" y1="215" x2="200" y2="255" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><rect x="400" y="50" width="150" height="55" rx="9" fill="#eef1f7" stroke="#8a94a6" stroke-width="1.4"/><text x="475.0" y="73.55" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">SYS_CLK</text><text x="475.0" y="90.55" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">CPU/核</text><rect x="400" y="140" width="150" height="50" rx="9" fill="#eef1f7" stroke="#8a94a6" stroke-width="1.4"/><text x="475.0" y="161.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">HSB</text><text x="475.0" y="178.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">高速总线</text><rect x="400" y="220" width="150" height="50" rx="9" fill="#eef1f7" stroke="#8a94a6" stroke-width="1.4"/><text x="475.0" y="241.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">LSB</text><text x="475.0" y="258.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">低速外设</text><line x1="350" y1="75" x2="400" y2="75" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="475" y1="105" x2="475" y2="140" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="475" y1="190" x2="475" y2="220" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="350" y1="255" x2="400" y2="245" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)" stroke-dasharray="5,4"/><text x="375.0" y="245.0" text-anchor="middle" font-size="11" fill="#5b6b8c" font-family="Segoe UI,sans-serif">PLL3→SDR</text><rect x="600" y="30" width="150" height="45" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="675.0" y="48.7" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">SFC</text><text x="675.0" y="64.7" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">HSB/(BAUD+1)</text><rect x="600" y="90" width="150" height="45" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="675.0" y="108.7" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">UART</text><text x="675.0" y="124.7" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">常 PLL48M</text><rect x="600" y="150" width="150" height="45" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="675.0" y="168.7" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">USB1 HS</text><text x="675.0" y="184.7" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">PLL3 480M</text><rect x="600" y="210" width="150" height="45" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="675.0" y="228.7" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">timer/sd/spi</text><text x="675.0" y="244.7" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">= LSB</text><rect x="600" y="270" width="150" height="45" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="675.0" y="288.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">DAC/WL/BT</text><text x="675.0" y="303.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">CLK_CON1 选源</text><rect x="600" y="330" width="150" height="45" rx="9" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.4"/><text x="675.0" y="348.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">SDRAM</text><text x="675.0" y="363.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">PLL2/2 或 PLL3/2</text><line x1="550" y1="165" x2="600" y2="52" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#arw)"/><line x1="550" y1="165" x2="600" y2="112" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#arw)"/><line x1="550" y1="165" x2="600" y2="172" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#arw)"/><line x1="550" y1="245" x2="600" y2="232" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#arw)"/><line x1="550" y1="245" x2="600" y2="292" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#arw)"/><line x1="550" y1="245" x2="600" y2="350" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)" stroke-dasharray="5,4"/><text x="20" y="400" text-anchor="start" font-size="11" fill="#4a5568" font-weight="500" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif">烧录: isd_config → uboot 配 PLL/分频；运行时: clock.h API / 可读回 SYS_DIV·CLK_CONx</text></svg><div class="figcap">OSC → PLL/PLL2/PLL3 → SYS → HSB/LSB → 外设（依据 clock.h + ota-loader clock.c）</div></div>
+<p>两条配置路径：① <b>烧录态</b> <code>isd_config.ini</code>（由 <code>isd_config_rule.c</code> 生成）由 uboot 上电写 PLL/分频；② <b>运行态</b> <code>asm/clock.h</code> 的 <code>system_clock_set</code> / <code>clk_get</code> 等。开源位定义与推算公式参考 <code>ac791n-ota-loader/.../clock_hw.h</code>、<code>clock.c</code>（gitee-repos-Other）。</p>
+
+</section>
+<section class="card" id="formula">
+<h2 id="formula">分频关系（clk_early_init 推算）</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>时钟</th><th>公式 / 来源</th><th>典型值(默认 isd)</th></tr></thead><tbody>
+<tr><td>OSC</td><td>OSC_FREQ；ANA.PLL_CON0[27:26]==2 → 40M 否则 24M</td><td>24 MHz</td></tr>
+<tr><td>PLL 档</td><td>CLK_CON2[3:0]：0=192 /1=137 /2=320 /3=480 /4=107 M；≥5→PLL2/3</td><td>对应 SYS=240M 档</td></tr>
+<tr><td>SYS</td><td>pll_base / div1 / div2；div1={1,3,5,7}[CON2[5:4]]；div2={1,2,4,8}[CON2[7:6]]</td><td>240 MHz</td></tr>
+<tr><td>HSB</td><td>sys / (HSB_DIV+1)；HSB_DIV = SYS_DIV[17:16]</td><td>240/(1+1)=120 MHz</td></tr>
+<tr><td>LSB</td><td>hsb / (LSB_DIV+1)；LSB_DIV = SYS_DIV[10:8]</td><td>120/(2+1)=40 MHz</td></tr>
+<tr><td>SDRAM</td><td>PLL3 8ph：usb_pll3/2；否则 PLL2/2（SDR.CON0.BIT11 使能）</td><td>240 MHz（PLL3）</td></tr>
+<tr><td>UART</td><td>CLK_CON1[11:10]=1 → 固定 48M（uboot 常见）</td><td>48 MHz</td></tr>
+<tr><td>timer/sd/spi</td><td>clk_get 返回 lsb</td><td>=LSB</td></tr>
+<tr><td>SFC</td><td>hsb / (JL_SFC->BAUD+1)</td><td>视 BAUD</td></tr>
+</tbody></table></div>
+<div class="note">isd 注释写明分频系数 = 配置值+1。默认 <code>SYS_CLK=240MHz; HSB_DIV=1; LSB_DIV=2;</code> → HSB=120M、LSB=40M。勿把 HSB 当成与 SYS 同频。</div>
+<pre><code>/* ac791n-ota-loader clock.c 核心推算（摘录） */
+u8 div1 = clk_div1[(JL_CLOCK-&gt;CLK_CON2 &gt;&gt; 4) &amp; 3];  /* 1,3,5,7 */
+u8 div2 = clk_div2[(JL_CLOCK-&gt;CLK_CON2 &gt;&gt; 6) &amp; 3];  /* 1,2,4,8 */
+u8 pll_div = JL_CLOCK-&gt;CLK_CON2 &amp; 0xF;
+/* pll_div→192/137/320/480/107M 后再 /div1/div2 → sys_clk */
+hsb = sys / (((SYS_DIV &gt;&gt; 16) &amp; 0x3) + 1);
+lsb = hsb / (((SYS_DIV &gt;&gt; 8) &amp; 0x7) + 1);</code></pre>
+
+</section>
+<section class="card" id="isd">
+<h2 id="isd">烧录配置（isd_config）</h2>
+<p>改 <code>cpu/wl82/tools/isd_config_rule.c</code> 后重新打包下载，参数进入 uboot，<b>不是</b>应用启动后再写一次 ini。</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>键</th><th>含义</th><th>常用取值</th></tr></thead><tbody>
+<tr><td>OSC / OSC_FREQ</td><td>晶振源与频率</td><td>OSC0 / 24MHz（亦见 40M 机型）</td></tr>
+<tr><td>SYS_CLK</td><td>系统主频目标</td><td>240M（默认）；320M；超频 396M 需抬 DVDD</td></tr>
+<tr><td>HSB_DIV</td><td>高速总线分频码（实际÷(值+1)）</td><td>1 → HSB=SYS/2</td></tr>
+<tr><td>LSB_DIV</td><td>低速总线分频码（实际÷(值+1)）</td><td>2 → LSB=HSB/3</td></tr>
+<tr><td>SDRAM_PLL3_EN</td><td>1：SDRAM 用 PLL3（须 SYS=240M）并可开 USB2.0</td><td>量产常 1</td></tr>
+<tr><td>SDRAM_PLL3_NOUSB_EN</td><td>1：PLL3 跟 SDRAM_CL，但禁用 USB2.0</td><td>0</td></tr>
+<tr><td>SDRAM_CL</td><td>SDRAM 时钟档（非 PLL3 时）</td><td>0=120…3=240…11=288；上限 288M</td></tr>
+<tr><td>SDRAM_DQ_DLY_TRM</td><td>DQ 刷新延时档</td><td>5≈240M</td></tr>
+<tr><td>VDDIO / DVDD / DCDC14</td><td>IO/核/DCDC 电压档</td><td>超频须抬 DVDD（如 14→1.35V）</td></tr>
+</tbody></table></div>
+<pre><code>/* 默认量产片段（isd_config_rule.c） */
+OSC_FREQ=24MHz;
+SYS_CLK=240MHz;
+HSB_DIV=1;   /* HSB = 240/(1+1) = 120M */
+LSB_DIV=2;   /* LSB = 120/(2+1) = 40M */
+SDRAM_PLL3_EN=1;  /* SDRAM@240M + USB2.0 可用 */
+SDRAM_CL=3;
+
+/* 超频示例（CONFIG_OVERCLOCKING_ENABLE，量产慎用） */
+SYS_CLK=396MHz; HSB_DIV=1; LSB_DIV=1;
+DVDD=14; DCDC14=4;  /* 抬核压 */</code></pre>
+<div class="warn">7913/7915 + RTC 内置电源时 SDK 会把 HSB_DIV=2、LSB_DIV=5（P33 降速）。换板核对 isd 条件编译。</div>
 
 </section>
 <section class="card" id="regs">
-<h2 id="regs">时钟寄存器(JL_CLOCK @ 0x10000)</h2>
-<div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
-<tr><td><code class="rg">0x00</code></td><td><code class="rg">PWR_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
-<tr><td><code class="rg">0x04</code></td><td><code class="rg">RESERVED0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
-<tr><td><code class="rg">0x08</code></td><td><code class="rg">SYS_DIV</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
-<tr><td><code class="rg">0x0C</code></td><td><code class="rg">CLK_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
-<tr><td><code class="rg">0x10</code></td><td><code class="rg">CLK_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
-<tr><td><code class="rg">0x14</code></td><td><code class="rg">CLK_CON2</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
-<tr><td><code class="rg">0x18</code></td><td><code class="rg">CLK_CON3</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
-</tbody></table></div>
+<h2 id="regs">JL_CLOCK 寄存器与位域</h2>
 <p>基址: <code class="rg">0x10000</code>(段基址 + (64×grp + adr)×4, 见 WL82.h)</p>
-<pre><code>/* clock.h API */
-u32 clk_get(const char *name);   /* &quot;sys&quot;/&quot;sdram&quot;/&quot;hsb&quot;/&quot;lsb&quot;/&quot;timer&quot; */
-int clk_set(const char *name, u32 clk);
-/* 临界区保护: CLOCK_CRITICAL_HANDLE_REG + list_for_each_loop_clock_critical */</code></pre>
+<p>与 <code>JL_POWER</code> 同基址 0x10000：PWR_CON ≡ POWER->CON。成员名以 WL82.h 为准（非旧文档的 CON0 简称）。</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">PWR_CON</code></td><td><span class="rw rw">RW</span></td><td>电源控制（同 JL_POWER->CON）</td></tr>
+<tr><td><code class="rg">0x04</code></td><td><code class="rg">RESERVED0</code></td><td><span class="rw rw">RW</span></td><td>保留</td></tr>
+<tr><td><code class="rg">0x08</code></td><td><code class="rg">SYS_DIV</code></td><td><span class="rw rw">RW</span></td><td>HSB/LSB（及部分 SFC）分频</td></tr>
+<tr><td><code class="rg">0x0C</code></td><td><code class="rg">CLK_CON0</code></td><td><span class="rw rw">RW</span></td><td>主时钟源 / RC / 时钟输出脚</td></tr>
+<tr><td><code class="rg">0x10</code></td><td><code class="rg">CLK_CON1</code></td><td><span class="rw rw">RW</span></td><td>UART/USB/DAC/WL 等外设时钟源</td></tr>
+<tr><td><code class="rg">0x14</code></td><td><code class="rg">CLK_CON2</code></td><td><span class="rw rw">RW</span></td><td>系统 PLL 档与后分频</td></tr>
+<tr><td><code class="rg">0x18</code></td><td><code class="rg">CLK_CON3</code></td><td><span class="rw rw">RW</span></td><td>扩展（SDK 少直接操作）</td></tr>
+</tbody></table></div>
+<h3>位域 — CLOCK.SYS_DIV</h3>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>位域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="bits-chip">8-10</span></td><td><code class='rg'>LSB_CLK_DIV</code></td><td>LSB 分频码；实际分频 = 值+1（与 isd LSB_DIV 对应）</td></tr>
+<tr><td><span class="bits-chip">16-17</span></td><td><code class='rg'>HSB_CLK_DIV</code></td><td>HSB 分频码；实际分频 = 值+1（与 isd HSB_DIV 对应，见 ota-loader clock.c）</td></tr>
+</tbody></table></div>
+<h3>位域 — CLOCK.CLK_CON0</h3>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>位域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="bits-chip">0</span></td><td><code class='rg'>RC_EN</code></td><td>RC 振荡使能</td></tr>
+<tr><td><span class="bits-chip">1</span></td><td><code class='rg'>RCH_EN</code></td><td>0=250K / 1=16M（RCH）</td></tr>
+<tr><td><span class="bits-chip">2-3</span></td><td><code class='rg'>TEST_SEL</code></td><td>主时钟测试源</td></tr>
+<tr><td><span class="bits-chip">4-5</span></td><td><code class='rg'>OSC_CLOCK_IN</code></td><td>0=BT_OSC / 2=RTOSC_L / 3=PAT</td></tr>
+<tr><td><span class="bits-chip">6-8</span></td><td><code class='rg'>MAIN_CLOCK_SEL</code></td><td>0=RC / 4=BTOSC / 6=RTOSC_L / 7=PLL</td></tr>
+<tr><td><span class="bits-chip">9</span></td><td><code class='rg'>SFR_MODE</code></td><td>0=idle 可关 / 1=always on</td></tr>
+<tr><td><span class="bits-chip">10-12</span></td><td><code class='rg'>PC0_CLOCK_OUT</code></td><td>PC0 时钟输出选择</td></tr>
+<tr><td><span class="bits-chip">13-15</span></td><td><code class='rg'>PA4_CLOCK_OUT</code></td><td>PA4 时钟输出选择</td></tr>
+</tbody></table></div>
+<h3>位域 — CLOCK.CLK_CON1</h3>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>位域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="bits-chip">0-1</span></td><td><code class='rg'>USB_CLOCK_IN</code></td><td>0=PLL48M / 1=OSC / 2=LSB / 3=关</td></tr>
+<tr><td><span class="bits-chip">2-3</span></td><td><code class='rg'>DAC_CLOCK_IN</code></td><td>0=PLL24M / 1=OSC / 2=LSB / 3=关</td></tr>
+<tr><td><span class="bits-chip">4-6</span></td><td><code class='rg'>GPCNT_CLOCK_IN</code></td><td>门控计数时钟源（SRC/SFC/HSB/AUDIO/WL/USB）</td></tr>
+<tr><td><span class="bits-chip">10-11</span></td><td><code class='rg'>UART_CLOCK_IN</code></td><td>0=OSC / 1=PLL48M / 2=LSB / 3=关；uboot 常置 1→48M</td></tr>
+<tr><td><span class="bits-chip">14-15</span></td><td><code class='rg'>BT/WL_CLOCK_IN</code></td><td>蓝牙/WiFi 时钟源选择</td></tr>
+<tr><td><span class="bits-chip">16</span></td><td><code class='rg'>MEM_CLOCK_STATUS</code></td><td>0=idle / 1=always on</td></tr>
+<tr><td><span class="bits-chip">28-29</span></td><td><code class='rg'>SFC_CLOCK_DELAY</code></td><td>SFC 时钟延时档</td></tr>
+</tbody></table></div>
+<h3>位域 — CLOCK.CLK_CON2</h3>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>位域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="bits-chip">0-3</span></td><td><code class='rg'>pll_div</code></td><td>系统 PLL 档：0=192M 1=137M 2=320M 3=480M 4=107M；≥5 走 PLL2/PLL3 衍生（clk_early_init）</td></tr>
+<tr><td><span class="bits-chip">4-5</span></td><td><code class='rg'>div1_sel</code></td><td>后分频1：{1,3,5,7}[sel]</td></tr>
+<tr><td><span class="bits-chip">6-7</span></td><td><code class='rg'>div2_sel</code></td><td>后分频2：{1,2,4,8}[sel]</td></tr>
+</tbody></table></div>
+<div class="note">位域摘自开源 <code>clock_hw.h</code>（ota-loader）；官方 AIoT 闭源库可能另有封装，应用优先走 API。</div>
 
 </section>
-<section class="card" id="lowp">
-<h2 id="lowp">低功耗与时钟保持</h2>
-<ul><li>soft poweroff(P33 域保持, 10ms 后唤醒)——net_update 复位路径用到【实测】</li><li>LSB 时钟丢失监控: JL_OSA->CON=0x6D + IRQ_OSA, 丢失即打印 'lsb clk lost'(debug.c)</li><li>低功耗配置宏 TCFG_LOWPOWER_*(app_config.h), DVDD/VDDIO 档位由 isd_config 烧录</li></ul>
+<section class="card" id="api">
+<h2 id="api">运行时配置方法</h2>
+<p><code>include_lib/.../asm/clock.h</code>（fw-mini-sdk / AC79 SDK 同款应用 API）：</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>API</th><th>作用</th><th>范围/说明</th></tr></thead><tbody>
+<tr><td>clk_get(name)</td><td>读缓存频率</td><td>"sys"/"sdram"/"hsb"/"lsb"/"uart"/"timer"/"sd"/"spi"/"osc"</td></tr>
+<tr><td>clk_set(name, clk)</td><td>按名改频</td><td>依赖闭源实现；改前走 critical handler</td></tr>
+<tr><td>system_clock_set(clk)</td><td>改系统时钟</td><td>24M~396M</td></tr>
+<tr><td>sdram_clock_set(clk)</td><td>改 SDRAM 钟</td><td>96M~244M（SDRAM_CLK_MIN=96M）</td></tr>
+<tr><td>system_sdram_clock_set(sys, sdr)</td><td>同时改两者</td><td>同上</td></tr>
+<tr><td>system_clock_set_default()</td><td>恢复上电初值</td><td>uboot 写入的 SYS/SDR</td></tr>
+<tr><td>system_clock_set_idle()</td><td>idle：SYS=24M，SDR 固定 120M</td><td>低功耗</td></tr>
+<tr><td>system_clock_hsb_lsb_div(h,l)</td><td>临时改 HSB/LSB 分频</td><td>hsb=sys/h（1~4），lsb=hsb/l（1~8）；须配对 resume</td></tr>
+<tr><td>sys_clk_source_set(i)</td><td>主时钟源</td><td>0=BT_OSC 1=RTC 2=PLL_OSC</td></tr>
+<tr><td>sys_clk_source_rc_clk_on/off</td><td>切 RC 16M/250K</td><td>休眠路径</td></tr>
+<tr><td>clk_out_pc0 / clk_out_pa0</td><td>把内部钟打到 IO</td><td>调试测频</td></tr>
+<tr><td>system_vdd_clock_set(i)</td><td>自定义 VDD+CLOCK 档</td><td>与电压表联动</td></tr>
+</tbody></table></div>
+<pre><code>/* 读频 */
+printf(&quot;sys=%d hsb=%d lsb=%d sdram=%d\n&quot;,
+       clk_get(&quot;sys&quot;), clk_get(&quot;hsb&quot;), clk_get(&quot;lsb&quot;), clk_get(&quot;sdram&quot;));
+
+/* 运行时降频（注意外设波特率/定时器依赖） */
+system_clock_set(SYS_CLK_120M);
+/* 或临时只拉大 HSB/LSB 分频 */
+int tok = system_clock_hsb_lsb_div(2, 4);  /* hsb=sys/2, lsb=hsb/4 */
+/* ... 临界业务 ... */
+system_clock_hsb_lsb_div_resume(tok);
+
+/* 改频临界区：驱动注册 enter/exit */
+CLOCK_CRITICAL_HANDLE_REG(uart, uart_clk_enter, uart_clk_exit);</code></pre>
+<div class="warn">改 SYS/HSB/LSB 后 UART 若绑 LSB 需重配波特率；uboot 常把 UART 固定 48M（CLK_CON1），与 LSB 脱钩。SFC BAUD、定时器 tick 也要复核。</div>
 
 </section>
-<div class="note">本章内容依据官方 SDK <code>include_lib/driver/cpu/wl82/asm/WL82.h</code>、<code>cpu/wl82/sdk_ld*.c</code> 与 <code>cpu/wl82/tools/isd_config_rule.c</code> 整理; 标注【实测】的条目来自 fw-mini-sdk 移植验证。</div>
+<section class="card" id="peri">
+<h2 id="peri">外设时钟源（CLK_CON1）</h2>
+<ul><li>UART：推荐 PLL48M（与波特率计算稳定）；亦可 OSC/LSB</li><li>USB FS（FUSB）侧选源：PLL48M / OSC / LSB</li><li>DAC：PLL24M / OSC / LSB</li><li>BT/WL：STD_48M、OSC、HSB 等（与射频库绑定，勿随意改）</li><li>GPCNT：可选 SRC/SFC/HSB/AUDIO/WL/USB 作计数源</li></ul>
+
+</section>
+<section class="card" id="usb240">
+<h2 id="usb240">为何高速 USB 要求 SYS=240M？</h2>
+<p>高速 USB（HUSB / USB2.0 HS）<b>并不吃 CPU 的 240M</b>，PHY 需要的是固定 <b>480 MHz</b> UTMI 钟。官方把「SYS=240M + SDRAM_PLL3_EN=1」绑在一起，是因为 <b>USB PLL3 与 SDRAM 时钟共用同一套 PLL3</b>，只能同时满足一组比例。</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>节点</th><th>频率</th><th>来源</th></tr></thead><tbody>
+<tr><td>USB PLL3（HUSB_COM_CON0[27:18]+2）</td><td>480 MHz</td><td>HS PHY / UTMI 基准</td></tr>
+<tr><td>SDRAM（8phase，CON0.BIT11）</td><td>PLL3÷2 = <b>240 MHz</b></td><td>HUSB_COM_CON2[4:3]==3 时走 PLL3（clock.c）</td></tr>
+<tr><td>SYS_CLK（isd 强制）</td><td><b>240 MHz</b></td><td>与 SDR@240 + DQ_DLY/电压档成套；非 PHY 直接输入</td></tr>
+<tr><td>HSB / LSB</td><td>SYS/(HSB_DIV+1) 等</td><td>与 USB 无硬接线比例</td></tr>
+</tbody></table></div>
+<pre><code>/* ota-loader clock.c */
+usb_pll3_clk = ((HUSB_COM_CON0 &gt;&gt; 18) &amp; 0x3FF) + 2;   /* MHz 量纲 */
+if (((HUSB_COM_CON2 &gt;&gt; 3) &amp; 0x3) == 0x3) {            /* PLL3 → SDR */
+    sdram_clk = (JL_SDR-&gt;CON0 &amp; BIT(11))
+                ? (usb_pll3_clk / 2 * 1000000) : 0;   /* 固定 ÷2 */
+}</code></pre>
+<ul><li><code>SDRAM_PLL3_EN=1</code>：PLL3 锁在 USB 可用的 480M → SDR 固定 240M；<b>isd 要求 SYS_CLK=240M</b>，SDK 宣称可开 USB2.0</li><li><code>SDRAM_PLL3_NOUSB_EN=1</code>：PLL3 按 <code>SDRAM_CL</code> 改到别的钟（120~288M 档）→ <b>不再保证 480M PHY</b> → 不能用高速 USB</li><li><code>SDRAM_PLL3_EN=0</code>：SDR 改走 PLL2÷2；高速 USB 是否单独开 PLL3 取决于 uboot/闭源库，官方推荐路径仍是 PLL3 共享方案</li><li>全速 FUSB（12Mbps）走 CLK_CON1 的 48M 等源，<b>不受</b> SYS=240 约束</li></ul>
+<div class="warn">改 <code>system_clock_set</code> 把 SYS 调离 240M 时，勿假定 HS USB 仍可用：PLL3/SDR 比例由 uboot 烧录态决定，运行时改 SYS 不会自动重锁 USB PHY 480M。</div>
+
+</section>
+<section class="card" id="note">
+<h2 id="note">约束与【实测】</h2>
+<ul><li>主频/分频以 isd 烧录为准；应用 system_clock_set 会改运行值但不改 Flash 内 uboot 参数</li><li>超频须同步抬 DVDD/DCDC14；量产默认关闭 CONFIG_OVERCLOCKING_ENABLE</li><li>soft poweroff（P33）唤醒后时钟由 uboot/SDK 恢复路径决定</li><li>LSB 丢失：JL_OSA->CON=0x6D + IRQ_OSA → 打印 lsb clk lost（debug.c）</li><li>测频：clk_out_pa0(PLL_SYS_CLK_OUT) / clk_out_pc0(HSB_CLK_OUT) 用示波器核对</li></ul>
+
+</section>
+<div class="note">本章内容依据官方 SDK <code>include_lib/driver/cpu/wl82/asm/WL82.h</code>、<code>csfr.h</code>、<code>cpu/wl82/sdk_ld*.c</code> 与 <code>cpu/wl82/tools/isd_config_rule.c</code> 整理; 标注【实测】的条目来自 fw-mini-sdk 移植验证。</div>
 
       <div class="footer">
-        <a href="cpu-mem.html">← CPU 与存储</a>
+        <a href="cache-mmu.html">← Cache / MMU</a>
         <span class="src">依据 JieLi 官方 SDK 头文件整理 · AC7912BB (WL82 / AC791N) · 仅供开发参考</span>
         <a href="gpio.html">GPIO 与复用 →</a>
       </div>
     </main>
-    <aside class="toc"><div class="t">本页目录</div><a href="#tree">时钟树</a><a href="#regs">时钟寄存器(JL_CLOCK @ 0x10000)</a><a href="#lowp">低功耗与时钟保持</a></aside>
+    <aside class="toc"><div class="t">本页目录</div><a href="#tree">时钟树总览</a><a href="#formula">分频关系（clk_early_init 推算）</a><a href="#isd">烧录配置（isd_config）</a><a href="#regs">JL_CLOCK 寄存器与位域</a><a href="#api">运行时配置方法</a><a href="#peri">外设时钟源（CLK_CON1）</a><a href="#usb240">为何高速 USB 要求 SYS=240M？</a><a href="#note">约束与【实测】</a></aside>
   </div>
 </div>
 </body>

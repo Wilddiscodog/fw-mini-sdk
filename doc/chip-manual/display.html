@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>显示接口 — AC7912BB 参考手册</title>
+<title>显示与 UI — AC7912BB 参考手册</title>
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -12,66 +12,166 @@
     <span class="logo">AC7912BB<em>·WL82</em></span>
     <span class="sub">芯片参考手册</span>
   </a>
-  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html" class=active>显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+  <div class="navlinks"><a class="nav-a" href="index.html">芯片总览</a><a class="nav-a" href="cpu-mem.html">CPU 与存储</a><a class="nav-a" href="cache-mmu.html">Cache / MMU</a><a class="nav-a" href="clock.html">时钟系统</a><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">基础外设<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a></div></div><div class="nav-drop open-active"><button type="button" class="nav-drop-btn" aria-expanded="false">多媒体<span class="nav-drop-cur">显示接口</span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html" class=active>显示接口</a><a href="camera.html">摄像头与编解码</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">系统<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div><button type="button" class="nav-more-btn" aria-label="全部章节">☰</button><div class="nav-all-panel"><div class="nav-all-g">核心</div><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="cache-mmu.html">Cache / MMU</a><a href="clock.html">时钟系统</a><div class="nav-all-g">基础外设</div><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><div class="nav-all-g">多媒体</div><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html" class=active>显示接口</a><a href="camera.html">摄像头与编解码</a><div class="nav-all-g">系统</div><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div>
 </div></nav>
+<script>
+(function(){
+  document.querySelectorAll('.nav-drop-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var drop = btn.parentElement;
+      var open = drop.classList.contains('open');
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      document.querySelector('.nav-all-panel') && document.querySelector('.nav-all-panel').classList.remove('open');
+      if (!open) drop.classList.add('open');
+      btn.setAttribute('aria-expanded', (!open).toString());
+    });
+  });
+  var more = document.querySelector('.nav-more-btn');
+  var panel = document.querySelector('.nav-all-panel');
+  if (more && panel) {
+    more.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      panel.classList.toggle('open');
+    });
+  }
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+    if (panel) panel.classList.remove('open');
+  });
+})();
+</script>
 
 <div class="wrap">
   <header class="hero">
     <div class="crumb">Display</div>
-    <h1>显示接口</h1>
-    <p>EMI 8080(实测逆向)/IMD RGB/PAP + LCD 驱动框架与背光策略</p>
+    <h1>显示与 UI</h1>
+    <p>EMI/IMD、ui_platform pi32v2 加速、LVGL 官方绑定</p>
   </header>
 
   <div class="layout">
     <main class="main">
-<p>三条显示通路 + 端口域 LCDC(0x51000 区, LCD 复用引脚控制):</p>
-<div class="tbl-wrap"><table class="tbl "><thead><tr><th>接口</th><th>基址</th><th>类型</th><th>典型屏</th></tr></thead><tbody>
-<tr><td>EMI</td><td><code>0x41400</code></td><td>8080 并口 8/16bit</td><td>ILI9341/ILI9481/JD9853 SPI 屏控制器 IC</td></tr>
-<tr><td>IMD</td><td><code>0x41D00 区</code></td><td>RGB 并口(SerDes 可扩展)</td><td>RGB888/565 裸屏</td></tr>
-<tr><td>PAP</td><td><code>0x12A00</code></td><td>并口(打印/低速)</td><td>并口外设</td></tr>
+<section class="card" id="arch">
+<h2 id="arch">显示架构</h2>
+<div class="fig"><svg viewBox="0 0 920 340" xmlns="http://www.w3.org/2000/svg" role="img"><defs><marker id="arw" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#5b6b8c"/></marker></defs><rect x="30" y="40" width="140" height="70" rx="9" fill="#e8eefc" stroke="#2456d6" stroke-width="1.4"/><text x="100.0" y="63.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">UI 框架</text><text x="100.0" y="79.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">ui_platform /</text><text x="100.0" y="95.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">LVGL</text><rect x="220" y="30" width="150" height="50" rx="9" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.4"/><text x="295.0" y="51.35" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">Framebuffer</text><text x="295.0" y="66.35" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">RGB565 / MONO</text><rect x="220" y="100" width="150" height="50" rx="9" fill="#e8eefc" stroke="#2456d6" stroke-width="1.4"/><text x="295.0" y="121.35" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">pi32v2 fill/copy</text><text x="295.0" y="136.35" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">DSP REP 加速</text><line x1="170" y1="75" x2="220" y2="55" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="170" y1="75" x2="220" y2="125" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><rect x="420" y="20" width="150" height="45" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="495.0" y="38.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">EMI 8080</text><text x="495.0" y="53.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">0x41400</text><rect x="420" y="80" width="150" height="45" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="495.0" y="98.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">IMD RGB</text><text x="495.0" y="113.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">+ IMR 旋转</text><rect x="420" y="140" width="150" height="45" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="495.0" y="158.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">PAP</text><text x="495.0" y="173.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">0x12800</text><rect x="420" y="200" width="150" height="45" rx="9" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.4"/><text x="495.0" y="218.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">DCP / IMB</text><text x="495.0" y="233.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">图像协处理</text><line x1="370" y1="55" x2="420" y2="42" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="370" y1="125" x2="420" y2="100" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><rect x="620" y="50" width="160" height="70" rx="9" fill="#f4ebfa" stroke="#7c2d92" stroke-width="1.4"/><text x="700.0" y="73.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">LCD 面板</text><text x="700.0" y="88.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">ILI/JD/ST…</text><text x="700.0" y="103.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">REGISTER_LCD_DEV</text><line x1="570" y1="42" x2="620" y2="75" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="570" y1="100" x2="620" y2="85" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><rect x="620" y="160" width="160" height="55" rx="9" fill="#eef1f7" stroke="#8a94a6" stroke-width="1.4"/><text x="700.0" y="183.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">TE 同步</text><text x="700.0" y="198.85" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">lcd_te_driver</text><text x="30" y="310" text-anchor="middle" font-size="11" fill="#4a5568" font-weight="500" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif">LVGL: lv_port_disp → lcd_lvgl_full → EMI DMA；官方 sty UI: ui_core → br23_* → put_draw_context → LCD</text></svg><div class="figcap">应用 UI → FB/加速填充 → EMI/IMD/PAP → 面板</div></div>
+<p>两条应用栈并行存在于原厂 SDK：<b>① 自研 sty/UI</b>（<code>ui_platform.c</code> + res）；<b>② LVGL</b>（官方补丁深度对接 <code>lcd_drive</code>）。底层共用 EMI/IMD 与面板驱动注册表。</p>
+
+</section>
+<section class="card" id="inst">
+<h2 id="inst">总线与加速硬件</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>模块</th><th>基址</th><th>IRQ</th><th>用途</th></tr></thead><tbody>
+<tr><td>EMI</td><td>0x41400</td><td>27</td><td>8080 并口写屏（MCU 屏主流）</td></tr>
+<tr><td>IMD</td><td>0x41D00</td><td>65</td><td>RGB 屏；可挂 IMR</td></tr>
+<tr><td>PAP</td><td>0x12800</td><td>22</td><td>低速并口</td></tr>
+<tr><td>DCP</td><td>0x41300</td><td>—</td><td>数据协处理（旋转/拷贝类，位域未公开）</td></tr>
+<tr><td>IMR</td><td>asm/imr.h</td><td>—</td><td>图像旋转（IMD 路径）</td></tr>
+<tr><td>IMB</td><td>asm/imb.h</td><td>—</td><td>YUV 贴图/合成（摄像头叠加）</td></tr>
+<tr><td>IMC</td><td>asm/imc.h</td><td>—</td><td>视频 OSD/裁剪/预缩放命令</td></tr>
+<tr><td>JPEG</td><td>0x41900</td><td>55</td><td>硬编解码喂显示/网络</td></tr>
 </tbody></table></div>
-<section class="card" id="emi">
-<h2 id="emi">EMI 8080 接口【实测逆向】</h2>
-<p>闭源 cpu.a 的 emi.c 关键语义(反汇编参考工程 sdk.elf 还原):</p>
-<ul><li>emi_write ≥5 字节 DMA 写要求缓冲 <b>4 字节对齐</b>, 否则返回 -22 且一个字节都不发(错误串 'err in emi dma data address no align 4bytes')</li><li>&lt;5 字节的短写(命令字节)自动拷入内部 emi_buf(0x1C14DC8)再发, 无对齐要求</li><li>DMA 寄存器在基址 0x41400: [+8]=缓冲指针 [+12]=长度(结构体偏移, 见下表); <b>可读 SDRAM</b>(与 USB DMA 不同)</li><li>EMI_USE_SEND_SEM ioctl: 信号量异步模式(os_sem_pend 200tick 让出 CPU)——LCD 帧写入的推荐模式</li><li>中断 IRQ_EMI_IDX=27, emi_isr 完成后 post 信号量</li></ul>
+
+</section>
+<section class="card" id="regs">
+<h2 id="regs">EMI / PAP 寄存器</h2>
 <div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
 <tr><td><code class="rg">0x00</code></td><td><code class="rg">CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
 <tr><td><code class="rg">0x04</code></td><td><code class="rg">CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
 <tr><td><code class="rg">0x08</code></td><td><code class="rg">CON2</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
-<tr><td><code class="rg">0x0C</code></td><td><code class="rg">ADR</code></td><td><span class="rw rw">RW</span></td><td>DMA 缓冲地址(≥5B 写, 4 字节对齐)</td></tr>
-<tr><td><code class="rg">0x10</code></td><td><code class="rg">CNT</code></td><td><span class="rw rw">RW</span></td><td>DMA 传输长度</td></tr>
+<tr><td><code class="rg">0x0C</code></td><td><code class="rg">ADR</code></td><td><span class="rw rw">RW</span></td><td>DMA 缓冲（≥5B，4 字节对齐）</td></tr>
+<tr><td><code class="rg">0x10</code></td><td><code class="rg">CNT</code></td><td><span class="rw rw">RW</span></td><td>DMA 长度</td></tr>
 </tbody></table></div>
-<pre><code>/* emi_platform_data(board.c) */
-static const struct emi_platform_data emi_data = {
-    .bits_mode = EMI_8BITS_MODE,      /* 8 位并口 */
-    .baudrate  = EMI_BAUD_DIV8,       /* clock = HSB/(baud+1) */
-    .colection = EMI_FALLING_COLT,    /* 下降沿采样 */
-    .tw        = EMI_BAUD_DIV6,       /* 写脉冲宽(慢屏加大) */
-    .th        = EMI_TWIDTH_NO_HALF,  .time_out = 1000,
-};
-dev_ioctl(hdl, EMI_USE_SEND_SEM, 0);  /* 异步信号量模式 */</code></pre>
-<div class="warn">【实测】写屏缓冲务必 aligned(4)(u16 fb[] 静态数组可能 2 对齐); 屏驱动注册表 list_for_each_lcd_driver 取<b>第一个</b>注册项, 多面板驱动同编时按链接顺序误选——只编一个面板驱动。</div>
-
-</section>
-<section class="card" id="lcd">
-<h2 id="lcd">LCD 框架与应用层</h2>
-<ul><li>lcd_drive.c: REGISTER_LCD_INTERFACE + 面板 REGISTER_LCD_DEV(.lcd 段)</li><li>面板驱动原语: WriteCOM/WriteDAT_8/WriteDAT_DMA(lcd_send_map→dev_write(emi))</li><li>背光在 lcd_pdata.bl_pin(GPIO 或 PWM); 复位 rst_pin; 撕裂同步 te_pin</li><li>【实测】原厂 ili9481_init 第一行即开背光(背光=驱动被选中+EMI open 成功的判据)</li><li>LVGL/AWTK/摄像头合成走 te_driver 框架(TE 中步同步), 未移植时用 te_stub 桩</li></ul>
-
-</section>
-<section class="card" id="pap">
-<h2 id="pap">PAP 并口寄存器</h2>
+<div class="note">EMI CON 寄存器位域未在 SDK 头文件公开，请以驱动 API / ioctl 为准。</div>
 <div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
-<tr><td><code class="rg">0x00</code></td><td><code class="rg">CON</code></td><td><span class="rw rw">RW</span></td><td>并口时序/使能</td></tr>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">CON</code></td><td><span class="rw rw">RW</span></td><td>时序/使能</td></tr>
 <tr><td><code class="rg">0x04</code></td><td><code class="rg">DAT0</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
 <tr><td><code class="rg">0x08</code></td><td><code class="rg">DAT1</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
 <tr><td><code class="rg">0x0C</code></td><td><code class="rg">BUF</code></td><td><span class="rw rw">RW</span></td><td>数据</td></tr>
 <tr><td><code class="rg">0x10</code></td><td><code class="rg">ADR</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
 <tr><td><code class="rg">0x14</code></td><td><code class="rg">CNT</code></td><td><span class="rw wo">WO</span></td><td></td></tr>
 </tbody></table></div>
-<div class="note">IMD(RGB 屏)寄存器在 asm/WL82_imd.h 单独定义(带 IPPI/层混合), 配 RX801T 类 RGB 屏使用; LCDC(0x51000 区)管 LCD 复用引脚方向。</div>
 
 </section>
-<div class="note">依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测整理(标注【实测】)。</div>
+<section class="card" id="emi">
+<h2 id="emi">EMI 写屏语义【实测】</h2>
+<pre><code>static const struct emi_platform_data emi_data = {
+    .bits_mode = EMI_8BITS_MODE, .baudrate = EMI_BAUD_DIV8,
+    .colection = EMI_FALLING_COLT, .tw = EMI_BAUD_DIV6,
+    .th = EMI_TWIDTH_NO_HALF, .time_out = 1000,
+};
+dev_ioctl(hdl, EMI_USE_SEND_SEM, 0);  /* 异步推荐 */</code></pre>
+<ul><li>≥5B DMA 写须 4 字节对齐，否则 -22 且不发</li><li>&lt;5B 短写进内部 emi_buf，无对齐要求</li><li>DMA <b>可读 SDRAM</b>（对比 USB 仅 RAM0）</li><li>面板 <code>REGISTER_LCD_DEV</code>：框架取<strong>第一个</strong>注册项</li></ul>
+
+</section>
+<section class="card" id="ui-plat">
+<h2 id="ui-plat">官方 UI 平台（ui_platform.c）</h2>
+<p>路径：<code>apps/common/ui/ui_driver/interface/ui_platform.c</code>（<code>CONFIG_UI_ENABLE</code>）。向 <code>ui_core_init</code> 注册 <code>br23_platform_api</code>：</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>API</th><th>作用</th></tr></thead><tbody>
+<tr><td>load_style / load_window</td><td>加载 .sty 窗口与控件树</td></tr>
+<tr><td>open/get/put/close_draw_context</td><td>申请/提交绘图上下文（FB 脏区）</td></tr>
+<tr><td>fill_rect / draw_rect / draw_image / show_text</td><td>填充、边框、图片(含 RLE+α)、文字</td></tr>
+<tr><td>read/draw_point / invert_rect</td><td>点读写与反色</td></tr>
+<tr><td>open_device / close_device</td><td>打开底层 lcd_interface</td></tr>
+</tbody></table></div>
+<ul><li>资源：menu.res / str.res / ascii.res（及表盘 JL.sty 等）</li><li>支持控件旋转 90°/270°（sty 头 rotate → ui_core_set_rotate + mirror）</li><li>图片：可选 alpha 通道 + RLE 解码后 α 混合（get_mixed_pixel）</li><li>输出格式：OSD16(RGB565) 或 MONO</li></ul>
+
+</section>
+<section class="card" id="pi32">
+<h2 id="pi32">ui_platform 中的 CPU/DSP 加速</h2>
+<p>文件开头定义了 <code>pi32v2_fill_q15/q31</code>、<code>pi32v2_copy_q7/q31</code>，用 pi32v2 <b>硬件循环 REP</b> 做成块填色/拷贝（DSP 风格内联汇编），在 <code>br23_fill_rect</code> 热路径调用。</p>
+<pre><code>#define USE_PI32V2_MATH  0      /* 默认关！改为 1 才走 DSP 路径 */
+#define PI32V2_MATH_DSP
+/* fill: pack 两个 RGB565 → 一次写 32bit；REP 循环 [%1++=4]=r8 */
+/* copy: REP 循环 load/store 字拷贝行缓冲 */
+#if USE_PI32V2_MATH
+    pi32v2_fill_q31(color32, p32, count);
+    pi32v2_copy_q31(_p32, __p32, width/2);  /* 后续行复制首行 */
+#else
+    while (count--) *p32++ = color32;       /* 纯 C */
+    memcpy(...);
+#endif</code></pre>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>点</th><th>说明</th></tr></thead><tbody>
+<tr><td>加速本质</td><td>不是独立 GPU，而是 <b>CPU0/1 的 pi32v2 SIMD/REP 指令</b>加速 FB 内存填充与行复制</td></tr>
+<tr><td>默认状态</td><td><code>USE_PI32V2_MATH=0</code> → 量产默认走 C/memcpy；打开后对齐要求更严（指针 4 字节对齐、width 偶数）</td></tr>
+<tr><td>适用操作</td><td>大面积 fill_rect、同色行复制；draw_image/α 混合仍多为标量循环</td></tr>
+<tr><td>与 EMI DMA 关系</td><td>CPU 加速的是<strong>合成进 FB</strong>；刷屏另走 EMI DMA（可并行：双缓冲/信号量）</td></tr>
+<tr><td>LVGL 侧</td><td>官方 <code>lv_port_disp.c</code> 中 <code>gpu_fill</code> 被注释掉，<b>未</b>把 pi32v2_fill 接到 LVGL；LVGL 绘制仍为软件光栅</td></tr>
+</tbody></table></div>
+<div class="note">若要给 LVGL 加速填充，需自行实现 <code>gpu_fill_cb</code> 调 pi32v2_*，并保证色格式/对齐与 RGB565 FB 一致；刷屏仍建议双 buffer + EMI DMA。</div>
+
+</section>
+<section class="card" id="lvgl">
+<h2 id="lvgl">LVGL 深度绑定（官方补丁）</h2>
+<p>原厂路径：<code>apps/common/example/third_party/lvgl/LVGL补丁/</code>；fw-mini-sdk：<code>third/lvgl</code> + <code>third/lvgl_port</code>（同款对接思路）。</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>层级</th><th>文件/符号</th><th>绑定点</th></tr></thead><tbody>
+<tr><td>任务</td><td>lvgl_main_task / late_initcall</td><td>lv_init → tick(1ms) → port_disp/indev → demo → lv_task_handler 循环</td></tr>
+<tr><td>显示</td><td>lv_port_disp.c</td><td>双缓冲各 LCD_W×10 行；flush_cb → <code>lcd_lvgl_full(xs,xe,ys,ye,buf)</code></td></tr>
+<tr><td>屏驱</td><td>lcd_drive / user_lcd_init</td><td>与 sty UI 共用面板驱动与 EMI；只初始化屏时可单独调 user_lcd_init</td></tr>
+<tr><td>TE</td><td>lcd_te_driver</td><td>撕裂同步；摄像头合成等同框架；无 TE 时用 stub</td></tr>
+<tr><td>输入</td><td>lv_port_indev.c</td><td>触摸 FT6236/GT911/CST816 等板级实现</td></tr>
+<tr><td>FS</td><td>lv_port_fs.c</td><td>对接杰理 FS（可选）</td></tr>
+<tr><td>配置</td><td>lv_conf.h + 板级 LCD_W/H</td><td>与 isd/屏驱动分辨率必须一致</td></tr>
+</tbody></table></div>
+<pre><code>/* 官方 lv_main.c 骨架 */
+lv_init();
+sys_timer_add(NULL, lv_tick_inc_1ms, 1);
+lv_port_disp_init();   /* → user_lcd_init + 双缓冲 */
+lv_port_indev_init();
+lv_demo_widgets();     /* 或 benchmark/music */
+while (1) { lv_task_handler(); }
+
+/* flush → 硬件 */
+lcd_lvgl_full(area-&gt;x1, area-&gt;x2, area-&gt;y1, area-&gt;y2, (u16 *)color_p);
+lv_disp_flush_ready(disp_drv);</code></pre>
+<ul><li>深度绑定含义：LVGL <b>不</b>另起一套总线驱动，flush 直接进原厂 <code>lcd_lvgl_full</code>→EMI；屏参/背光/复位与 sty 工程共用</li><li>官方示例默认双 partial buffer（10 行×2），注释写明应用 DMA 与绘制并行——对应 EMI_USE_SEND_SEM 异步路径</li><li>【实测 fw-mini-sdk】JD9853 + EMI8 + CST816；OTA 前须挂起 LVGL/EMI，否则与 Flash/WiFi 抢总线易 misalign</li><li>任务优先级示例 11（低于 audio_decoder=30，高于部分网络）；重 UI 时可 #C1lvgl 与 BT#C0 错开</li></ul>
+
+</section>
+<section class="card" id="note">
+<h2 id="note">选型与约束</h2>
+<ul><li>MCU 屏 → EMI；RGB 屏 → IMD(+IMR)；视频 OSD → IMC；贴图 → IMB</li><li>sty UI 适合表盘/资源包产品；LVGL 适合自定义控件与开源生态</li><li>两者勿同时高频刷同一 EMI，除非分时/挂起一方</li><li>写屏缓冲 aligned(4)；多面板驱动勿同编</li></ul>
+
+</section>
+<div class="note">依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测（标注【实测】）。</div>
 
       <div class="footer">
         <a href="sfc-sec.html">← Flash 与加密</a>
@@ -79,7 +179,7 @@ dev_ioctl(hdl, EMI_USE_SEND_SEM, 0);  /* 异步信号量模式 */</code></pre>
         <a href="camera.html">摄像头与编解码 →</a>
       </div>
     </main>
-    <aside class="toc"><div class="t">本页目录</div><a href="#emi">EMI 8080 接口【实测逆向】</a><a href="#lcd">LCD 框架与应用层</a><a href="#pap">PAP 并口寄存器</a></aside>
+    <aside class="toc"><div class="t">本页目录</div><a href="#arch">显示架构</a><a href="#inst">总线与加速硬件</a><a href="#regs">EMI / PAP 寄存器</a><a href="#emi">EMI 写屏语义【实测】</a><a href="#ui-plat">官方 UI 平台（ui_platform.c）</a><a href="#pi32">ui_platform 中的 CPU/DSP 加速</a><a href="#lvgl">LVGL 深度绑定（官方补丁）</a><a href="#note">选型与约束</a></aside>
   </div>
 </div>
 </body>

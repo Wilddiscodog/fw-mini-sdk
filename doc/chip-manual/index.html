@@ -12,8 +12,36 @@
     <span class="logo">AC7912BB<em>·WL82</em></span>
     <span class="sub">芯片参考手册</span>
   </a>
-  <div class="navlinks"><a href="index.html" class=active>芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+  <div class="navlinks"><a class="nav-a active" href="index.html">芯片总览</a><a class="nav-a" href="cpu-mem.html">CPU 与存储</a><a class="nav-a" href="cache-mmu.html">Cache / MMU</a><a class="nav-a" href="clock.html">时钟系统</a><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">基础外设<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">多媒体<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">系统<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div><button type="button" class="nav-more-btn" aria-label="全部章节">☰</button><div class="nav-all-panel"><div class="nav-all-g">核心</div><a href="index.html" class=active>芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="cache-mmu.html">Cache / MMU</a><a href="clock.html">时钟系统</a><div class="nav-all-g">基础外设</div><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><div class="nav-all-g">多媒体</div><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><div class="nav-all-g">系统</div><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div>
 </div></nav>
+<script>
+(function(){
+  document.querySelectorAll('.nav-drop-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var drop = btn.parentElement;
+      var open = drop.classList.contains('open');
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      document.querySelector('.nav-all-panel') && document.querySelector('.nav-all-panel').classList.remove('open');
+      if (!open) drop.classList.add('open');
+      btn.setAttribute('aria-expanded', (!open).toString());
+    });
+  });
+  var more = document.querySelector('.nav-more-btn');
+  var panel = document.querySelector('.nav-all-panel');
+  if (more && panel) {
+    more.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      panel.classList.toggle('open');
+    });
+  }
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+    if (panel) panel.classList.remove('open');
+  });
+})();
+</script>
 
 <div class="wrap">
   <header class="hero">
@@ -41,8 +69,9 @@
 <tr><td><code>11800</code></td><td>USB (FUSB 1.1)</td><td>LSB</td><td>全速设备/主机</td></tr>
 <tr><td><code>11900</code></td><td>ANA 模拟前端</td><td>LSB</td><td>54 个模拟寄存器</td></tr>
 <tr><td><code>11C00~11F00</code></td><td>SPI0~3</td><td>LSB</td><td>4 路 SPI</td></tr>
-<tr><td><code>12000~12400</code></td><td>UART0~2 / IIC</td><td>LSB</td><td>3 串口 + 硬件 I²C</td></tr>
-<tr><td><code>12800</code></td><td>USB1 (HUSB 2.0)</td><td>LSB</td><td>高速双角色【实测】</td></tr>
+<tr><td><code>12000~12200</code></td><td>UART0~2</td><td>LSB</td><td>3 串口</td></tr>
+<tr><td><code>12400</code></td><td>IIC</td><td>LSB</td><td>硬件 I²C</td></tr>
+<tr><td><code>12700</code></td><td>USB1 (HUSB 2.0)</td><td>LSB</td><td>高速双角色【实测】</td></tr>
 <tr><td><code>12A00/12B00</code></td><td>PAP / SS</td><td>LSB</td><td>并口打印 / 保密接口</td></tr>
 <tr><td><code>12E00~12F00</code></td><td>ALNK0/1 / AUDIO</td><td>LSB</td><td>音频链路</td></tr>
 <tr><td><code>13000~13200</code></td><td>ENC / ADC / IRFLT</td><td>LSB</td><td>编码器 / LADC / 红外</td></tr>
@@ -65,10 +94,10 @@
 </section>
 <section class="card" id="dirs">
 <h2 id="dirs">手册章节</h2>
-<div class="grid g3"><a href="uart.html" class="pcard"><div class="ic">📡</div><div class="nm">UART ×3</div><div class="ds">三串口, 环形 DMA</div></a><a href="spi.html" class="pcard"><div class="ic">🔗</div><div class="nm">SPI ×4 / IIC</div><div class="ds">四路 SPI + 硬件 I²C</div></a><a href="timer.html" class="pcard"><div class="ic">⏲</div><div class="nm">TIMER ×6</div><div class="ds">定时器与计数器</div></a><a href="audio.html" class="pcard"><div class="ic">🎵</div><div class="nm">音频</div><div class="ds">DAC/LADC/ALNK/PLNK/EQ/ANC/AEC</div></a><a href="usb.html" class="pcard"><div class="ic">🔌</div><div class="nm">USB 双控</div><div class="ds">FUSB1.1 + HUSB2.0 完整细节</div></a><a href="display.html" class="pcard"><div class="ic">🖥</div><div class="nm">显示</div><div class="ds">EMI 8080 / IMD RGB / PAP</div></a></div>
+<div class="grid g3"><a href="cache-mmu.html" class="pcard"><div class="ic">🗄</div><div class="nm">Cache / MMU</div><div class="ds">I$/D$、TLB、EMU/异常对照</div></a><a href="uart.html" class="pcard"><div class="ic">📡</div><div class="nm">UART ×3</div><div class="ds">三串口, 环形 DMA</div></a><a href="spi.html" class="pcard"><div class="ic">🔗</div><div class="nm">SPI ×4 / IIC</div><div class="ds">四路 SPI + 硬件 I²C</div></a><a href="timer.html" class="pcard"><div class="ic">⏲</div><div class="nm">TIMER ×6</div><div class="ds">定时器与计数器</div></a><a href="audio.html" class="pcard"><div class="ic">🎵</div><div class="nm">音频</div><div class="ds">DAC/LADC/ALNK/PLNK/EQ/ANC/AEC</div></a><a href="usb.html" class="pcard"><div class="ic">🔌</div><div class="nm">USB 双控</div><div class="ds">FUSB1.1 + HUSB2.0 完整细节</div></a><a href="display.html" class="pcard"><div class="ic">🖥</div><div class="nm">显示</div><div class="ds">EMI 8080 / IMD RGB / PAP</div></a></div>
 
 </section>
-<div class="note">本章内容依据官方 SDK <code>include_lib/driver/cpu/wl82/asm/WL82.h</code>、<code>cpu/wl82/sdk_ld*.c</code> 与 <code>cpu/wl82/tools/isd_config_rule.c</code> 整理; 标注【实测】的条目来自 fw-mini-sdk 移植验证。</div>
+<div class="note">本章内容依据官方 SDK <code>include_lib/driver/cpu/wl82/asm/WL82.h</code>、<code>csfr.h</code>、<code>cpu/wl82/sdk_ld*.c</code> 与 <code>cpu/wl82/tools/isd_config_rule.c</code> 整理; 标注【实测】的条目来自 fw-mini-sdk 移植验证。</div>
 
       <div class="footer">
         <span></span>

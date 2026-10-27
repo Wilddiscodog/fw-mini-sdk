@@ -21,10 +21,6 @@
 #include "fw_version.h"
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 #include "lcd_drive.h"
-#if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
-#include "lvgl.h"
-void lv_port_disp_init(void);
-#endif
 #endif
 
 /* CherryUSB 组合设备 2×CDC + MSC(RAM 盘) (高速口 USB1) */
@@ -279,53 +275,35 @@ static void hw_timer_task(void *p)
     while (1) { os_time_dly(10000); }   /* FreeRTOS 任务不允许返回 */
 }
 
-/*============================ LCD：EMI 8080 并口点屏自检 (+LVGL) ============== */
+/*============================ LCD：EMI 8080 并口 ============================ */
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 static void lcd_test_task(void *p)
 {
-    /* 延迟到 USB 枚举完成之后才点亮/刷屏: V0.9.6 实测开机即高频刷 EMI 会
-     * 干扰 USB 枚举(待隔离确认)。此延时也是 emi/panel 初始化与 USB 启动的
-     * 时序解耦点。 */
+    /* 延迟点屏, 避免开机 EMI 刷屏干扰 USB 枚举; 暂不跑 LVGL benchmark */
     os_time_dly(800);
-    user_lcd_init();   /* dev_open("emi") + 屏初始化 + 背光 */
+    user_lcd_init();
 
     struct lcd_interface *lcd = lcd_get_hdl();
-    if (lcd == NULL) {
-        printf("[lcd] no panel driver matched\n");
+    if (lcd == NULL || lcd->draw_lvgl == NULL) {
+        printf("[lcd] no panel driver matched, park lcd_test\n");
         while (1) { os_time_dly(10000); }
     }
-
-#if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
-    printf("[lcd] start LVGL
-");
-    lv_init();
-    lv_port_disp_init();
-    while (1) {
-        lv_tick_inc(5);
-        lv_timer_handler();
-        os_time_dly(1);
-    }
-#else
-    /* 无 LVGL: 彩条自检(RGB565) */
-    u16 w = 240, h = 320;
-    /* aligned(4) 必须的: 闭源 emi_write 对 ≥5 字节 DMA 写检查缓冲运行时地址,
-     * 非 4 对齐直接返回 -22 且一个字节都不发(反汇编原厂参考工程 sdk.elf 实锤) */
-    static u16 fb[240 * 40] __attribute__((aligned(4)));   /* 40 行条带 */
-    u16 colors[8] = {0xF800, 0x07E0, 0x001F, 0xFFE0, 0xF81F, 0x07FF, 0xFFFF, 0x0000};
-    while (1) {
-        for (u8 band = 0; band < 8; band++) {
-            for (u32 i = 0; i < w * 40; i++) {
-                fb[i] = colors[band];
-            }
-            for (u16 y = 0; y < h; y += 40) {
-                /* draw_lvgl = JD9853_lvgl_Fill: SetRange+RAMWR+DMA 真实写屏。
-                 * (lcd->draw 走 ui_send_data_ready —— te_stub 里是空函数, 画不上) */
-                lcd->draw_lvgl(0, w - 1, y, y + 39, (char *)fb);
-            }
-            os_time_dly(200);            /* 2s 换色: 降低 EMI 总线占用 */
+    {
+        struct lcd_info li;
+        memset(&li, 0, sizeof(li));
+        if (lcd->get_screen_info) {
+            lcd->get_screen_info(&li);
+        }
+        if (li.width == 0 || li.height == 0) {
+            printf("[lcd] panel not ready (lcd_dev missing), park lcd_test\n");
+            while (1) { os_time_dly(10000); }
         }
     }
-#endif
+
+    printf("[lcd] panel ready, park (benchmark/CoreMark key triggers off)\n");
+    while (1) {
+        os_time_dly(10000);
+    }
 }
 #endif
 
@@ -389,24 +367,18 @@ void app_main()
     // os_task_create(adc_task,         NULL,  8, 512,  0, "adc_task");
     os_task_create(hw_timer_task,    NULL,  8, 512,  0, "hw_timer");
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
-    os_task_create(lcd_test_task,    NULL,  8, 2048, 0, "lcd_test");
+    os_task_create(lcd_test_task,    NULL, 22, 2048, 0, "lcd_test");
 #endif
     /* USB 设备模式: MSC 4MB RAM 盘(含虚拟U盘自动升级看门, 见 cdc_acm_msc_app.c) */
-    // os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
-    /* WiFi 由 ADC 按键2 触发启动(bt_wifi_app.c key handler → wifi_start());
-     * 启动后流程不变: 读存储→STA 重试→失败转 AP, 网页后台(配网/上传升级固件) */
-    /* 心跳: 1s 一拍, 判定系统在 BT 启动试验后是否存活 */
+    os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
     os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
-    /* ADC 按键框架开机独立初始化(PB01 电阻梯; 与 BT 启动解耦——
-     * 之前埋在 bt_wifi_start 里形成循环依赖, 按键永远没机会触发) */
+    /* 按键框架先就绪; BT/WiFi 延后自启(避开 USB 枚举窗, 见 bt_wifi_start_deferred) */
     extern void key_early_init(void);
+    extern void bt_wifi_start_deferred(void);
     key_early_init();
+    bt_wifi_start_deferred();
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
-    /* 内置音频回环自检(MIC→DAC, 见 app/audio_demo.c) */
     extern void audio_demo_start(void);
     audio_demo_start();
 #endif
-    // /* 外设演示(PWM/RTC/SD/加密, Makefile MINI_XXX_SUPPORT 开关, 默认全关) */
-    // extern void periph_demo_start(void);
-    // periph_demo_start();
 }

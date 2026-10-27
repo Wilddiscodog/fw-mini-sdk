@@ -12,22 +12,54 @@
     <span class="logo">AC7912BB<em>·WL82</em></span>
     <span class="sub">芯片参考手册</span>
   </a>
-  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html" class=active>MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+  <div class="navlinks"><a class="nav-a" href="index.html">芯片总览</a><a class="nav-a" href="cpu-mem.html">CPU 与存储</a><a class="nav-a" href="cache-mmu.html">Cache / MMU</a><a class="nav-a" href="clock.html">时钟系统</a><div class="nav-drop open-active"><button type="button" class="nav-drop-btn" aria-expanded="false">基础外设<span class="nav-drop-cur">MCPWM</span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html" class=active>MCPWM</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">多媒体<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">系统<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div><button type="button" class="nav-more-btn" aria-label="全部章节">☰</button><div class="nav-all-panel"><div class="nav-all-g">核心</div><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="cache-mmu.html">Cache / MMU</a><a href="clock.html">时钟系统</a><div class="nav-all-g">基础外设</div><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html" class=active>MCPWM</a><div class="nav-all-g">多媒体</div><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><div class="nav-all-g">系统</div><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div>
 </div></nav>
+<script>
+(function(){
+  document.querySelectorAll('.nav-drop-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var drop = btn.parentElement;
+      var open = drop.classList.contains('open');
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      document.querySelector('.nav-all-panel') && document.querySelector('.nav-all-panel').classList.remove('open');
+      if (!open) drop.classList.add('open');
+      btn.setAttribute('aria-expanded', (!open).toString());
+    });
+  });
+  var more = document.querySelector('.nav-more-btn');
+  var panel = document.querySelector('.nav-all-panel');
+  if (more && panel) {
+    more.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      panel.classList.toggle('open');
+    });
+  }
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+    if (panel) panel.classList.remove('open');
+  });
+})();
+</script>
 
 <div class="wrap">
   <header class="hero">
     <div class="crumb">MCPWM</div>
     <h1>PWM 控制器</h1>
-    <p>8 通道互补输出、死区、两位小数占空比</p>
+    <p>全寄存器表 + 通道掩码 + ioctl</p>
   </header>
 
   <div class="layout">
     <main class="main">
+<section class="card" id="inst">
+<h2 id="inst">实例</h2>
 <p>基址: <code class="rg">0x15000</code>(段基址 + (64×grp + adr)×4, 见 WL82.h)</p>
-<p>多通道 PWM 控制器(0x15000 区, 58 寄存器): 8 输出通道(PWMCH0-7_H/L 互补对)、多个 32bit 时基(timer con/cnt/prd)、死区/换向。驱动头 <code>asm/pwm.h</code>。</p>
+<p>多通道 PWM（约 58 寄存器）：8 路 PWMCH_H/L 互补、多时基、死区。驱动 <code>asm/pwm.h</code>；IRQ MCTMRX=33 / CHX_PWM=34。</p>
+
+</section>
 <section class="card" id="regs">
-<h2 id="regs">MCPWM 寄存器(前 20 项, 全表自动提取)</h2>
+<h2 id="regs">寄存器总表</h2>
 <div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
 <tr><td><code class="rg">0x00</code></td><td><code class="rg">TMR0_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
 <tr><td><code class="rg">0x04</code></td><td><code class="rg">TMR0_CNT</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
@@ -49,23 +81,66 @@
 <tr><td><code class="rg">0x44</code></td><td><code class="rg">TMR5_PR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
 <tr><td><code class="rg">0x48</code></td><td><code class="rg">TMR6_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
 <tr><td><code class="rg">0x4C</code></td><td><code class="rg">TMR6_CNT</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x50</code></td><td><code class="rg">TMR6_PR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x54</code></td><td><code class="rg">TMR7_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x58</code></td><td><code class="rg">TMR7_CNT</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x5C</code></td><td><code class="rg">TMR7_PR</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x60</code></td><td><code class="rg">FPIN_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x64</code></td><td><code class="rg">CH0_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x68</code></td><td><code class="rg">CH0_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x6C</code></td><td><code class="rg">CH0_CMPH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x70</code></td><td><code class="rg">CH0_CMPL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x74</code></td><td><code class="rg">CH1_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x78</code></td><td><code class="rg">CH1_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x7C</code></td><td><code class="rg">CH1_CMPH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x80</code></td><td><code class="rg">CH1_CMPL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x84</code></td><td><code class="rg">CH2_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x88</code></td><td><code class="rg">CH2_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x8C</code></td><td><code class="rg">CH2_CMPH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x90</code></td><td><code class="rg">CH2_CMPL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x94</code></td><td><code class="rg">CH3_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x98</code></td><td><code class="rg">CH3_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x9C</code></td><td><code class="rg">CH3_CMPH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xA0</code></td><td><code class="rg">CH3_CMPL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xA4</code></td><td><code class="rg">CH4_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xA8</code></td><td><code class="rg">CH4_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xAC</code></td><td><code class="rg">CH4_CMPH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xB0</code></td><td><code class="rg">CH4_CMPL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xB4</code></td><td><code class="rg">CH5_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xB8</code></td><td><code class="rg">CH5_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xBC</code></td><td><code class="rg">CH5_CMPH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xC0</code></td><td><code class="rg">CH5_CMPL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xC4</code></td><td><code class="rg">CH6_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xC8</code></td><td><code class="rg">CH6_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xCC</code></td><td><code class="rg">CH6_CMPH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xD0</code></td><td><code class="rg">CH6_CMPL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xD4</code></td><td><code class="rg">CH7_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xD8</code></td><td><code class="rg">CH7_CON1</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xDC</code></td><td><code class="rg">CH7_CMPH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xE0</code></td><td><code class="rg">CH7_CMPL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0xE4</code></td><td><code class="rg">MCPWM_CON0</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
 </tbody></table></div>
-<p>…共 58 项(时基×N + 通道 CON0/CON1/CMPH/CMPL×8)。位域未在 SDK 公开, 全部经 pwm 驱动 API 操作。</p>
+<h3>pwm.h 通道掩码（API 层）</h3>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>位域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="bits-chip">0-7</span></td><td><code class='rg'>PWMCH0_H..7_H</code></td><td>高侧通道掩码（pwm.h）</td></tr>
+<tr><td><span class="bits-chip">10-17</span></td><td><code class='rg'>PWMCH0_L..7_L</code></td><td>低侧通道掩码（偏移 PWM_CHL_OFFSET=10）</td></tr>
+<tr><td><span class="bits-chip">20-21</span></td><td><code class='rg'>PWM_TIMER2/3_OPCH</code></td><td>TIMER2/3 PWM 输出通道</td></tr>
+</tbody></table></div>
+<div class="note">MCPWM 硬件 CON 寄存器位域未在 SDK 头文件公开，请以驱动 API / ioctl 为准。</div>
 
 </section>
-<section class="card" id="api">
-<h2 id="api">pwm 驱动(pwm.h)</h2>
+<section class="card" id="init">
+<h2 id="init">初始化</h2>
 <pre><code>struct pwm_platform_data d = {
-    .pwm_ch  = PWM_TIMER2_OPCH2, .freq = 1000,
-    .duty    = 50.0f,            /* 支持 0.00~100.00 两位小数(point_bit) */
-    .port    = IO_PORTC_05,      /* 经 IOMAP 输出通道映射到 IO */
-    .deathtime = 0,              /* 死区 0-31 个系统周期 */
+    .pwm_ch = PWM_TIMER2_OPCH2, .freq = 1000,
+    .duty = 50.0f, .port = IO_PORTC_05,
+    .deathtime = 0,   /* 0~31 系统周期 */
 };
-/* ioctl: PWM_RUN/STOP/PWM_SET_FREQ/PWM_SET_DUTY/PWM_SET_DEATH_TIME... */</code></pre>
-<div class="note">【实测】xiaolu-R2 背光 PA6 网络名 LED_PWM: 可由 MCPWM/Timer-PWM 通道经 IOMAP 输出实现调光, GPIO 直推仅开关。</div>
+/* ioctl: PWM_RUN/STOP / PWM_SET_FREQ / PWM_SET_DUTY / PWM_SET_DEATH_TIME */</code></pre>
+<div class="note">【实测】背光可用 MCPWM/Timer-PWM 经 IOMAP；GPIO 直推仅开关。</div>
 
 </section>
-<div class="note">依据官方 SDK <code>asm/uart.h·uart_dev.h·spi.h·iic.h·pwm.h</code> 与 <code>WL82.h</code> 整理。</div>
+<div class="note">依据官方 SDK <code>asm/uart.h·uart_dev.h·spi.h·iic.h·pwm.h</code> 与 <code>WL82.h</code>；位域仅收录头文件/【实测】明确项。</div>
 
       <div class="footer">
         <a href="timer.html">← 定时器</a>
@@ -73,7 +148,7 @@
         <a href="adc.html">ADC 采集 →</a>
       </div>
     </main>
-    <aside class="toc"><div class="t">本页目录</div><a href="#regs">MCPWM 寄存器(前 20 项, 全表自动提取)</a><a href="#api">pwm 驱动(pwm.h)</a></aside>
+    <aside class="toc"><div class="t">本页目录</div><a href="#inst">实例</a><a href="#regs">寄存器总表</a><a href="#init">初始化</a></aside>
   </div>
 </div>
 </body>

@@ -48,6 +48,16 @@
 #endif
 #endif
 
+#if TCFG_LCD_JD9853_ENABLE
+#if HORIZONTAL_SCREEN
+#define LCD_W     320
+#define LCD_H     240
+#else
+#define LCD_W     240
+#define LCD_H     320
+#endif
+#endif
+
 #if TCFG_LCD_ILI9488_ENABLE
 #if HORIZONTAL_SCREEN
 #define LCD_W     480

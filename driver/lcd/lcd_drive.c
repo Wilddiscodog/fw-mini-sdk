@@ -156,16 +156,20 @@ static int lcd_init(void *p)
 
         }
         if (!find_lcd) {
-            printf("err no lcd_dev\n");
+            printf("err no lcd_dev (check TCFG_LCD_*_ENABLE vs compiled panel)\n");
+            lcd_dev = NULL;
             return -1;
         }
         if (lcd_interface_init() != 0) {
             printf("err unknow lcd port \n\n\n");
+            lcd_dev = NULL;
             return -1;
         }
         if (lcd_dev && lcd_dev->LCD_Init) {
             return lcd_dev->LCD_Init();
         }
+        lcd_dev = NULL;
+        return -1;
     }
     return 0;
 }
@@ -174,7 +178,9 @@ void user_lcd_init(void)
 {
     if (!lcd_hdl) {
         extern const struct ui_devices_cfg ui_cfg_data;
-        lcd_init(&ui_cfg_data);//ui_cfg_data参数可以在版籍配置
+        if (lcd_init(&ui_cfg_data) != 0) {
+            printf("[lcd] user_lcd_init failed\n");
+        }
     }
 }
 
@@ -345,6 +351,9 @@ void lcd_show_frame(u8 *buf, u32 len)//该接口主要用于用户显示数据 /
 
 void lcd_lvgl_full(u16 xs, u16 xe, u16 ys, u16 ye, char *img)
 {
+    if (!lcd_dev || !lcd_dev->LCD_Lvgl_Full) {
+        return;
+    }
     lcd_dev->LCD_Lvgl_Full(xs, xe, ys, ye, img);
 }
 

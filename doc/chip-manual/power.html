@@ -12,41 +12,81 @@
     <span class="logo">AC7912BB<em>·WL82</em></span>
     <span class="sub">芯片参考手册</span>
   </a>
-  <div class="navlinks"><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="clock.html">时钟系统</a><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="sfc-sec.html">Flash 与加密</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><a href="power.html" class=active>电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div>
+  <div class="navlinks"><a class="nav-a" href="index.html">芯片总览</a><a class="nav-a" href="cpu-mem.html">CPU 与存储</a><a class="nav-a" href="cache-mmu.html">Cache / MMU</a><a class="nav-a" href="clock.html">时钟系统</a><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">基础外设<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">多媒体<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a></div></div><div class="nav-drop open-active"><button type="button" class="nav-drop-btn" aria-expanded="false">系统<span class="nav-drop-cur">电源管理</span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="sfc-sec.html">Flash 与加密</a><a href="power.html" class=active>电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div><button type="button" class="nav-more-btn" aria-label="全部章节">☰</button><div class="nav-all-panel"><div class="nav-all-g">核心</div><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="cache-mmu.html">Cache / MMU</a><a href="clock.html">时钟系统</a><div class="nav-all-g">基础外设</div><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><div class="nav-all-g">多媒体</div><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><div class="nav-all-g">系统</div><a href="sfc-sec.html">Flash 与加密</a><a href="power.html" class=active>电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div>
 </div></nav>
+<script>
+(function(){
+  document.querySelectorAll('.nav-drop-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var drop = btn.parentElement;
+      var open = drop.classList.contains('open');
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      document.querySelector('.nav-all-panel') && document.querySelector('.nav-all-panel').classList.remove('open');
+      if (!open) drop.classList.add('open');
+      btn.setAttribute('aria-expanded', (!open).toString());
+    });
+  });
+  var more = document.querySelector('.nav-more-btn');
+  var panel = document.querySelector('.nav-all-panel');
+  if (more && panel) {
+    more.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      panel.classList.toggle('open');
+    });
+  }
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+    if (panel) panel.classList.remove('open');
+  });
+})();
+</script>
 
 <div class="wrap">
   <header class="hero">
     <div class="crumb">Power</div>
     <h1>电源管理</h1>
-    <p>电源域、P33 软关机、充电、RTC(LRCT)、看门狗</p>
+    <p>域、P33、WDT、充电</p>
   </header>
 
   <div class="layout">
     <main class="main">
-<p>电源域: CORE(DVDD 1.2V 档)/IO(VDDIO 档)/DCDC14/模拟域, 档位由 isd_config 烧录(VDDIO=4→3.2V 等); P33 常供电域支持软关机与唤醒。</p>
-<section class="card" id="p33">
-<h2 id="p33">P33 与软关机</h2>
-<pre><code>/* asm/power_interface.h【实测: net_update 复位路径】 */
-if (get_power_keep_state() &amp; POWER_KEEP_RTC)
-    power_set_soft_poweroff(10);   /* 软关机 10ms 后上电唤醒(RTC 保时场景) */
+<section class="card" id="inst">
+<h2 id="inst">电源域</h2>
+<p>CORE DVDD / IO VDDIO / DCDC14 / 模拟域；档位 isd_config 烧录。P33 常电域：软关机与唤醒。相关：JL_POWER / JL_P33 / LRCT。</p>
+<p>基址: <code class="rg">0x10000</code>(段基址 + (64×grp + adr)×4, 见 WL82.h)</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">CON</code></td><td><span class="rw rw">RW</span></td><td>电源控制（位域未公开，经 power_* API）</td></tr>
+</tbody></table></div>
+
+</section>
+<section class="card" id="regs">
+<h2 id="regs">P33 / 关键</h2>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">PMU_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x04</code></td><td><code class="rg">RTC_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x08</code></td><td><code class="rg">SPI_CON</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x0C</code></td><td><code class="rg">SPI_DAT</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+</tbody></table></div>
+<div class="note">POWER/P33 寄存器位域未在 SDK 头文件公开，请以驱动 API / ioctl 为准。</div>
+
+</section>
+<section class="card" id="init">
+<h2 id="init">软关机 / WDT / RTC</h2>
+<pre><code>if (get_power_keep_state() &amp; POWER_KEEP_RTC)
+    power_set_soft_poweroff(10);
 else
-    system_reset();                /* 普通复位 */</code></pre>
+    system_reset();
+__wdt_clear();   /* 异常路径必调 */</code></pre>
 
 </section>
-<section class="card" id="charge">
-<h2 id="charge">充电与电池</h2>
-<ul><li>charge.h: 充电电流/电压阈值平台数据(锂电池直充方案)</li><li>LRCT(0x13600 区, IRQ 44): RTC 计数与闹钟, 掉电域保持</li><li>LVD 低压检测、VCM/VDD 档位调试接口(p33.h)</li></ul>
+<section class="card" id="note">
+<h2 id="note">其它</h2>
+<ul><li>charge.h 充电流压阈值</li><li>LRCT RTC 闹钟（IRQ 44）</li><li>power_interface.h：SYS_SLEEP_* / POWER_KEEP_* 标志</li></ul>
 
 </section>
-<section class="card" id="wdt">
-<h2 id="wdt">看门狗</h2>
-<pre><code>#include &quot;asm/wdt.h&quot;
-wdt_close();            /* 关闭(调试) */
-__wdt_clear();          /* 清狗(异常路径必须调, cpu/wl82/debug.c) */</code></pre>
-
-</section>
-<div class="note">依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测整理(标注【实测】)。</div>
+<div class="note">依据官方 SDK 头文件与 fw-mini-sdk 移植/逆向实测（标注【实测】）。</div>
 
       <div class="footer">
         <a href="camera.html">← 摄像头与编解码</a>
@@ -54,7 +94,7 @@ __wdt_clear();          /* 清狗(异常路径必须调, cpu/wl82/debug.c) */</c
         <a href="wifi-bt.html">WiFi / BT 射频 →</a>
       </div>
     </main>
-    <aside class="toc"><div class="t">本页目录</div><a href="#p33">P33 与软关机</a><a href="#charge">充电与电池</a><a href="#wdt">看门狗</a></aside>
+    <aside class="toc"><div class="t">本页目录</div><a href="#inst">电源域</a><a href="#regs">P33 / 关键</a><a href="#init">软关机 / WDT / RTC</a><a href="#note">其它</a></aside>
   </div>
 </div>
 </body>

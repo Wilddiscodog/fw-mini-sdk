@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cache、MMU 与异常调试 — AC7912BB 参考手册</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-inner">
+  <a class="brand" href="index.html">
+    <span class="logo">AC7912BB<em>·WL82</em></span>
+    <span class="sub">芯片参考手册</span>
+  </a>
+  <div class="navlinks"><a class="nav-a" href="index.html">芯片总览</a><a class="nav-a" href="cpu-mem.html">CPU 与存储</a><a class="nav-a active" href="cache-mmu.html">Cache / MMU</a><a class="nav-a" href="clock.html">时钟系统</a><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">基础外设<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">多媒体<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a></div></div><div class="nav-drop"><button type="button" class="nav-drop-btn" aria-expanded="false">系统<span class="nav-drop-cur"></span><span class="caret">▾</span></button><div class="nav-drop-menu"><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div><button type="button" class="nav-more-btn" aria-label="全部章节">☰</button><div class="nav-all-panel"><div class="nav-all-g">核心</div><a href="index.html">芯片总览</a><a href="cpu-mem.html">CPU 与存储</a><a href="cache-mmu.html" class=active>Cache / MMU</a><a href="clock.html">时钟系统</a><div class="nav-all-g">基础外设</div><a href="gpio.html">GPIO 与复用</a><a href="irq.html">中断系统</a><a href="uart.html">UART 串口</a><a href="spi.html">SPI 总线</a><a href="iic.html">IIC 总线</a><a href="timer.html">定时器</a><a href="mcpwm.html">MCPWM</a><div class="nav-all-g">多媒体</div><a href="adc.html">ADC 采集</a><a href="audio.html">音频系统</a><a href="usb.html">USB 双控</a><a href="sdmmc.html">SD 卡</a><a href="display.html">显示接口</a><a href="camera.html">摄像头与编解码</a><div class="nav-all-g">系统</div><a href="sfc-sec.html">Flash 与加密</a><a href="power.html">电源管理</a><a href="wifi-bt.html">WiFi / BT 射频</a><a href="misc.html">其他外设</a></div></div>
+</div></nav>
+<script>
+(function(){
+  document.querySelectorAll('.nav-drop-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var drop = btn.parentElement;
+      var open = drop.classList.contains('open');
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      document.querySelector('.nav-all-panel') && document.querySelector('.nav-all-panel').classList.remove('open');
+      if (!open) drop.classList.add('open');
+      btn.setAttribute('aria-expanded', (!open).toString());
+    });
+  });
+  var more = document.querySelector('.nav-more-btn');
+  var panel = document.querySelector('.nav-all-panel');
+  if (more && panel) {
+    more.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+      panel.classList.toggle('open');
+    });
+  }
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.nav-drop.open').forEach(function(d){ d.classList.remove('open'); });
+    if (panel) panel.classList.remove('open');
+  });
+})();
+</script>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="crumb">Cache / MMU</div>
+    <h1>Cache、MMU 与异常调试</h1>
+    <p>I$/D$ way、非缓存窗口、TLB、corex2/EMU 寄存器与 DBG_MSG 对照</p>
+  </header>
+
+  <div class="layout">
+    <main class="main">
+<section class="card" id="ov">
+<h2 id="ov">存储层次</h2>
+<div class="fig"><svg viewBox="0 0 900 280" xmlns="http://www.w3.org/2000/svg" role="img"><defs><marker id="arw" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#5b6b8c"/></marker></defs><rect x="30" y="40" width="140" height="70" rx="9" fill="#e8eefc" stroke="#2456d6" stroke-width="1.4"/><text x="100.0" y="71.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">CPU0 / CPU1</text><text x="100.0" y="88.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">pi32v2</text><rect x="220" y="30" width="160" height="50" rx="9" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.4"/><text x="300.0" y="51.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">I-Cache 8way</text><text x="300.0" y="68.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">行 32B</text><rect x="220" y="100" width="160" height="50" rx="9" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.4"/><text x="300.0" y="121.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">D-Cache 8way</text><text x="300.0" y="138.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">行 32B</text><rect x="220" y="180" width="160" height="50" rx="9" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.4"/><text x="300.0" y="201.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">MMU / TLB</text><text x="300.0" y="218.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">每核 0x2000</text><line x1="170" y1="75" x2="220" y2="55" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="170" y1="75" x2="220" y2="125" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="170" y1="90" x2="220" y2="205" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><rect x="440" y="40" width="180" height="60" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="530.0" y="66.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">SDRAM / Flash</text><text x="530.0" y="83.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">可缓存视图</text><rect x="440" y="130" width="180" height="60" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="530.0" y="156.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">NO_CACHE 窗口</text><text x="530.0" y="173.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">+0x4000000</text><rect x="440" y="210" width="180" height="50" rx="9" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.4"/><text x="530.0" y="231.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="800" fill="#14264d">cache_ram</text><text x="530.0" y="248.05" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11.5" font-weight="500" fill="#4a5568">0x1F20000+</text><line x1="380" y1="55" x2="440" y2="70" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="380" y1="125" x2="440" y2="160" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="380" y1="205" x2="440" y2="235" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><rect x="680" y="80" width="180" height="80" rx="9" fill="#fceaea" stroke="#b83232" stroke-width="1.4"/><text x="770.0" y="108.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">PRP 外设主</text><text x="770.0" y="124.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">USB/EMI/…</text><text x="770.0" y="140.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">共享 D$ way</text><line x1="600" y1="150" x2="680" y2="120" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)" stroke-dasharray="5,4"/></svg><div class="figcap">CPU ↔ Cache/MMU ↔ 可缓存/非缓存窗口 ↔ PRP</div></div>
+<p>核 SFR 基址 <code>csfr_base=0x1EE0000</code>（<code>asm/csfr.h</code>）。Cache 控制在 corex2；每核 EMU/ETM/中断配置在 <code>q32DSP(n)</code>。应用 API：<code>asm/cache.h</code>、<code>asm/cpu.h</code>（NO_CACHE_ADDR / 屏障）。</p>
+
+</section>
+<section class="card" id="cache">
+<h2 id="cache">I-Cache / D-Cache</h2>
+<div class="fig"><svg viewBox="0 0 880 160" xmlns="http://www.w3.org/2000/svg" role="img"><defs><marker id="arw" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#5b6b8c"/></marker></defs><rect x="20" y="40" width="90" height="70" rx="9" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.4"/><text x="65.0" y="71.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">way0</text><text x="65.0" y="87.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">I$/D$</text><rect x="120" y="40" width="90" height="70" rx="9" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.4"/><text x="165.0" y="71.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">way1…</text><text x="165.0" y="87.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">…</text><rect x="220" y="40" width="120" height="70" rx="9" fill="#fdf3e3" stroke="#b7791f" stroke-width="1.4"/><text x="280.0" y="71.35" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">way(8-N)…7</text><text x="280.0" y="86.35" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">仍作 Cache</text><rect x="380" y="40" width="200" height="70" rx="9" fill="#e6f5ec" stroke="#1e7f4f" stroke-width="1.4"/><text x="480.0" y="71.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="12" font-weight="800" fill="#14264d">FREE_*ACHE_WAY</text><text x="480.0" y="87.2" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="10.5" font-weight="500" fill="#4a5568">→ cache_ram 4K×N</text><rect x="620" y="40" width="220" height="70" rx="9" fill="#dbe4f5" stroke="#14264d" stroke-width="1.4"/><text x="730.0" y="71.35" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="11" font-weight="800" fill="#14264d">ORIGIN</text><text x="730.0" y="86.35" text-anchor="middle" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="9.5" font-weight="500" fill="#4a5568">0x1F20000+(8-FI)×4K</text><line x1="340" y1="75" x2="380" y2="75" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><line x1="580" y1="75" x2="620" y2="75" stroke="#5b6b8c" stroke-width="1.6" marker-end="url(#arw)"/><text x="440" y="140" text-anchor="middle" font-size="11" fill="#4a5568" font-weight="500" font-family="Segoe UI,PingFang SC,Microsoft YaHei,sans-serif">sdk_ld: CACHE_RAM_SIZE = FREE_DACHE_WAY*4K + FREE_IACHE_WAY*4K (max 7)</text></svg><div class="figcap">Cache way 回收为 cache_ram</div></div>
+<ul><li>各 8 way，行长 <code>CACHE_LINE_COUNT=32</code>（cache.h）</li><li>寄存器: <code>corex2(0)->CACHE_CON / DCACHE_WAY / ICACHE_WAY</code></li><li><code>dcache_way_use_select(cpu_way, prp_way)</code>：D$ way 在 CPU 与 PRP 间分配</li><li><code>dcache_cwt_set(en, start, end)</code> 写直通窗口；<code>dcache_cwt_buffer_sync</code> / <code>flush_dcache</code> / <code>flushinv_dcache</code></li><li><code>CACHE_WAIT()</code>：等 <code>CACHE_CON & BIT(14)</code>（cpu.h）</li></ul>
+<h3>位域 — CACHE.CON</h3>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>位域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="bits-chip">14</span></td><td><code class='rg'>CACHE_RDY</code></td><td>CACHE_WAIT：等 CACHE_CON.BIT14（cpu.h）</td></tr>
+</tbody></table></div>
+<pre><code>/* 典型一致性（DMA 前） */
+flush_dcache(buf, len);          /* 或 flushinv_dcache */
+__asm_csync();                   /* 核屏障 */
+/* 外设用非缓存别名时可: ptr = (void *)NO_CACHE_ADDR(buf); */</code></pre>
+
+</section>
+<section class="card" id="nocache">
+<h2 id="nocache">非缓存地址窗口</h2>
+<p><code>NO_CACHE_ADDR(addr)</code>：若 <code>addr ≥ 0x4000000</code> 则 <code>addr + 0x4000000</code>（落到 0x8000000 段非缓存视图）；<code>CPU_ADDR</code> 反向。用于 CPU 与 DMA 共享缓冲时绕过 D$。另配 <code>__asm_csync</code> / <code>__asm_ssync</code> 屏障。【实测】USB/EMI 路径对一致性敏感，勿混用脏 cache 行与 DMA。</p>
+<pre><code>#define NO_CACHE_ADDR(addr) \
+    (u32)(((u32)(addr) &gt;= 0x4000000) ? ((u32)(addr)+0x4000000) : (u32)(addr))</code></pre>
+
+</section>
+<section class="card" id="mmu">
+<h2 id="mmu">MMU / TLB</h2>
+<ul><li>可选：<code>CONFIG_MMU_ENABLE</code>（sdk_ld_sfc.c / sdk_ld_sdram.c）</li><li>使能时 RAM0 起址放置 2 张 TLB（CPU0/CPU1 各 0x2000，共 16KB）</li><li>CPU0/CPU1 与 PRP 外设主均经 MMU；越权 → corex2 DBG_MSG 中 prp_*_mmu_err / c0_*_mmu_expt / c1_*_mmu_expt</li><li>出错 ID：<code>PRP_MMU_ERR_RID / PRP_MMU_ERR_WID</code>（exception_analyze 打印）</li></ul>
+
+</section>
+<section class="card" id="corex2">
+<h2 id="corex2">corex2 寄存器（摘要）</h2>
+<p>基址: <code class="rg">0x1EEE000</code>（csfr_base=0x1EE0000 + map_adr / 固定偏移，见 csfr.h）</p>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>偏移</th><th>寄存器</th><th>属性</th><th>说明</th></tr></thead><tbody>
+<tr><td><code class="rg">0x00</code></td><td><code class="rg">C0_CON</code></td><td><span class="rw rw">RW</span></td><td>CPU0 控制</td></tr>
+<tr><td><code class="rg">0x04</code></td><td><code class="rg">C1_CON</code></td><td><span class="rw rw">RW</span></td><td>CPU1 控制</td></tr>
+<tr><td><code class="rg">0x08</code></td><td><code class="rg">CACHE_CON</code></td><td><span class="rw rw">RW</span></td><td>Cache 控制（含 BIT14 ready）</td></tr>
+<tr><td><code class="rg">0x0C</code></td><td><code class="rg">DCACHE_WAY</code></td><td><span class="rw rw">RW</span></td><td>D-Cache way 配置</td></tr>
+<tr><td><code class="rg">0x10</code></td><td><code class="rg">ICACHE_WAY</code></td><td><span class="rw rw">RW</span></td><td>I-Cache way 配置</td></tr>
+<tr><td><code class="rg">0x14</code></td><td><code class="rg">RING_OSC</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x200</code></td><td><code class="rg">C0_IF_UACNTL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x204</code></td><td><code class="rg">C0_IF_UACNTH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x208</code></td><td><code class="rg">C0_RD_UACNTL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x20C</code></td><td><code class="rg">C0_RD_UACNTH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x210</code></td><td><code class="rg">C0_WR_UACNTL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x214</code></td><td><code class="rg">C0_WR_UACNTH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x218</code></td><td><code class="rg">C0_TL_CKCNTL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x21C</code></td><td><code class="rg">C0_TL_CKCNTH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x220</code></td><td><code class="rg">C1_IF_UACNTL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x224</code></td><td><code class="rg">C1_IF_UACNTH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x228</code></td><td><code class="rg">C1_RD_UACNTL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x22C</code></td><td><code class="rg">C1_RD_UACNTH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x230</code></td><td><code class="rg">C1_WR_UACNTL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x234</code></td><td><code class="rg">C1_WR_UACNTH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x238</code></td><td><code class="rg">C1_TL_CKCNTL</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x23C</code></td><td><code class="rg">C1_TL_CKCNTH</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x240</code></td><td><code class="rg">DBG_WR_EN</code></td><td><span class="rw rw">RW</span></td><td>调试寄存器写使能（debug_enter_critical 写 0xe7）</td></tr>
+<tr><td><code class="rg">0x244</code></td><td><code class="rg">DBG_MSG</code></td><td><span class="rw ro">RO</span></td><td>总线/MMU/限界异常标志（见下表）</td></tr>
+<tr><td><code class="rg">0x248</code></td><td><code class="rg">DBG_MSG_CLR</code></td><td><span class="rw rw">RW</span></td><td>清 DBG_MSG</td></tr>
+<tr><td><code class="rg">0x280</code></td><td><code class="rg">WR_LIMIT0_H</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x284</code></td><td><code class="rg">WR_LIMIT1_H</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x288</code></td><td><code class="rg">WR_LIMIT2_H</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x28C</code></td><td><code class="rg">WR_LIMIT3_H</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x290</code></td><td><code class="rg">WR_LIMIT4_H</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x294</code></td><td><code class="rg">WR_LIMIT5_H</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x298</code></td><td><code class="rg">WR_LIMIT6_H</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x29C</code></td><td><code class="rg">WR_LIMIT7_H</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x2C0</code></td><td><code class="rg">WR_LIMIT0_L</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x2C4</code></td><td><code class="rg">WR_LIMIT1_L</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x2C8</code></td><td><code class="rg">WR_LIMIT2_L</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x2CC</code></td><td><code class="rg">WR_LIMIT3_L</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x2D0</code></td><td><code class="rg">WR_LIMIT4_L</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x2D4</code></td><td><code class="rg">WR_LIMIT5_L</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+<tr><td><code class="rg">0x2D8</code></td><td><code class="rg">WR_LIMIT6_L</code></td><td><span class="rw rw">RW</span></td><td></td></tr>
+</tbody></table></div>
+<p>完整表含 WR_LIMIT0..7、WR_ALLOW_ID0..7 等；解析器跳过 REV_* 填充。写调试寄存器前须 <code>DBG_WR_EN=0xe7</code>（debug.c）。</p>
+
+</section>
+<section class="card" id="dbg">
+<h2 id="dbg">DBG_MSG 异常对照（debug.c）</h2>
+<h3>corex2.DBG_MSG 位 → 原因串</h3>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>位域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="bits-chip">0</span></td><td><code class='rg'>wdt_timout_err</code></td><td>看门狗超时</td></tr>
+<tr><td><span class="bits-chip">1</span></td><td><code class='rg'>prp_rd_mmu_err</code></td><td>外设主读 MMU 错</td></tr>
+<tr><td><span class="bits-chip">2</span></td><td><code class='rg'>prp_wr_limit_err</code></td><td>外设主写限界</td></tr>
+<tr><td><span class="bits-chip">3</span></td><td><code class='rg'>prp_wr_mmu_err</code></td><td>外设主写 MMU 错</td></tr>
+<tr><td><span class="bits-chip">4</span></td><td><code class='rg'>axi_rd_inv</code></td><td>AXI 读非法</td></tr>
+<tr><td><span class="bits-chip">5</span></td><td><code class='rg'>axi_wr_inv</code></td><td>AXI 写非法</td></tr>
+<tr><td><span class="bits-chip">6</span></td><td><code class='rg'>c1_rd_mmu_expt</code></td><td>CPU1 读 MMU 异常</td></tr>
+<tr><td><span class="bits-chip">7</span></td><td><code class='rg'>c0_rd_mmu_expt</code></td><td>CPU0 读 MMU 异常</td></tr>
+<tr><td><span class="bits-chip">8</span></td><td><code class='rg'>c1_wr_mmu_expt</code></td><td>CPU1 写 MMU 异常</td></tr>
+<tr><td><span class="bits-chip">9</span></td><td><code class='rg'>c0_wr_mmu_expt</code></td><td>CPU0 写 MMU 异常</td></tr>
+<tr><td><span class="bits-chip">10</span></td><td><code class='rg'>c1_pc_limit_err_r</code></td><td>CPU1 PC 限界</td></tr>
+<tr><td><span class="bits-chip">11</span></td><td><code class='rg'>c1_wr_limit_err_r</code></td><td>CPU1 写限界</td></tr>
+<tr><td><span class="bits-chip">12</span></td><td><code class='rg'>c0_pc_limit_err_r</code></td><td>CPU0 PC 限界</td></tr>
+<tr><td><span class="bits-chip">13</span></td><td><code class='rg'>c0_wr_limit_err_r</code></td><td>CPU0 写限界</td></tr>
+<tr><td><span class="bits-chip">14</span></td><td><code class='rg'>dmc_pnd</code></td><td>DMC pending</td></tr>
+<tr><td><span class="bits-chip">15</span></td><td><code class='rg'>dbg_pnd</code></td><td>调试 pending</td></tr>
+<tr><td><span class="bits-chip">16</span></td><td><code class='rg'>c1_if_bus_inv</code></td><td>CPU1 取指总线非法</td></tr>
+<tr><td><span class="bits-chip">17</span></td><td><code class='rg'>c1_rd_bus_inv</code></td><td>CPU1 读总线非法</td></tr>
+<tr><td><span class="bits-chip">18</span></td><td><code class='rg'>c1_wr_bus_inv</code></td><td>CPU1 写总线非法</td></tr>
+<tr><td><span class="bits-chip">19</span></td><td><code class='rg'>c0_if_bus_inv</code></td><td>CPU0 取指总线非法</td></tr>
+<tr><td><span class="bits-chip">20</span></td><td><code class='rg'>c0_rd_bus_inv</code></td><td>CPU0 读总线非法</td></tr>
+<tr><td><span class="bits-chip">21</span></td><td><code class='rg'>c0_wr_bus_inv</code></td><td>CPU0 写总线非法</td></tr>
+</tbody></table></div>
+<div class="note">exception_analyze 对 BIT2/11/13 会打印对应 WR_LIMITn_H/L；BIT10 打印 PC_LIMIT0/1。</div>
+
+</section>
+<section class="card" id="emu">
+<h2 id="emu">每核 EMU / ETM（q32DSP）</h2>
+<p>基址: <code class="rg">0x1EEF000</code>（csfr_base=0x1EE0000 + map_adr / 固定偏移，见 csfr.h）</p>
+<p>每核一份：<code>q32DSP(0/1)</code> 基址 0x1EEF000 / +0x200。关键：EMU_CON/MSG、SSP/USP 限界、ETM_CON/PC0..3、WP0_*、ICFG/IPND/ILAT。</p>
+<h3>EMU_MSG 位（emu_msg[]，BIT(i) ↔ 名[31-i]）</h3>
+<div class="tbl-wrap"><table class="tbl "><thead><tr><th>位域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="bits-chip">0</span></td><td><code class='rg'>misalign_err</code></td><td>非对齐访问（debug.c emu_msg）</td></tr>
+<tr><td><span class="bits-chip">1</span></td><td><code class='rg'>illeg_err</code></td><td>非法指令</td></tr>
+<tr><td><span class="bits-chip">2</span></td><td><code class='rg'>div0_err</code></td><td>除零</td></tr>
+<tr><td><span class="bits-chip">3</span></td><td><code class='rg'>stackoverflow</code></td><td>栈越界（配合 EMU_SSP/USP 限界）</td></tr>
+<tr><td><span class="bits-chip">8</span></td><td><code class='rg'>etm_wp0_err</code></td><td>ETM 写点命中</td></tr>
+<tr><td><span class="bits-chip">16</span></td><td><code class='rg'>fpu_inv_err</code></td><td>FPU 非法操作</td></tr>
+<tr><td><span class="bits-chip">17</span></td><td><code class='rg'>fpu_inf_err</code></td><td>FPU 无穷</td></tr>
+<tr><td><span class="bits-chip">18</span></td><td><code class='rg'>fpu_tiny</code></td><td>FPU 下溢</td></tr>
+<tr><td><span class="bits-chip">19</span></td><td><code class='rg'>fpu_huge_err</code></td><td>FPU 上溢</td></tr>
+<tr><td><span class="bits-chip">20</span></td><td><code class='rg'>fpu_ine_err</code></td><td>FPU 不精确</td></tr>
+</tbody></table></div>
+<pre><code>/* 使能栈溢出检测后命中 → EMU_MSG.BIT(3) stackoverflow */
+q32DSP(id)-&gt;EMU_SSP_L = lo;  q32DSP(id)-&gt;EMU_SSP_H = hi;
+q32DSP(id)-&gt;EMU_CON |= BIT(3);</code></pre>
+
+</section>
+<section class="card" id="api">
+<h2 id="api">调试 API 片段</h2>
+<pre><code>/* cpu/wl82/debug.c */
+pc_rang_limit(low, high);           /* PC 限界 */
+dev_write_range_limit(...);         /* 写限界窗口 */
+request_irq(IRQ_EXCEPTION_IDX, 7, exception_analyze_sram, 0xff);</code></pre>
+<div class="note">总览与链接槽位见 <a href="cpu-mem.html">cpu-mem.html</a>；本页数据源：csfr.h / cache.h / cpu.h / debug.c / sdk_ld_*。</div>
+
+</section>
+<div class="note">本章内容依据官方 SDK <code>include_lib/driver/cpu/wl82/asm/WL82.h</code>、<code>csfr.h</code>、<code>cpu/wl82/sdk_ld*.c</code> 与 <code>cpu/wl82/tools/isd_config_rule.c</code> 整理; 标注【实测】的条目来自 fw-mini-sdk 移植验证。</div>
+
+      <div class="footer">
+        <a href="cpu-mem.html">← CPU 与存储</a>
+        <span class="src">依据 JieLi 官方 SDK 头文件整理 · AC7912BB (WL82 / AC791N) · 仅供开发参考</span>
+        <a href="clock.html">时钟系统 →</a>
+      </div>
+    </main>
+    <aside class="toc"><div class="t">本页目录</div><a href="#ov">存储层次</a><a href="#cache">I-Cache / D-Cache</a><a href="#nocache">非缓存地址窗口</a><a href="#mmu">MMU / TLB</a><a href="#corex2">corex2 寄存器（摘要）</a><a href="#dbg">DBG_MSG 异常对照（debug.c）</a><a href="#emu">每核 EMU / ETM（q32DSP）</a><a href="#api">调试 API 片段</a></aside>
+  </div>
+</div>
+</body>
+</html>
