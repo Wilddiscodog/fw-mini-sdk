@@ -374,6 +374,15 @@ static const u8 msbc_mute_data[] = {
     0x6D, 0xB6, 0xDD, 0xDB, 0x6D, 0xB7, 0x76, 0xDB, 0x6C, 0x00,
 };
 
+/* fw-mini-sdk 差异回补(官方 demo_edr): 控制器对丢/错 eSCO 包打 0x5555AAAA 标记,
+ * 解码前检出则以静音帧替换, 避免错数据进 msbc 解码器出杂音 */
+static const u8 msbc_err_data[] = {
+    0x55, 0x55, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+};
+
 static void phone_stream_free(void)
 {
     if (pfs->p_addr) {
@@ -397,6 +406,17 @@ static int bt_phone_file_read(void *priv, void *buf, u32 len)
                 pfs->p_len = sizeof(msbc_mute_data);
             } else {
                 pfs->p_addr = (u8 *)lmp_private_get_esco_packet(&pfs->p_len, &hash);
+                if (pfs->p_addr) {
+                    /* 官方 demo_edr: 丢/错包标记 0x5555AAAA → 静音帧替换 */
+                    u8 test_check[4];
+                    memset(test_check, 0, 4);
+                    memcpy(test_check, pfs->p_addr, 4);
+                    if (test_check[0] == 0x55 && test_check[1] == 0x55 && test_check[2] == 0xAA && test_check[3] == 0xAA) {
+                        memcpy(buf, msbc_err_data, len);
+                        phone_stream_free();
+                        return len;
+                    }
+                }
             }
             if (!pfs->p_addr) {
                 pfs->p_len = 0;
@@ -643,7 +663,7 @@ static int phone_speak_start(int format, int packet_len)
     struct aec_s_attr aec_param = {0};
     aec_param.EnableBit = AEC_MODE_ADVANCE;
     /* aec_param.agc_en = 1; */
-    /* aec_param.output_way = 1; */
+    aec_param.output_way = 1;   /* 1:硬件回采(本板 MIC3 接功放输出); 0:软件回采 */
     req.enc.aec_attr = &aec_param;
     req.enc.aec_enable = 1;
 
@@ -661,7 +681,8 @@ static int phone_speak_start(int format, int packet_len)
     if (aec_param.output_way) {
 #ifdef CONFIG_ALL_ADC_CHANNEL_OPEN_ENABLE
         req.enc.channel_bit_map |= BIT(CONFIG_AEC_ADC_CHANNEL);
-        if (CONFIG_AEC_ADC_CHANNEL > CONFIG_PHONE_CALL_ADC_CHANNEL) {
+        /* 官方 demo_edr: 回采通道号比 MIC 通道小才需交换(本板 AEC=3 > MIC=1, 不交换) */
+        if (CONFIG_AEC_ADC_CHANNEL < CONFIG_PHONE_CALL_ADC_CHANNEL) {
             req.enc.ch_data_exchange = 1;
         }
 #endif

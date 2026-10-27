@@ -196,9 +196,12 @@ static const struct dac_platform_data dac_data = {
     .pa_auto_mute       = 1,
     .pa_mute_port       = IO_PORTH_07,
     .pa_mute_value      = 0,            /* MUTE=低; 播放/通话 unmute → PH7 高=功放开 */
-    .differ_output      = 0,
-    .hw_channel         = 0x05,
-    .ch_num             = 4,
+    /* DAC 三参数对齐官方 demo_edr(音箱参考, 上板实测正常):
+     * V1.4.0 误抄 DevKitBoard(综合视频演示板)的 differ=0/0x05/ch_num=4,
+     * 4 数字通道消耗立体声数据速率失配 → A2DP 持续 ~27% 冲刷丢包(K/F 刷屏) */
+    .differ_output      = 1,            /* 硬件差分输出模式 */
+    .hw_channel         = 0x03,
+    .ch_num             = 1,            /* 差分只需开一个通道 */
     .vcm_init_delay_ms  = 1000,
     .mute_delay_ms      = 200,
 };
@@ -260,6 +263,9 @@ void debug_uart_init()
 
 void board_early_init()
 {
+    /* 官方 demo_edr 同款: DAC 模拟通道早期配置 + VCM 稳定等待
+     * (差分模式按 ch_num 选 0x3/0xf, 非差分用 hw_channel) */
+    dac_early_init(0, dac_data.differ_output ? (dac_data.ch_num > 1 ? 0xf : 0x3) : dac_data.hw_channel, 1000);
     devices_init();
 }
 

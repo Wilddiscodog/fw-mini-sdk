@@ -70,12 +70,13 @@
 #define SYSVDD_VOL_SEL_LEVEL                    SYSVDD_VOL_SEL_126V
 
 #define CONFIG_DEBUG_ENABLE
-/* 日志镜像到 USB CDC: 会改写 putbyte, 与 UART0 抢路径易影响正常串口日志。
- * 暂关; 需要 CDC 日志时再打开本宏, 并建议 MINI_USB_CDC_ENABLE=1。 */
-/* #define CONFIG_USB_DEBUG_ENABLE */
+/* 日志镜像到 USB CDC: 打开后 putbyte 把日志写入环形缓冲, usb_log_task 经
+ * cdc_write_data 从 CDC 口发出(同时仍镜像 UART0, 双通道都有日志)。
+ * 电脑端打开 CDC 串口(DTR 置位)即收日志; 串口未开时日志只入缓冲不外发。 */
+#define CONFIG_USB_DEBUG_ENABLE
 
-/* USB 设备形态: 1=CDC+MSC 组合; 0=MSC-only。暂关 CDC(与上项配套)。 */
-#define MINI_USB_CDC_ENABLE    0
+/* USB 设备形态: 1=CDC+MSC 组合(CDC 为日志输出口); 0=MSC-only(无日志口)。 */
+#define MINI_USB_CDC_ENABLE    1
 
 /* ================ 内置音频(MIC + DAC + AEC, MINI_AUDIO_SUPPORT) =================
  * Makefile: MINI_AUDIO_SUPPORT 默认 1(蓝牙音箱需要)。
@@ -170,7 +171,10 @@
 
 #if MINI_BT_SUPPORT
 #ifdef CONFIG_BT_ENABLE
-#define CONFIG_BT_RX_BUFF_SIZE  (12 * 1024)
+/* ACL 收包池(进 ram0_bss, sdk_ld.c 重生成 sdk.ld)。音箱场景对齐官方 demo_edr/
+ * story_machine(SDRAM 在位): RX=17K+400 —— 12K(DevKitBoard 值)在 A2DP 连续流
+ * 下余量不足, RX 池打满即丢包(日志 K/F 刷屏) */
+#define CONFIG_BT_RX_BUFF_SIZE  (17 * 1024 + 400)
 #define CONFIG_BT_TX_BUFF_SIZE  (12 * 1024)
 #define TCFG_USER_BLE_ENABLE            1
 #if MINI_BT_SPEAKER_EN

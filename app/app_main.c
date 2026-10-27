@@ -62,10 +62,19 @@ const struct task_info task_info_table[] = {
     {"usb_server",          20,     1024,	  64  },
     {"usb_msd0",             1,     512,	  128 },
     {"usb_msd1",             1,     512,	  128 },
-    /* BT 协议栈任务(demo_edr 同款; btctrler.a 按名 task_create btencry) */
+    /* BT 协议栈任务(官方 demo_DevKitBoard/demo_edr 同款; btctrler.a 按名 task_create)
+     * 双核必须 "#C0" 前缀把 BT 任务钉在 CPU0 —— BT 控制器中断在 CPU0, 任务漂到
+     * CPU1 会因跨核调度延迟丢 ACL 包(V1.4.0 漏抄此前缀, A2DP 丢包~30% 即此因);
+     * 双核版 btencry 优先级 16、btstack 栈 1024, 与单核版(14/768)不同 */
+#if CPU_CORE_NUM > 1
+    {"#C0btencry",          16,     512,   128 },
+    {"#C0btctrler",         19,     512,   384 },
+    {"#C0btstack",          18,     1024,  384 },
+#else
     {"btencry",             14,     512,	  128 },
     {"btctrler",            19,     512,	  384 },
     {"btstack",             18,     768,	  384 },
+#endif
     {"bt_app",              12,     1024,   0   },
     {"wifi_app",            12,     2048,   0   },
     /* WiFi 协议栈任务(demo_wifi 同款, 库按名字 task_create, 缺一不可):
@@ -373,7 +382,7 @@ void app_main()
     // os_task_create(adc_task,         NULL,  8, 512,  0, "adc_task");
     os_task_create(hw_timer_task,    NULL,  8, 512,  0, "hw_timer");
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
-    os_task_create(lcd_test_task,    NULL, 22, 2048, 0, "lcd_test");
+    // os_task_create(lcd_test_task,    NULL, 22, 2048, 0, "lcd_test");
 #endif
     /* USB 设备模式: MSC 4MB RAM 盘(含虚拟U盘自动升级看门, 见 cdc_acm_msc_app.c) */
     os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
