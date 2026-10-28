@@ -366,6 +366,20 @@ static void uart0_log_putc(char c)
     wait = 20000;
     while (((u->CON0 & (BIT(15) | BIT(0))) == BIT(0)) && --wait);
 }
+
+/* 经 wifi_log_mute 行过滤后再出 UART0 + CDC 环形缓冲 */
+extern void mini_log_filter_putbyte(char c, void (*emit)(char));
+static void usb_log_emit(char c)
+{
+    uart0_log_putc(c);
+    if (c == '\r') {
+        return;
+    }
+    if (c == '\n') {
+        lg_buf[(lg_cnt++) % (sizeof(lg_buf))] = '\r';
+    }
+    lg_buf[(lg_cnt++) % (sizeof(lg_buf))] = c;
+}
 #endif
 
 void putbyte(char c)
@@ -389,14 +403,7 @@ void putbyte(char c)
     first_write = 0;
 #endif
 #if defined CONFIG_USB_DEBUG_ENABLE
-    uart0_log_putc(c);             /* fw-mini-sdk: 镜像到 UART0, 串口 CDC 双通道 */
-    if (c == '\r') {
-        return;
-    }
-    if (c == '\n') {
-        lg_buf[(lg_cnt++) % (sizeof(lg_buf))] = '\r';
-    }
-    lg_buf[(lg_cnt++) % (sizeof(lg_buf))] = c;
+    mini_log_filter_putbyte(c, usb_log_emit);
 #endif
 }
 #endif

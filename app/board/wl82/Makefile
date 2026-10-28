@@ -35,14 +35,27 @@ MINI_AUDIO_SUPPORT ?= 1
 # (jl_math 源码在 LCD 条件块之后追加——必须在 c_SRC_FILES := 主赋值之后)
 AUDIO_LIB :=
 ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
-# 对齐 demo_edr: audio_server + AEC/DNS + AAC(seek) + DRC
+# demo_edr 通话/A2DP + demo_audio 网络/DLNA 解码集
+# M4A/AAC: 用 lib_m4a_dec_seek(与 lib_m4a_dec 符号冲突, 不可双链)
 AUDIO_LIB := \
 	../../../cpu/wl82/liba/audio_server.a \
 	../../../cpu/wl82/liba/libaec.a \
 	../../../cpu/wl82/liba/libdns.a \
 	../../../cpu/wl82/liba/libjlsp.a \
 	../../../cpu/wl82/liba/lib_m4a_dec_seek.a \
-	../../../cpu/wl82/liba/libdrc.a
+	../../../cpu/wl82/liba/lib_mp3_dec.a \
+	../../../cpu/wl82/liba/lib_wma_dec.a \
+	../../../cpu/wl82/liba/lib_wav_dec.a \
+	../../../cpu/wl82/liba/lib_flac_dec.a \
+	../../../cpu/wl82/liba/lib_ape_dec.a \
+	../../../cpu/wl82/liba/lib_amr_dec.a \
+	../../../cpu/wl82/liba/lib_dts_dec.a \
+	../../../cpu/wl82/liba/lib_ogg_vorbis_dec.a \
+	../../../cpu/wl82/liba/libdrc.a \
+	../../../cpu/wl82/liba/network_download.a \
+	../../../cpu/wl82/liba/libmpeg.a \
+	../../../cpu/wl82/liba/libdlna.a \
+	../../../cpu/wl82/liba/ai_server.a
 endif
 
 ifeq ($(OS), Windows_NT)
@@ -107,7 +120,7 @@ CFLAGS := \
 	-Wuninitialized \
 	-Wno-invalid-noreturn \
 	-fno-common \
-	-O2 \
+	-Oz \
 	-g \
 	-fallow-pointer-null \
 	-fprefer-gnu-section \
@@ -201,6 +214,8 @@ INCLUDES := \
 	-I../../../include_lib/net/lwip_2_1_3/lwip/app \
 	-I../../../include_lib/media \
 	-I../../../include_lib/media/cpu/wl82 \
+	-I../../../include_lib/server \
+	-I../../../include_lib/net/network_download \
 	-I../../../driver \
 	-I../../../third/CherryUSB/core \
 	-I../../../third/CherryUSB/common \
@@ -224,6 +239,7 @@ c_SRC_FILES := \
 	../../../app/bt_profile_config.c \
 	../../../app/bt_music.c \
 	../../../app/bt_decode.c \
+	../../../app/net_music.c \
 	../../../app/audio_config.c \
 	../../../app/cdc_acm_msc_app.c \
 	../../../app/audio_demo.c \

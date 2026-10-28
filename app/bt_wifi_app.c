@@ -181,6 +181,13 @@ static void bt_status_event_handler(struct bt_event *bt)
 /* 原厂 app 框架事件路由: sys_event 分发给本强定义(库 weak) */
 void app_default_event_handler(struct sys_event *event)
 {
+#ifdef CONFIG_NET_MUSIC_MODE_ENABLE
+    if (event->type == SYS_NET_EVENT) {
+        extern int net_music_on_net_event(struct net_event *e);
+        net_music_on_net_event((struct net_event *)event->payload);
+        return;
+    }
+#endif
 #if MINI_BT_SPEAKER_EN
     if (event->type == SYS_KEY_EVENT) {
         bt_music_key_event_handler((struct key_event *)event->payload);

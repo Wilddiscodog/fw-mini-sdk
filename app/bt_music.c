@@ -585,6 +585,16 @@ static void bt_emitter_disable(void)
 }
 #endif
 
+/* 网络/DLNA 抢占 DAC: 停 A2DP 解码并清本层状态(不断开 ACL) */
+void bt_music_audio_takeover(void)
+{
+    if (__this->dec_server && __this->media_play_flag) {
+        __this->dec_server = NULL;
+        __this->media_play_flag = 0;
+        earphone_a2dp_audio_codec_close();
+    }
+}
+
 void bredr_a2dp_open_and_close(void)
 {
     if (get_curr_channel_state() & A2DP_CH) {
@@ -763,6 +773,11 @@ static int bt_connction_status_event_handler(struct bt_event *bt)
     case BT_STATUS_A2DP_MEDIA_START:
         log_i(" BT_STATUS_A2DP_MEDIA_START");
         __this->call_flag = 0;
+        /* 与 DLNA/网络播放互斥: 先停网络解码再开 A2DP */
+#ifdef CONFIG_NET_MUSIC_MODE_ENABLE
+        extern void net_music_audio_takeover(void);
+        net_music_audio_takeover();
+#endif
         if (!__this->dec_server) {
             __this->dec_server = earphone_a2dp_audio_codec_open(bt->value, __this->media_volume);//A2DP_CODEC_SBC);
             if (__this->dec_server) {
@@ -782,6 +797,10 @@ static int bt_connction_status_event_handler(struct bt_event *bt)
     case BT_STATUS_SCO_STATUS_CHANGE:
         log_i(" BT_STATUS_SCO_STATUS_CHANGE len:%d ,type:%d", (bt->value >> 16), (bt->value & 0x0000ffff));
         if (bt->value != 0xff) {
+#ifdef CONFIG_NET_MUSIC_MODE_ENABLE
+            extern void net_music_audio_takeover(void);
+            net_music_audio_takeover();
+#endif
             if (!__this->dec_server) {
                 __this->dec_server = phone_call_begin(&bt->value, __this->call_volume);
             }

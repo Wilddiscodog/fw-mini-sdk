@@ -91,8 +91,24 @@
 #define CONFIG_MSBC_ENC_ENABLE
 #define CONFIG_CVSD_DEC_ENABLE
 #define CONFIG_CVSD_ENC_ENABLE
-#define CONFIG_AAC_DEC_ENABLE                 /* A2DP AAC 解码(较 SBC 音质更好) */
+/* 解码格式对齐 demo_audio(本地+网络/DLNA); A2DP 仍用 AAC + m4a_dec_seek */
+#define CONFIG_AAC_DEC_ENABLE
+#define CONFIG_MP3_DEC_ENABLE
+#define CONFIG_M4A_DEC_ENABLE
+#define CONFIG_WMA_DEC_ENABLE
+#define CONFIG_WAV_DEC_ENABLE
+#define CONFIG_FLAC_DEC_ENABLE
+#define CONFIG_APE_DEC_ENABLE
+#define CONFIG_AMR_DEC_ENABLE
+#define CONFIG_DTS_DEC_ENABLE
+#define CONFIG_OGG_VORBIS_DEC_ENABLE
+#define CONFIG_PCM_DEC_ENABLE
+#define CONFIG_ADPCM_DEC_ENABLE
 #define CONFIG_VIRTUAL_DEV_ENC_ENABLE
+
+/* 网络播放 + DLNA MediaRenderer(demo_audio 同款, STA 拿到 IP 后启动) */
+#define CONFIG_NET_MUSIC_MODE_ENABLE
+#define CONFIG_DLNA_SDK_ENABLE
 
 #define AUDIO_ENC_SAMPLE_SOURCE_MIC         0
 #define AUDIO_ENC_SAMPLE_SOURCE_PLNK0       1
@@ -115,7 +131,8 @@
 
 /* AEC: MIC3(PH5/6) 回采功放; MIC1(PH8/9) 通话 MIC */
 #define CONFIG_AEC_ENC_ENABLE
-#define CONFIG_DNS_ENC_ENABLE
+/* 暂关 DNS 深度降噪, 便于确认串扰/回声是否与 DNS 有关; libdns.a / dns_encoder 任务仍保留 */
+/* #define CONFIG_DNS_ENC_ENABLE */
 #define CONFIG_PHONE_CALL_ADC_CHANNEL       1     /* MIC1 */
 #define CONFIG_AEC_ADC_CHANNEL              3     /* MIC3 回采 */
 #define CONFIG_AEC_AUDIO_ADC_GAIN           80

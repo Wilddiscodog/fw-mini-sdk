@@ -13,8 +13,29 @@ nor_sdfile_vfs_ops
 clock_timer1
 clock_port
 audio_server_info
+pcm_decoder_ops
+
+
 subdev_pcm_enc
 pcm_package_ops
+
+
+
+adpcm_decoder_ops
+
+
+
+
+
+
+
+wav_decoder
+
+
+
+
+
+
 msbc_decoder
 
 
@@ -34,16 +55,48 @@ cvsd_decoder
 
 subdev_cvsd_enc
 cvsd_package_ops
+
+
+
+mp3_decoder
+wma_decoder
+
+
+
+
+
+
+
 aac_decoder
 aas_decoder
+
+
+
+m4a_decoder
+amr_decoder
+
+
+
+
+
+
+
+ape_decoder
+
+
+
+flac_decoder
+
+
+
+dts_decoder
+
+
+
+ogg_vorbis_decoder
 vir_dev_sub
-subdev_dns_enc
-subdev_dns_dual_enc
-
-
-
 subdev_aec_enc
-
+dlna_sdk_api
 );
 
 
@@ -99,28 +152,46 @@ SECTIONS
         *(.jlsp_code)
         . = ALIGN(4);
         *(.jlsp_const)
-
-
-        . = ALIGN(4);
-        *(.dns_common_data)
-        . = ALIGN(4);
-        *(.dns_16k_data)
-        . = ALIGN(4);
-        *(.dns_8k_data)
-        . = ALIGN(4);
-        *(.dns_param_data_single)
-        . = ALIGN(4);
-        *(.dns_param_data_dual)
-
-
-
         *(.sms_code)
         *(.sms_sparse_code)
         . = ALIGN(4);
         *(.opcore_maskrom)
         . = ALIGN(4);
         *(.sms_const)
+        *(.dts_dec_code)
+        *(.dts_dec_const)
+        *(.dts_dec_ff_const)
+        *(.dts_dec_sparse_code)
+        *(.dts_dec_sparse_const)
+        *(.mp3_dec_sparse_code)
+        *(.mp3_dec_sparse_const)
+        *(.mp3_dec_code)
+        *(.mp3_dec_const)
 
+
+
+        *(.flac_dec_sparse_code)
+        *(.flac_dec_sparse_const)
+        *(.flac_dec_code)
+        *(.flac_dec_const)
+        *(.wav_dec_sparse_code)
+        *(.wav_dec_sparse_const)
+        *(.wav_dec_code)
+        *(.wav_dec_const)
+
+
+
+        *(.wma_dec_code)
+        *(.wma_dec_const)
+        *(.wma_dec_sparse_code)
+        *(.wma_dec_sparse_const)
+
+
+
+        *(.ape_dec_code)
+        *(.ape_dec_const)
+        *(.ape_dec_sparse_code)
+        *(.ape_dec_sparse_const)
 
 
         . = ALIGN(4);
@@ -281,8 +352,7 @@ SECTIONS
         btctler_code_end = .;
 
   . = ALIGN(4);
-
-        . = ALIGN(4);
+ . = ALIGN(4);
 
 
 
@@ -338,8 +408,7 @@ SECTIONS
 
 
         BTSTACK_CODE_TOTAL_SIZE = btstack_code_end - btstack_code_start;
-
-        . = ALIGN(4);
+ . = ALIGN(4);
 
         lcd_interface_begin = .;
         KEEP(*(.lcd_if_info))
@@ -377,7 +446,6 @@ SECTIONS
         *(.battery_notify)
         battery_notify_end = .;
 
-
         PROVIDE(__fsymtab_start = .);
         KEEP(*(.FSymTab))
         PROVIDE(__fsymtab_end = .);
@@ -406,13 +474,6 @@ SECTIONS
     . = ORIGIN(sdram);
     .data ALIGN(32):
     {
-
-
-
-
-
-        . = ALIGN(4);
-        *(.jlsp_data)
         . = ALIGN(4);
         *(.ui_ram)
 
@@ -565,7 +626,6 @@ SECTIONS
     _video_pkg_end = .;
     PROVIDE(video_pkg_end = .);
 
-
         . = ALIGN(4);
 
  _app_begin = .;
@@ -597,7 +657,6 @@ SECTIONS
     *(.clock_critical_txt)
  _clock_critical_handler_end = .;
  PROVIDE(clock_critical_handler_end = .);
-
 
    _audio_decoder_begin = .;
    PROVIDE(audio_decoder_begin = .);
@@ -667,7 +726,6 @@ SECTIONS
     _video_subdev_end = .;
     PROVIDE(video_subdev_end = .);
 
-
         . = ALIGN(4);
 
 
@@ -701,7 +759,6 @@ SECTIONS
  _net_video_stream_sub_end = .;
  PROVIDE(net_video_stream_sub_end = .);
 
-
         . = ALIGN(4);
 
 
@@ -724,7 +781,6 @@ SECTIONS
 
 
         btstack_data_end = .;
-
 
         . = ALIGN(4);
         *(.data)
@@ -765,7 +821,6 @@ SECTIONS
         BTSTACK_LE_HOST_MESH_BSS_SIZE = ABSOLUTE(. - BTSTACK_LE_HOST_MESH_BSS_START);
 
         btstack_bss_end = .;
-
 
         . = ALIGN(4);
     } > sdram
@@ -879,7 +934,6 @@ SECTIONS
 
         btctler_data_end = .;
 
-
         . = ALIGN(4);
     } > ram0
 
@@ -947,7 +1001,6 @@ SECTIONS
 
         btctler_bss_end = .;
 
-
         . = ALIGN(4);
         *(.the_debug_isr_stack_c0)
         *(.the_debug_isr_stack_c1)
@@ -1001,7 +1054,6 @@ PROVIDE(usb_data_begin = .);
 *(.cdc_var)
 _usb_data_end = .;
 PROVIDE(usb_data_end = .);
-
 
         . = ALIGN(4);
     } > ram0

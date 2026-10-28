@@ -101,6 +101,10 @@ const struct task_info task_info_table[] = {
     {"cvsd_encoder",        13,     512,    0   },
     {"vir_dev_task",        13,     256,    0   },
 #endif
+#ifdef CONFIG_NET_MUSIC_MODE_ENABLE
+    /* DLNA/ai_server(demo_DevKitBoard 同款) */
+    {"ai_server",           15,     1024,   64  },
+#endif
     {0, 0, 0, 0, 0},
 };
 
