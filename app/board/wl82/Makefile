@@ -421,6 +421,7 @@ LVGL_C_SRC += $(call rwildcard, $(LVGL_DIR)/src/, *.c)
 LVGL_C_SRC += $(call rwildcard, $(LVGL_DIR)/demos/benchmark/, *.c)
 c_SRC_FILES += $(LVGL_C_SRC)
 c_SRC_FILES += ../../../third/lvgl_port/driver/lv_port_disp.c
+c_SRC_FILES += ../../../third/lvgl_port/driver/lv_port_indev.c
 INCLUDES    += -I../../../third/lvgl -I$(LVGL_DIR) -I$(LVGL_DIR)/src
 INCLUDES    += -I$(LVGL_DIR)/demos -I$(LVGL_DIR)/demos/benchmark
 INCLUDES    += -I../../../third/lvgl_port/driver -I../../../driver/lcd/include

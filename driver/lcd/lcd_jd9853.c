@@ -150,8 +150,9 @@ static void JD9853_reg_cfg(void)
 
     WriteCOM(0x3A);            /* COLMOD: RGB565 */
     WriteDAT_8(0x55);
-    WriteCOM(0x36);            /* MADCTL: 竖屏 RGB(方向不对再改 set_direction) */
-    WriteDAT_8(0x00);
+    WriteCOM(0x36);            /* MADCTL: 竖屏 + BGR 位(bit3): 本屏 BGR 排列,
+                                * 不置位则红蓝互换(实测 黑白红绿蓝→黑白蓝红绿) */
+    WriteDAT_8(0x08);
 
     /* 不发 0x21(INVON): 本屏为 TN 型(常态白), 反相开会把整屏取反
      * (实测: 黑白红绿蓝→白黑黄青紫)。若换 IPS 屏色反了再加回。 */
@@ -176,9 +177,9 @@ static void JD9853_SetRange(u16 xs, u16 xe, u16 ys, u16 ye)
 
 void JD9853_set_direction(u8 dir)
 {
-    WriteCOM(0x36);            /* 240x320 竖屏 */
+    WriteCOM(0x36);            /* 竖屏 + BGR(bit3), 见 reg_cfg 注释 */
     if (dir == ROTATE_DEGREE_0) {
-        WriteDAT_8(0x00);
+        WriteDAT_8(0x08);
     } else if (dir == ROTATE_DEGREE_90) {
         WriteDAT_8(0x60);
     } else if (dir == ROTATE_DEGREE_180) {

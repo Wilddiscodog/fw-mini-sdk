@@ -296,9 +296,24 @@ static void hw_timer_task(void *p)
 
 /*============================ LCD：EMI 8080 并口 ============================ */
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
+#if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
+#include "lvgl.h"
+extern void lv_init(void);
+extern void lv_port_disp_init(void);
+extern void lv_port_indev_init(void);
+extern void lv_demo_benchmark(void);
+
+static void lv_tick_10ms_cb(void *p)
+{
+    extern void lv_tick_inc(u32 tick);
+    lv_tick_inc(10);            /* sys_timer 粒度=OS tick(10ms), 心跳须与实
+                                 * 际周期一致, 否则动画/跑分计时失真 */
+}
+#endif
+
 static void lcd_test_task(void *p)
 {
-    /* 延迟点屏, 避免开机 EMI 刷屏干扰 USB 枚举; 暂不跑 LVGL benchmark */
+    /* 延迟点屏, 避免开机 EMI 刷屏干扰 USB 枚举 */
     os_time_dly(800);
     user_lcd_init();
 
@@ -322,34 +337,23 @@ static void lcd_test_task(void *p)
         }
     }
 
-    /* 定向测试图(静态): 上下 5 条横带 黑/白/红/绿/蓝 各 1/5 屏高, 黑带正中
-     * 白色圆作方向标记(圆在上=屏正置)。静态一帧便于拍照比对每个发送色
-     * 与显示色的映射; 像素路径与 LVGL 相同(SetRange+RAMWR+DMA)。 */
-    printf("[lcd] panel ready, band test 5x%drows + marker\n", lcd_h / 5);
-    {
-        static u16 line[240] __attribute__((aligned(4)));   /* EMI DMA 要求 4 字节对齐 */
-        static const u16 band[5] = {0x0000, 0xFFFF, 0xF800, 0x07E0, 0x001F}; /* 黑白红绿蓝 */
-        const u16 band_h = lcd_h / 5;
-        const u16 cx = lcd_w / 2, cy = band_h / 2, r2 = 16 * 16;    /* 圆: 黑带中央 r=16 */
-        for (u16 y = 0; y < lcd_h; y++) {
-            u16 bi = y / band_h;
-            u16 c = band[bi > 4 ? 4 : bi];
-            for (u16 x = 0; x < lcd_w && x < 240; x++) {
-                line[x] = c;
-            }
-            if (bi == 0) {  /* 黑带: 圆内画白 */
-                s32 dy = (s32)y - (s32)cy;
-                for (u16 x = 0; x < lcd_w && x < 240; x++) {
-                    s32 dx = (s32)x - (s32)cx;
-                    if (dx * dx + dy * dy <= r2) {
-                        line[x] = 0xFFFF;
-                    }
-                }
-            }
-            lcd->draw_lvgl(0, lcd_w - 1, y, y, (char *)line);
-        }
+#if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
+    /* LVGL benchmark(third/lvgl_port 移植层): disp/indev 在本任务内初始化
+     * (user_lcd_init 幂等, disp_init 里重复调用是 no-op); tick 走 sys_timer */
+    printf("[lcd] panel ready %dx%d, start LVGL benchmark\n", lcd_w, lcd_h);
+    lv_init();
+    sys_timer_add(NULL, lv_tick_10ms_cb, 10);
+    lv_port_disp_init();
+    lv_port_indev_init();
+    lv_demo_benchmark();
+    while (1) {
+        lv_task_handler();
+        os_time_dly(1);         /* 10ms: LVGL 建议 5-10ms 轮询一次 */
     }
-    while (1) { os_time_dly(10000); }   /* 图形保持, 不再循环 */
+#else
+    printf("[lcd] panel ready, park (MINI_LVGL_SUPPORT=0)\n");
+    while (1) { os_time_dly(10000); }
+#endif
 }
 #endif
 

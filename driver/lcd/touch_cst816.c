@@ -36,6 +36,22 @@ static void *iic = NULL;
 static u8 touch_status = 0;
 static u16 touch_x, touch_y;
 
+/* LVGL 输入桥(lv_port_indev.c 调 get_touch_x_y): 返回最近触点状态.
+ * 字段布局须与 lv_port_indev.c 的 struct touch_hdl 一致(u16,u16,u8) */
+void *get_touch_x_y(void)
+{
+    static struct {
+        u16 x;
+        u16 y;
+        u8 status;
+    } hdl;
+
+    hdl.x = touch_x;
+    hdl.y = touch_y;
+    hdl.status = touch_status;
+    return &hdl;
+}
+
 /* 触摸事件回调(由 LCD/UI 层注册; 无注册时仅打印) */
 static void (*cst816_event_cb)(u8 status, u16 x, u16 y) = NULL;
 void cst816_register_event(void (*cb)(u8 status, u16 x, u16 y))
