@@ -3,6 +3,6 @@
 
 /* 固件版本号: 每次改动按需递增, 启动横幅与 usb-irq 探针都会打印,
  * 用于确认板上跑的是哪一版固件 */
-#define FW_VERSION   "V1.1.6"
+#define FW_VERSION   "V1.6.0"
 
 #endif

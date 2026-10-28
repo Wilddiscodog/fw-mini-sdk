@@ -303,6 +303,7 @@ static void lcd_test_task(void *p)
     user_lcd_init();
 
     struct lcd_interface *lcd = lcd_get_hdl();
+    u16 lcd_w = 0, lcd_h = 0;
     if (lcd == NULL || lcd->draw_lvgl == NULL) {
         printf("[lcd] no panel driver matched, park lcd_test\n");
         while (1) { os_time_dly(10000); }
@@ -313,16 +314,42 @@ static void lcd_test_task(void *p)
         if (lcd->get_screen_info) {
             lcd->get_screen_info(&li);
         }
-        if (li.width == 0 || li.height == 0) {
+        lcd_w = li.width;
+        lcd_h = li.height;
+        if (lcd_w == 0 || lcd_h == 0) {
             printf("[lcd] panel not ready (lcd_dev missing), park lcd_test\n");
             while (1) { os_time_dly(10000); }
         }
     }
 
-    printf("[lcd] panel ready, park (benchmark/CoreMark key triggers off)\n");
-    while (1) {
-        os_time_dly(10000);
+    /* 定向测试图(静态): 上下 5 条横带 黑/白/红/绿/蓝 各 1/5 屏高, 黑带正中
+     * 白色圆作方向标记(圆在上=屏正置)。静态一帧便于拍照比对每个发送色
+     * 与显示色的映射; 像素路径与 LVGL 相同(SetRange+RAMWR+DMA)。 */
+    printf("[lcd] panel ready, band test 5x%drows + marker\n", lcd_h / 5);
+    {
+        static u16 line[240] __attribute__((aligned(4)));   /* EMI DMA 要求 4 字节对齐 */
+        static const u16 band[5] = {0x0000, 0xFFFF, 0xF800, 0x07E0, 0x001F}; /* 黑白红绿蓝 */
+        const u16 band_h = lcd_h / 5;
+        const u16 cx = lcd_w / 2, cy = band_h / 2, r2 = 16 * 16;    /* 圆: 黑带中央 r=16 */
+        for (u16 y = 0; y < lcd_h; y++) {
+            u16 bi = y / band_h;
+            u16 c = band[bi > 4 ? 4 : bi];
+            for (u16 x = 0; x < lcd_w && x < 240; x++) {
+                line[x] = c;
+            }
+            if (bi == 0) {  /* 黑带: 圆内画白 */
+                s32 dy = (s32)y - (s32)cy;
+                for (u16 x = 0; x < lcd_w && x < 240; x++) {
+                    s32 dx = (s32)x - (s32)cx;
+                    if (dx * dx + dy * dy <= r2) {
+                        line[x] = 0xFFFF;
+                    }
+                }
+            }
+            lcd->draw_lvgl(0, lcd_w - 1, y, y, (char *)line);
+        }
     }
+    while (1) { os_time_dly(10000); }   /* 图形保持, 不再循环 */
 }
 #endif
 
@@ -386,10 +413,10 @@ void app_main()
     // os_task_create(adc_task,         NULL,  8, 512,  0, "adc_task");
     os_task_create(hw_timer_task,    NULL,  8, 512,  0, "hw_timer");
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
-    // os_task_create(lcd_test_task,    NULL, 22, 2048, 0, "lcd_test");
+    os_task_create(lcd_test_task,    NULL, 22, 2048, 0, "lcd_test");
 #endif
     /* USB 设备模式: MSC 4MB RAM 盘(含虚拟U盘自动升级看门, 见 cdc_acm_msc_app.c) */
-    os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
+    // os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
     os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
     /* 按键框架先就绪; BT/WiFi 延后自启(避开 USB 枚举窗, 见 bt_wifi_start_deferred) */
     extern void key_early_init(void);
@@ -399,6 +426,6 @@ void app_main()
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT && !MINI_BT_SPEAKER_EN
     /* 音箱模式走 A2DP/HFP, 不再跑 mic→DAC 回环自检(抢 audio 设备) */
     extern void audio_demo_start(void);
-    audio_demo_start();
+    // audio_demo_start();
 #endif
 }

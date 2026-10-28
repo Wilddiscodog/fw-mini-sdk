@@ -68,7 +68,8 @@ PWM_PLATFORM_DATA_END();
  * J:\xiaolu-r2\新建文件夹\, 详见 doc/屏幕触摸移植记录.md):
  *   PC1~PC8  = LCD_D0~D7   芯片 LCD 复用脚, dev_open("emi") 时由 EMI 控制器配置
  *   PC10     = LCD_WR      同上(EMI 硬件)
- *   PC9      = LCD_CS      同上(EMI 硬件选通) → cs_pin 保持 -1, 勿当 GPIO 用
+ *   PC9      = LCD_CS      软件 GPIO(EMI 硬件不输出 CS; cs_pin 必须配置,
+ *                          悬空恒高则面板忽略全部写 → 背光亮但黑屏)
  *   PB5      = LCD_RS      GPIO, 命令/数据切换(lcd_rs_pinstate)
  *   PB6      = LCD_RD      GPIO 拉高(芯片无 LCD_RD 复用, EMI 只写; 见 lcd_jd9853.c)
  *   PB7      = LCD_RESET   GPIO
@@ -82,13 +83,18 @@ static const struct emi_platform_data emi_data = {
 	.time_out       = 1 * 1000,             /* 写超时 ms */
 	.th             = EMI_TWIDTH_NO_HALF,
 	.ts             = 0,
-	.tw             = EMI_BAUD_DIV4,   /* (baud+1)/2 档, EMI_BAUD 是枚举类型名不可作值 */
+	.tw             = EMI_BAUD_DIV8,   /* WR 脉宽(HSB 周期数): 对齐官方 DevKitBoard
+	                                       (tw==baudrate 同为 DIV8)。曾用 DIV4(3 周期
+	                                       ≈25ns@120M)过快 → 面板采样错位花屏 */
 	.data_bit_en    = 0,
 };
 
 static const struct ui_lcd_platform_data lcd_pdata = {
 	.rst_pin        = IO_PORTB_07,   /* LCD_RESET: PB7 */
-	.cs_pin         = -1,            /* CS=PC9 为 EMI 硬件脚, 软件不动 */
+	/* LCD_CS: PC9。原注释称"EMI 硬件选通"不成立: 反汇编 emi_open 仅配置
+	 * PC1~PC8+PC10(WR), 无 PC9; 官方 DevKitBoard EMI 参考里 PC9 是普通 GPIO。
+	 * CS 悬空恒高 → 面板忽略全部写(背光亮但黑屏), 必须软件 GPIO 驱动 */
+	.cs_pin         = IO_PORTC_09,
 	.rs_pin         = IO_PORTB_05,   /* LCD_RS: PB5 */
 	.bl_pin         = IO_PORTA_06,   /* 背光 LED_PWM: PA6 */
 	.te_pin         = IO_PORTC_00,   /* LCD_TE: PC0 */

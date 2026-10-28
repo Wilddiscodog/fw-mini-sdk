@@ -11,7 +11,8 @@
  *    色偏/亮度异常/首行错位, 替换 PANEL_TUNING 区(需抓原机 RAM 或厂商规格书)。
  *
  * 接口: EMI 8080-8bit, 引脚固定于 zc-p25136 原理图(见 board.c LCD 段注释):
- *   PC1~PC8=D0~D7, PC10=WR, PC9=CS(以上 EMI 硬件复用);
+ *   PC1~PC8=D0~D7, PC10=WR(以上 EMI 硬件复用);
+ *   PC9=CS —— EMI 硬件不输出 CS, 由 lcd_cs_pinstate 软件驱动(board.c cs_pin);
  *   PB5=RS, PB7=RESET, PC0=TE, PA6=背光(GPIO, 网络名 LED_PWM);
  *   PB6=RD —— 芯片无 LCD_RD 复用功能(EMI 只写), 必须软件输出高,
  *   否则 RD 悬空可能被干扰导致面板误读、数据错乱。
@@ -66,21 +67,20 @@ static void JD9853_io_init(void)
 {
     gpio_direction_output(IO_PORTB_06, 1);  /* LCD_RD=PB6 拉高(只写接口) */
     lcd_rs_pinstate(0);
-    lcd_cs_pinstate(1);   /* cs_pin=-1 时为空操作(CS 由 EMI 硬件选通) */
+    lcd_cs_pinstate(1);   /* CS 空闲态拉高(board.c cs_pin=PC9, 写时自动拉低) */
 }
 
-/* ================= 面板调优段(公开参考, 异常时替换) =================
- * JD9853 360x360: 电源/Gamma/驱动能力。该段与批次相关, 保留原样即可点亮,
- * 色偏/发暗再回头调。 */
-static const u8 jd9853_tuning[][8] = {
-    /* {cmd, n, d0..d5, delay_ms} */
-    {0xC0, 3, 0x10, 0x0B, 0x07, 0, 0, 0},     /* 电源: GVDD/VRH */
-    {0xC1, 2, 0x40 + 0x04, 0x08, 0, 0, 0, 0}, /* VCOM */
-    {0xC2, 2, 0x07, 0x12, 0, 0, 0, 0},        /* VCOM offset */
-    {0xC5, 1, 0x28, 0, 0, 0, 0, 0},           /* FRM 60Hz */
-    {0xE4, 1, 0x25, 0, 0, 0, 0, 0},           /* MIPI/DPI 时序 */
-    {0xB0, 1, 0x19, 0, 0, 0, 0, 0},           /* 振铃抑制 */
-};
+/* ================= Jadard JD9853 厂商初始化段 =================
+ * 旧"调优段"(C0=GVDD/C1=VCOM/C5=FRM...)是 ILI9341 风格命令, 对 JD9853 无效:
+ * Jadard 的 C0/C1 是时序寄存器, 且厂商寄存器必须先 0xDF={0x98,0x53} 解锁。
+ * 本段自 esp_lcd_jd9853(Apache-2.0, BOE 1.83" 参考)移植, 电源/Gamma 参数
+ * 与面板批次相关, 点亮后色偏/发暗再微调。多字节命令用 WriteDAT_N 展开。 */
+static void WriteDAT_N(const u8 *d, u8 n)
+{
+    while (n--) {
+        WriteDAT_8(*d++);
+    }
+}
 
 static void JD9853_reg_cfg(void)
 {
@@ -92,26 +92,70 @@ static void JD9853_reg_cfg(void)
     lcd_rst_pinstate(1);
     lcd_delay(120);
 
-    /* DCS 标准流 */
+    /* ---- 厂商段(sleep 态下写, Jadard 参考同序) ---- */
+    WriteCOM(0xDF);
+    {
+        static const u8 d[] = {0x98, 0x53};          /* 解锁厂商寄存器 */
+        WriteDAT_N(d, sizeof(d));
+    }
+    WriteCOM(0xDE);
+    WriteDAT_8(0x00);                                /* page 0 */
+    {
+        static const u8 b2[] = {0x25};
+        static const u8 b7[] = {0x00, 0x21, 0x00, 0x49};
+        static const u8 bb[] = {0x1F, 0x9A, 0x55, 0x73, 0x63, 0xF0};
+        static const u8 c0[] = {0x22, 0x22};
+        static const u8 c1[] = {0x12};
+        static const u8 c3[] = {0x7D, 0x07, 0x14, 0x06, 0xC8, 0x6A, 0x6C, 0x77};
+        static const u8 c4[] = {0x00, 0x00, 0xA0, 0x6F, 0x1E, 0x1A, 0x16, 0x79, 0x1E, 0x1A, 0x16, 0x82};
+        static const u8 c8[] = {
+            0x3F, 0x2C, 0x26, 0x20, 0x25, 0x26, 0x21, 0x21,
+            0x1F, 0x1F, 0x1F, 0x13, 0x11, 0x0B, 0x04, 0x00,
+            0x3F, 0x2C, 0x26, 0x20, 0x25, 0x27, 0x21, 0x21,
+            0x1F, 0x1F, 0x1F, 0x13, 0x11, 0x0B, 0x04, 0x00
+        };
+        static const u8 d0[] = {0x04, 0x06, 0x62, 0x0F, 0x00};
+        static const u8 d7[] = {0x00, 0x30};
+        WriteCOM(0xB2); WriteDAT_N(b2, sizeof(b2));
+        WriteCOM(0xB7); WriteDAT_N(b7, sizeof(b7));
+        WriteCOM(0xBB); WriteDAT_N(bb, sizeof(bb));
+        WriteCOM(0xC0); WriteDAT_N(c0, sizeof(c0));
+        WriteCOM(0xC1); WriteDAT_N(c1, sizeof(c1));
+        WriteCOM(0xC3); WriteDAT_N(c3, sizeof(c3));
+        WriteCOM(0xC4); WriteDAT_N(c4, sizeof(c4));
+        WriteCOM(0xC8); WriteDAT_N(c8, sizeof(c8));  /* Gamma G2.2 */
+        WriteCOM(0xD0); WriteDAT_N(d0, sizeof(d0));
+        WriteCOM(0xD7); WriteDAT_N(d7, sizeof(d7));
+        WriteCOM(0xE6); WriteDAT_8(0x14);
+    }
+    WriteCOM(0xDE);
+    WriteDAT_8(0x01);                                /* page 1 */
+    {
+        static const u8 b7[] = {0x03, 0x13, 0xEF, 0x35, 0x35};
+        static const u8 c1[] = {0x14, 0x15, 0xC0};
+        static const u8 c2[] = {0x06, 0x3A, 0xC7};
+        static const u8 c4[] = {0x72, 0x12};
+        WriteCOM(0xB7); WriteDAT_N(b7, sizeof(b7));
+        WriteCOM(0xC1); WriteDAT_N(c1, sizeof(c1));
+        WriteCOM(0xC2); WriteDAT_N(c2, sizeof(c2));
+        WriteCOM(0xC4); WriteDAT_N(c4, sizeof(c4));
+        WriteCOM(0xBE); WriteDAT_8(0x00);
+    }
+    WriteCOM(0xDE);
+    WriteDAT_8(0x00);                                /* 回 page 0 */
+
+    /* ---- DCS 标准段 ---- */
     WriteCOM(0x11);            /* Sleep Out */
     lcd_delay(120);
 
     WriteCOM(0x3A);            /* COLMOD: RGB565 */
     WriteDAT_8(0x55);
+    WriteCOM(0x36);            /* MADCTL: 竖屏 RGB(方向不对再改 set_direction) */
+    WriteDAT_8(0x00);
 
-    /* 调优段 */
-    for (u32 i = 0; i < sizeof(jd9853_tuning) / sizeof(jd9853_tuning[0]); i++) {
-        const u8 *t = jd9853_tuning[i];
-        WriteCOM(t[0]);
-        for (u8 j = 0; j < t[1]; j++) {
-            WriteDAT_8(t[2 + j]);
-        }
-        if (t[7]) {
-            lcd_delay(t[7]);
-        }
-    }
+    /* 不发 0x21(INVON): 本屏为 TN 型(常态白), 反相开会把整屏取反
+     * (实测: 黑白红绿蓝→白黑黄青紫)。若换 IPS 屏色反了再加回。 */
 
-    WriteCOM(0x21);            /* 反色关(如屏色反了删/加此行) */
     WriteCOM(0x29);            /* Display ON */
     lcd_delay(50);             /* zc 日志: init_start→config succes ~300ms, 吻合 */
 }
