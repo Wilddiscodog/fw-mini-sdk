@@ -114,6 +114,43 @@ static void icm_scan_bus(void)
     }
 }
 
+/* 寄存器空间 dump(诊断): 0x18 应答但 WHO_AM_I(0x75)=0x00 —— SC7U22TR 布局
+ * 与英飞凌原版有出入, 从 dump 数据分布反推真实布局(BMI160 系 CHIP_ID@0x00=
+ * 0xD1, ST 系@0x0F, Invensense 系@0x75)。16B 分块读, 单块 NACK 不拖垮整轮 */
+static void icm_dump_regs(u8 addr7)
+{
+    u8 buf[16];
+
+    s_addr_w = (u8)(addr7 << 1);
+    s_addr_r = (u8)((addr7 << 1) | 1);
+    printf("[icm42607] dump 0x%02x regs 0x00-0x7f:\n", addr7);
+    for (u8 base = 0x00; base < 0x80; base += 16) {
+        if (icm_read_regs(base, buf, 16) == 0) {
+            printf("[icm42607] %02x: %02x %02x %02x %02x %02x %02x %02x %02x "
+                   "%02x %02x %02x %02x %02x %02x %02x %02x\n",
+                   base, buf[0], buf[1], buf[2], buf[3],
+                   buf[4], buf[5], buf[6], buf[7],
+                   buf[8], buf[9], buf[10], buf[11],
+                   buf[12], buf[13], buf[14], buf[15]);
+        } else {
+            printf("[icm42607] %02x: read err\n", base);
+        }
+        wdt_clear();
+    }
+    {
+        u8 id;
+        if (!icm_read_regs(0x00, &id, 1)) {
+            printf("[icm42607] cand reg0x00=%02x (BMI160 系 CHIP_ID=0xD1)\n", id);
+        }
+        if (!icm_read_regs(0x0F, &id, 1)) {
+            printf("[icm42607] cand reg0x0F=%02x (ST 系 WHO_AM_I)\n", id);
+        }
+        if (!icm_read_regs(0x75, &id, 1)) {
+            printf("[icm42607] cand reg0x75=%02x (Invensense 系 WHO_AM_I)\n", id);
+        }
+    }
+}
+
 int icm42607_init(void)
 {
     u8 mclk = 0;
@@ -133,6 +170,7 @@ int icm42607_init(void)
     if (probe_addr(ADDR7_SC7U_L) && probe_addr(ADDR7_SC7U_H) &&
         probe_addr(ADDR7_AD0_L) && probe_addr(ADDR7_AD0_H)) {
         printf("[icm42607] WHO_AM_I probe fail (try 0x18/0x19/0x68/0x69)\n");
+        icm_dump_regs(ADDR7_SC7U_L);     /* 0x18 应答: dump 全寄存器反推布局 */
         return -2;
     }
     printf("[icm42607] WHO_AM_I=0x%02x addr=0x%02x\n", s_whoami, s_addr_w >> 1);

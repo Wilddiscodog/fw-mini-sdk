@@ -33,9 +33,11 @@
 #include <string.h>
 #include <stdio.h>
 
-/* 网页 OTA: 优先 4MB 整包(当前 update-ota.ufw ~3.6MB); 失败则降级。
+/* 网页 OTA: 整包缓存目标 5MB(当前 update-ota.ufw ~4.24MB, 2026-10-29 用户要求
+ * 4MB→5MB —— 文件已超 4MiB, 整包进缓存可完全避开 spill 模式的 CRC 风险;
+ * 实测双 CDC 删 3MB RAM 盘后 SDRAM 堆空闲 ~7.8MB, 5MB 放得下)。失败对半降级。
  * 中途刷 flash 若不抽 TCP, 对端窗口堵死 → recv stall → net_update err。 */
-#define OTA_CACHE_TARGET   (4u * 1024u * 1024u)
+#define OTA_CACHE_TARGET   (5u * 1024u * 1024u)
 #define OTA_CACHE_MIN      (64u * 1024u)
 #define OTA_BURN_CHUNK     (4u * 1024u)
 #define OTA_SPILL_SIZE     (256u * 1024u)
