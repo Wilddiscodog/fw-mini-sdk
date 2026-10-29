@@ -5,9 +5,16 @@
 #include "device/iic.h"
 #include "asm/includes.h"
 #include "asm/pwm.h"
+#include "asm/power_interface.h"
+#include "asm/system_reset_reason.h"
+#include "key/adkey.h"
+#include "sys_power.h"
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 #include "ui_api.h"
 #include "asm/emi.h"
+#endif
+#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
+#include "asm/dac.h"
 #endif
 
 // *INDENT-OFF*
@@ -60,6 +67,15 @@ PWM_PLATFORM_DATA_BEGIN(pwm_data1)
 	.pwm_ch  = PWM_TIMER2_OPCH2,
 	.freq    = 1000,
 	.duty    = 50,
+	.point_bit = 0,
+PWM_PLATFORM_DATA_END();
+
+/* LCD 背光 PWM: PA6 + TIMER3 OPCH3 (与 pwm1 通道分离) */
+PWM_PLATFORM_DATA_BEGIN(pwm_data_bl)
+	.port    = IO_PORTA_06,
+	.pwm_ch  = PWM_TIMER3_OPCH3,
+	.freq    = 2000,
+	.duty    = 80,
 	.point_bit = 0,
 PWM_PLATFORM_DATA_END();
 
@@ -156,6 +172,122 @@ static const struct low_power_param power_param = {
     .vlvd_enable	= TRUE,
     .vlvd_value		= VLVD_SEL_25V,
 };
+
+/* 软关机/休眠唤醒: ADKEY 同脚 PB01 (按下拉低 → 下降沿唤醒) */
+#define PORT_WAKEUP_IO			IO_PORTB_01
+#define PORT_WAKEUP_NUM			(PORT_WAKEUP_IO / IO_GROUP_NUM)
+
+static const struct port_wakeup port0 = {
+	.edge       = FALLING_EDGE,
+	.attribute  = BLUETOOTH_RESUME,
+	.iomap      = PORT_WAKEUP_IO,
+	.low_power  = POWER_SLEEP_WAKEUP | POWER_OFF_WAKEUP,
+};
+
+static const struct long_press lpres_port = {
+	.enable     = FALSE,
+	.use_sec4   = TRUE,
+	.edge       = FALLING_EDGE,
+	.iomap      = PORT_WAKEUP_IO,
+};
+
+static const struct sub_wakeup sub_wkup = {
+	.attribute  = BLUETOOTH_RESUME,
+};
+
+static const struct charge_wakeup charge_wkup = {
+	.attribute  = BLUETOOTH_RESUME,
+};
+
+static const struct wakeup_param wk_param = {
+	.port[PORT_WAKEUP_NUM] = &port0,
+	.sub = &sub_wkup,
+	.charge = &charge_wkup,
+	.lpres = &lpres_port,
+};
+
+extern const struct adkey_platform_data adkey_data;
+
+#ifdef CONFIG_PRESS_LONG_KEY_POWERON
+/* ADKEY 电源键按下时 ADC 很低(实测≈0); 阈值 50 对齐官方 */
+static unsigned int read_power_key(int dly)
+{
+	gpio_latch_en(adkey_data.adkey_pin, 0);
+	gpio_direction_input(adkey_data.adkey_pin);
+	gpio_set_die(adkey_data.adkey_pin, 0);
+	gpio_set_pull_up(adkey_data.adkey_pin, 0);
+	gpio_set_pull_down(adkey_data.adkey_pin, 0);
+
+	if (dly) {
+		delay_us(3000);
+	}
+
+	JL_ADC->CON = (0xf << 12) | (adkey_data.ad_channel << 8) | (1 << 6) | (1 << 4) | (1 << 3) | (6 << 0);
+	while (!(JL_ADC->CON & BIT(7)));
+	return (JL_ADC->RES < 50);
+}
+
+void sys_power_poweroff_wait_powerkey_up(void)
+{
+	JL_TIMER1->CON = 0;
+	JL_TIMER1->CON = 0;
+	JL_TIMER1->CON = 0;
+	JL_ADC->CON = 0;
+	JL_ADC->CON = 0;
+	JL_ADC->CON = 0;
+	while (read_power_key(1));
+}
+#else
+void sys_power_poweroff_wait_powerkey_up(void)
+{
+}
+#endif
+
+void sys_power_poweroff(void)
+{
+	printf("[power] soft poweroff enter\n");
+	sys_power_poweroff_wait_powerkey_up();
+	power_set_soft_poweroff(0);
+}
+
+/* 进软关机前 IO 高阻(除 SDRAM 相关 PD/PE/PF/PG) */
+static void board_set_soft_poweroff(void)
+{
+	u32 IO_PORT;
+	JL_PORT_FLASH_TypeDef *gpio[] = {JL_PORTA, JL_PORTB, JL_PORTC, JL_PORTD, JL_PORTE, JL_PORTF, JL_PORTG, JL_PORTH};
+	u8 p, i;
+
+	for (p = 0; p < 8; ++p) {
+		if (gpio[p] == JL_PORTD || gpio[p] == JL_PORTE || gpio[p] == JL_PORTF || gpio[p] == JL_PORTG) {
+			continue;
+		}
+		for (i = 0; i < 16; ++i) {
+			IO_PORT = IO_PORTA_00 + p * 16 + i;
+			gpio_set_pull_up(IO_PORT, 0);
+			gpio_set_pull_down(IO_PORT, 0);
+			gpio_set_direction(IO_PORT, 1);
+			gpio_set_die(IO_PORT, 0);
+			gpio_set_dieh(IO_PORT, 0);
+			gpio_set_hd(IO_PORT, 0);
+			gpio_set_hd1(IO_PORT, 0);
+			gpio_latch_en(IO_PORT, 1);
+		}
+	}
+}
+
+static void sleep_exit_callback(u32 usec)
+{
+	(void)usec;
+}
+
+static void sleep_enter_callback(u8 step)
+{
+	if (step == 1) {
+#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
+		dac_power_off();
+#endif
+	}
+}
 
 /*============================ RTC：内部时钟 (MINI_RTC_SUPPORT) ================== */
 #if (defined MINI_RTC_SUPPORT) && MINI_RTC_SUPPORT
@@ -255,6 +387,7 @@ REGISTER_DEVICES(device_table) = {
 	{"audio", &audio_dev_ops, (void *)&audio_data },
 #endif
 	{"pwm1",  &pwm_dev_ops,  (void *)&pwm_data1 },
+	{"pwm_bl",&pwm_dev_ops,  (void *)&pwm_data_bl },
 	{"rtc",   &rtc_dev_ops,  NULL},
 };
 /* 注：不注册 "otg"——AC7912BB 两 USB 控制器共用 D+/D-，
@@ -277,7 +410,29 @@ void board_early_init()
 
 static void board_power_init(void)
 {
-    power_init(&power_param);
+	power_init(&power_param);
+	power_set_callback(TCFG_LOWPOWER_LOWPOWER_SEL, sleep_enter_callback,
+			   sleep_exit_callback, board_set_soft_poweroff);
+	power_keep_state(POWER_KEEP_RESET | POWER_KEEP_DACVDD);
+	power_wakeup_init(&wk_param);
+
+#ifdef CONFIG_PRESS_LONG_KEY_POWERON
+	/* 端口唤醒后若电源键已松开 → 视为误触, 立刻再关机 */
+	if (system_reset_reason_get() == SYS_RST_PORT_WKUP) {
+		for (int i = 0; i < 500; i++) {
+			if (0 == read_power_key(1)) {
+				sys_power_poweroff();
+				break;
+			}
+		}
+	}
+#endif
+	extern void clean_wakeup_source_port(void);
+	clean_wakeup_source_port();
+}
+
+__attribute__((weak)) void clean_wakeup_source_port(void)
+{
 }
 
 void board_init()

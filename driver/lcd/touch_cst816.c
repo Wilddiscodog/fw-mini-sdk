@@ -20,6 +20,7 @@
 #include "device/iic.h"
 #include "os/os_api.h"
 #include "app_config.h"
+#include "lcd_config.h"          /* LCD_W/H: 横屏时触摸坐标需映射 */
 
 #if TCFG_TOUCH_CST816_ENABLE
 
@@ -122,18 +123,35 @@ static int cst816_init(void)
     return 0;
 }
 
-/* 读触点: [0]=按住, [1]=xh, [3]=xl, [5]=yh, [7]=yl */
+/* 读触点: [0]=按住, [1]=xh, [3]=xl, [5]=yh, [7]=yl
+ * 触摸 IC 按面板原生竖屏 240x320 报坐标; 显示逆时针 90° 横屏时映射到 320x240:
+ *   lx = ty,  ly = (240-1) - tx
+ */
 static u8 cst816_read_point(u16 *x, u16 *y)
 {
     u8 d[8] = {0};
+    u16 tx, ty;
 
     if (cst816_read_regs(CST816_REG_DATA, d, 8)) {
         return 0;
     }
     u8 press = d[0] & 0x0f;              /* 触点数 */
     if (press) {
-        *x = ((u16)(d[1] & 0x0f) << 8) | d[3];
-        *y = ((u16)(d[5] & 0x0f) << 8) | d[7];
+        tx = ((u16)(d[1] & 0x0f) << 8) | d[3];
+        ty = ((u16)(d[5] & 0x0f) << 8) | d[7];
+#if HORIZONTAL_SCREEN
+        *x = ty;
+        *y = (240 - 1) - tx;
+        if (*x >= LCD_W) {
+            *x = LCD_W - 1;
+        }
+        if (*y >= LCD_H) {
+            *y = LCD_H - 1;
+        }
+#else
+        *x = tx;
+        *y = ty;
+#endif
     }
     return press;
 }

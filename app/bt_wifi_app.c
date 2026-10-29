@@ -58,15 +58,16 @@ void wifi_prov_run(void);
 #include "key/key_driver.h"
 #include "key/adkey.h"
 
-/* 实测(10bit raw): 空闲 1014 / 按键1 162 / 按键2 0。
- * 中点阈值(升序), 驱动按"第一个 raw≤表项"匹配: 0→按键2, 81<raw≤588→按键1 */
+/* 实测(10bit raw): 空闲 1014 / KEY1≈162 / KEY2≈0。
+ * 中点阈值(升序), 驱动按"第一个 raw≤表项"匹配:
+ *   raw≈0 → KEY_POWER(0) 开关机; raw≈162 → KEY_PREV(1) */
 const struct adkey_platform_data adkey_data = {
     .enable       = 1,
     .adkey_pin    = IO_PORTB_01,
     .extern_up_en = 1,              /* 板上外部上拉(空闲 3.13V) */
     .ad_channel   = AD_CH_PB01,     /* = 3 */
     .ad_value     = {0, 588, 1023, 1023, 1023, 1023, 1023, 1023, 1023, 1023},
-    .key_value    = {2, 1, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY},
+    .key_value    = {KEY_POWER, KEY_PREV, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY, NO_KEY},
 };
 
 /* BT/WiFi 开机自启; CoreMark/按键跑分已关 */
@@ -79,6 +80,13 @@ static void key_sys_event_handler(struct sys_event *event)
         return;
     }
     struct key_event *e = (struct key_event *)event->payload;
+    /* KEY_POWER(0) 长按: 关机动画 → P33 真关机 */
+    if (e->value == KEY_POWER && e->action == KEY_EVENT_LONG) {
+        extern void watch_power_key_long(void);
+        watch_power_key_long();
+        printf("[key] POWER long -> P33 poweroff\n");
+        return;
+    }
     if (e->action == KEY_EVENT_CLICK || e->action == KEY_EVENT_UP) {
         printf("[key] v=%d action=%d\n", e->value, e->action);
     }

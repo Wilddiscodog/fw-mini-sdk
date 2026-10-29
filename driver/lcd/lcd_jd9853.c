@@ -27,13 +27,19 @@
 
 #if TCFG_LCD_JD9853_ENABLE
 
-#define LCD_W   240    /* 竖屏宽; 横屏对调并改 MADCTL */
-#define LCD_H   320
+/* LCD_W/H 由 lcd_config.h 按 HORIZONTAL_SCREEN 给出:
+ * 竖屏 240x320 / 横屏 320x240(逆时针 90°) */
 
 #define ROTATE_DEGREE_0    0
 #define ROTATE_DEGREE_90   1
 #define ROTATE_DEGREE_180  2
 #define ROTATE_DEGREE_270  3
+
+#if HORIZONTAL_SCREEN
+#define JD9853_INIT_ROTATE  ROTATE_DEGREE_90
+#else
+#define JD9853_INIT_ROTATE  ROTATE_DEGREE_0
+#endif
 
 void msleep(unsigned int ms);
 #define lcd_delay(x) msleep(x)
@@ -177,15 +183,17 @@ static void JD9853_SetRange(u16 xs, u16 xe, u16 ys, u16 ye)
 
 void JD9853_set_direction(u8 dir)
 {
-    WriteCOM(0x36);            /* 竖屏 + BGR(bit3), 见 reg_cfg 注释 */
+    /* MADCTL: bit3=BGR 必须保留; MV/MX/MY 控制旋转
+     * 0°=0x08, 90°CCW=0x68(MX|MV|BGR), 180°=0xC8, 270°=0xA8 */
+    WriteCOM(0x36);
     if (dir == ROTATE_DEGREE_0) {
         WriteDAT_8(0x08);
     } else if (dir == ROTATE_DEGREE_90) {
-        WriteDAT_8(0x60);
+        WriteDAT_8(0x68);
     } else if (dir == ROTATE_DEGREE_180) {
-        WriteDAT_8(0xC0);
+        WriteDAT_8(0xC8);
     } else {
-        WriteDAT_8(0xA0);
+        WriteDAT_8(0xA8);
     }
     JD9853_SetRange(0, LCD_W - 1, 0, LCD_H - 1);
 }
@@ -238,9 +246,10 @@ static int JD9853_init(void)
     lcd_bl_pinstate(BL_ON);
 
     JD9853_io_init();
-    printf("[lcd] LCD_JD9853 init_start\n");
+    printf("[lcd] LCD_JD9853 init_start %dx%d rot=%d\n",
+           LCD_W, LCD_H, JD9853_INIT_ROTATE);
     JD9853_reg_cfg();
-    JD9853_set_direction(ROTATE_DEGREE_0);
+    JD9853_set_direction(JD9853_INIT_ROTATE);
     init_TE(JD9853_Fill);
     printf("[lcd] LCD_JD9853 config succes\n");
     return 0;

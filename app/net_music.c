@@ -283,6 +283,21 @@ static int net_music_set_dec_volume(int step)
     return 0;
 }
 
+int watch_net_music_set_volume(int vol)
+{
+    if (vol < MIN_VOLUME_VALUE) {
+        vol = MIN_VOLUME_VALUE;
+    } else if (vol > MAX_VOLUME_VALUE) {
+        vol = MAX_VOLUME_VALUE;
+    }
+    if (!__this->dec_server) {
+        __this->volume = vol;
+        syscfg_write(CFG_MUSIC_VOL, &__this->volume, sizeof(__this->volume));
+        return 0;
+    }
+    return net_music_set_dec_volume(vol - __this->volume);
+}
+
 static int net_music_dec_seek(int seek_step)
 {
     union audio_req r = {0};

@@ -21,6 +21,7 @@
 #include "fw_version.h"
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 #include "lcd_drive.h"
+#include "lcd_config.h"         /* LCD_W/H, 汉字冒烟布局用 */
 #endif
 
 /* CherryUSB 组合设备 2×CDC + MSC(RAM 盘) (高速口 USB1) */
@@ -298,16 +299,15 @@ static void hw_timer_task(void *p)
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 #if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
 #include "lvgl.h"
+#include "watch_ui.h"
 extern void lv_init(void);
 extern void lv_port_disp_init(void);
 extern void lv_port_indev_init(void);
-extern void lv_demo_benchmark(void);
 
 static void lv_tick_10ms_cb(void *p)
 {
     extern void lv_tick_inc(u32 tick);
-    lv_tick_inc(10);            /* sys_timer 粒度=OS tick(10ms), 心跳须与实
-                                 * 际周期一致, 否则动画/跑分计时失真 */
+    lv_tick_inc(10);            /* sys_timer 粒度=OS tick(10ms) */
 }
 #endif
 
@@ -338,14 +338,12 @@ static void lcd_test_task(void *p)
     }
 
 #if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
-    /* LVGL benchmark(third/lvgl_port 移植层): disp/indev 在本任务内初始化
-     * (user_lcd_init 幂等, disp_init 里重复调用是 no-op); tick 走 sys_timer */
-    printf("[lcd] panel ready %dx%d, start LVGL benchmark\n", lcd_w, lcd_h);
+    printf("[lcd] panel ready %dx%d, start watch UI\n", lcd_w, lcd_h);
     lv_init();
     sys_timer_add(NULL, lv_tick_10ms_cb, 10);
     lv_port_disp_init();
     lv_port_indev_init();
-    lv_demo_benchmark();
+    watch_ui_start();
     while (1) {
         lv_task_handler();
         os_time_dly(1);         /* 10ms: LVGL 建议 5-10ms 轮询一次 */
@@ -420,7 +418,7 @@ void app_main()
     os_task_create(lcd_test_task,    NULL, 22, 2048, 0, "lcd_test");
 #endif
     /* USB 设备模式: MSC 4MB RAM 盘(含虚拟U盘自动升级看门, 见 cdc_acm_msc_app.c) */
-    // os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
+    os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
     os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
     /* 按键框架先就绪; BT/WiFi 延后自启(避开 USB 枚举窗, 见 bt_wifi_start_deferred) */
     extern void key_early_init(void);

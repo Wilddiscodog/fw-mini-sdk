@@ -1235,4 +1235,20 @@ int bt_music_key_event_handler(struct key_event *key)
     return false;
 }
 
+/* ---- watch UI 薄封装 ---- */
+int bt_music_ui_play_pause(void)
+{
+    return bt_music_play_pause();
+}
+
+int bt_music_ui_vol_step(int step)
+{
+    return bt_music_set_volume_step(step);
+}
+
+int bt_music_ui_is_playing(void)
+{
+    return __this->media_play_flag ? 1 : 0;
+}
+
 #endif

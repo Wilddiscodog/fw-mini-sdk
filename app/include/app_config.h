@@ -27,7 +27,7 @@
 #define TCFG_LCD_ST7789V_ENABLE         0
 #define TCFG_LCD_ST7735S_ENABLE         0
 #define TCFG_LCD_480x272_8BITS          0
-#define HORIZONTAL_SCREEN               0   /* 0=竖屏 240x320 */
+#define HORIZONTAL_SCREEN               1   /* 1=横屏 320x240(逆时针旋转 90°) */
 #endif
 
 /* C++ 支持开关在 Makefile: make MINI_CXX_SUPPORT=1 (改后 make clean)
@@ -68,6 +68,9 @@
 
 #define VDC14_VOL_SEL_LEVEL                     VDC14_VOL_SEL_140V
 #define SYSVDD_VOL_SEL_LEVEL                    SYSVDD_VOL_SEL_126V
+
+/* ADKEY(PB01) 与开关机键复用: 长按进 P33 软关机, 再按唤醒冷启动 */
+#define CONFIG_PRESS_LONG_KEY_POWERON
 
 #define CONFIG_DEBUG_ENABLE
 /* 日志镜像到 USB CDC: 打开后 putbyte 把日志写入环形缓冲, usb_log_task 经
@@ -161,6 +164,11 @@
 #define TCFG_TOUCH_CST816_ENABLE    1
 #else
 #define TCFG_TOUCH_CST816_ENABLE    0
+#endif
+
+/* ICM-42607 六轴: 与 CST816 同挂 PH0/PH1(iic0) */
+#ifndef TCFG_ICM42607_ENABLE
+#define TCFG_ICM42607_ENABLE        1
 #endif
 
 /* ================ ADC 按键(原厂 key_driver/adkey 框架, PB01 电阻梯) ================

@@ -401,6 +401,10 @@ c_SRC_FILES += ../../../driver/lcd/lcd_te_stub.c
 INCLUDES    += -I../../../driver/lcd/include
 endif
 
+# ICM-42607 六轴 (PH0/PH1 iic0, 与触摸共总线)
+c_SRC_FILES += ../../../driver/imu/icm42607.c
+INCLUDES    += -I../../../driver/imu/include
+
 # ---------------- jl_math 源码库(MINI_AUDIO_SUPPORT, AEC 回采用) ----------------
 # 原厂 apps/common/jl_math 同目录: AEC/DNS 的 WOLA 滤波器组引用 flrfft/flrifft
 # 等浮点 FFT 原语(闭源库内没有, 由应用层源码提供)
@@ -413,18 +417,24 @@ c_SRC_FILES += ../../../app/jl_math/nn_function_vec.c
 INCLUDES    += -I../../../app/jl_math
 endif
 
-# LVGL 8.2.0: 源码在 third/lvgl/lvgl (无 .git, 随仓库推送); lcd_test 跑 demos/benchmark
+# LVGL 8.2.0 + watch_ui 智能手表 Demo
 ifeq ($(MINI_LVGL_SUPPORT),1)
 LVGL_DIR  := ../../../third/lvgl/lvgl
 rwildcard = $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
 LVGL_C_SRC += $(call rwildcard, $(LVGL_DIR)/src/, *.c)
-LVGL_C_SRC += $(call rwildcard, $(LVGL_DIR)/demos/benchmark/, *.c)
 c_SRC_FILES += $(LVGL_C_SRC)
 c_SRC_FILES += ../../../third/lvgl_port/driver/lv_port_disp.c
 c_SRC_FILES += ../../../third/lvgl_port/driver/lv_port_indev.c
+c_SRC_FILES += ../../../app/watch_ui/watch_ui.c
+c_SRC_FILES += ../../../app/watch_ui/watch_home.c
+c_SRC_FILES += ../../../app/watch_ui/watch_dropdown.c
+c_SRC_FILES += ../../../app/watch_ui/watch_backlight.c
+c_SRC_FILES += ../../../app/watch_ui/watch_volume.c
+c_SRC_FILES += ../../../app/watch_ui/watch_power.c
+c_SRC_FILES += ../../../app/watch_ui/watch_apps.c
 INCLUDES    += -I../../../third/lvgl -I$(LVGL_DIR) -I$(LVGL_DIR)/src
-INCLUDES    += -I$(LVGL_DIR)/demos -I$(LVGL_DIR)/demos/benchmark
 INCLUDES    += -I../../../third/lvgl_port/driver -I../../../driver/lcd/include
+INCLUDES    += -I../../../app/watch_ui -I../../../app/include
 DEFINES     += -DLV_CONF_INCLUDE_SIMPLE
 endif
 
