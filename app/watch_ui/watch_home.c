@@ -14,6 +14,8 @@ static lv_obj_t *s_dots[2];
 static void tile_click_cb(lv_event_t *e)
 {
     enum watch_app_id id = (enum watch_app_id)(uintptr_t)lv_event_get_user_data(e);
+    printf("[home] tile click id=%d (input_en=%u dd=%u)\n", id,
+           watch_power_input_enabled(), watch_ui_dropdown_is_open());
     if (!watch_power_input_enabled()) {
         return;
     }

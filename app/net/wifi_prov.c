@@ -732,22 +732,37 @@ static int ota_spill_ensure(void)
     return 0;
 }
 
-/* 对刚收到的文件字节做 CRC(跳过双头 64B), 并累加 recv_total */
+/* 对刚收到的文件字节做 CRC(跳过双头 64B), 并累加 recv_total。
+ * 2026-10-29 修: 字节计入钳在 file_size —— 文件尾之后漏进的多余字节(实测
+ * +61B, 恰为 multipart 结束边界长度)不再污染 CRC/计数, 那是 spill 模式
+ * 大文件(>缓存)升级 crc 校验失败的根因 */
 static void ota_account_bytes(const u8 *data, int len)
 {
     int cs = 0;
     int left;
     int po;
+    u32 take;
 
     if (len <= 0) {
         return;
     }
-    while (len > cs && upl.crc_skip) {
+    take = (u32)len;
+    if (upl.file_size) {
+        if (upl.recv_total >= upl.file_size) {
+            take = 0;                    /* 已收满: 之后的字节全部丢弃 */
+        } else {
+            u32 remain = upl.file_size - upl.recv_total;
+            if (take > remain) {
+                take = remain;
+            }
+        }
+    }
+    while (take > (u32)cs && upl.crc_skip) {
         cs++;
         upl.crc_skip--;
     }
-    if (len > cs) {
-        left = len - cs;
+    if (take > (u32)cs) {
+        left = (int)(take - (u32)cs);
         po = cs;
         while (left > 0) {
             u16 chunk = left > 4096 ? 4096 : (u16)left;
@@ -757,7 +772,7 @@ static void ota_account_bytes(const u8 *data, int len)
             left -= chunk;
         }
     }
-    upl.recv_total += len;
+    upl.recv_total += take;
 }
 
 static void ota_tcp_drain(int conn)
@@ -875,7 +890,9 @@ static int ota_cache_feed(int conn, u8 *cache, u32 cap, u32 *fill,
     return 0;
 }
 
-/* 喂文件字节: 入缓存 + CRC/计数(spill 里已 account 过的不再重复) */
+/* 喂文件字节: 入缓存 + CRC/计数(spill 里已 account 过的不再重复)。
+ * 入缓存字节同样钳在 file_size —— 尾部多余字节不入 flash(multipart 尾由
+ * 收尾循环丢弃) */
 static int ota_feed_file(int conn, u8 *cache, u32 cap, u32 *fill,
                          const u8 *data, int len)
 {
@@ -883,6 +900,18 @@ static int ota_feed_file(int conn, u8 *cache, u32 cap, u32 *fill,
 
     if (len <= 0) {
         return 0;
+    }
+    if (upl.file_size) {
+        if (upl.recv_total >= upl.file_size) {
+            return 0;                    /* 已收满 */
+        }
+        u32 remain = upl.file_size - upl.recv_total;
+        if ((u32)len > remain) {
+            len = (int)remain;
+        }
+        if (len <= 0) {
+            return 0;
+        }
     }
     fr = ota_cache_feed(conn, cache, cap, fill, data, len);
     if (fr) {

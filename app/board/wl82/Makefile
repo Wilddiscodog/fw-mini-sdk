@@ -241,7 +241,7 @@ c_SRC_FILES := \
 	../../../app/bt_decode.c \
 	../../../app/net_music.c \
 	../../../app/audio_config.c \
-	../../../app/cdc_acm_msc_app.c \
+	../../../app/cdc_dual_app.c \
 	../../../app/audio_demo.c \
 	../../../app/periph_demo.c \
 	../../../app/usbh_msc_app.c \

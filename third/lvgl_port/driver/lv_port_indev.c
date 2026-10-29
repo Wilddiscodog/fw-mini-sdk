@@ -35,13 +35,19 @@ extern u8 touch_lvgl_staus;
 
 static bool touchpad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
 {
-//		printf("<<<<<<<<<<<<touch_lvgl_staus = %d , x = %d, y = %d",touch_lvgl_staus , touch_lvgl_x , touch_lvgl_y);
+    static u8 last_st = 0xff;            /* 诊断: 状态跳变打印一次(LVGL 是否收到输入) */
     data->point.x = hdl->x;
     data->point.y = hdl->y;
     if (hdl->status) { //触摸按下了
         data->state = LV_INDEV_STATE_PR;
     } else {
         data->state = LV_INDEV_STATE_REL;
+    }
+    if (data->state != last_st) {
+        last_st = data->state;
+        printf("[indev] %s (%d,%d)\n",
+               data->state == LV_INDEV_STATE_PR ? "PR" : "REL",
+               data->point.x, data->point.y);
     }
     return false;
 }

@@ -5,6 +5,7 @@
 #include "system/includes.h"
 #include "device/device.h"
 #include "device/iic.h"
+#include "asm/wdt.h"
 #include "app_config.h"
 #include "icm42607.h"
 
@@ -66,16 +67,45 @@ static int icm_read_regs(u8 reg, u8 *buf, u8 len)
 static int probe_addr(u8 addr7)
 {
     u8 id = 0;
+    int err;
     s_addr_w = (u8)(addr7 << 1);
     s_addr_r = (u8)((addr7 << 1) | 1);
-    if (icm_read_regs(REG_WHO_AM_I, &id, 1)) {
+    err = icm_read_regs(REG_WHO_AM_I, &id, 1);
+    if (err) {
+        printf("[icm42607] probe 0x%02x: NACK/IO err=%d\n", addr7, err);
         return -1;
     }
     if (id != WHO_AM_I_VAL) {
+        printf("[icm42607] probe 0x%02x: ACK but WHO_AM_I=0x%02x (want 0x%02x)\n",
+               addr7, id, WHO_AM_I_VAL);
         return -2;
     }
     s_whoami = id;
     return 0;
+}
+
+/* 总线扫描: 探测 0x03~0x77 全部 7bit 地址的 ACK(写地址+STOP 最小事务)。
+ * 诊断用: 确认陀螺仪实际地址, 同时验证总线本身(0x15=CST816 应应答) */
+static void icm_scan_bus(void)
+{
+    u8 found = 0;
+    printf("[icm42607] i2c0 scan 0x03-0x77:\n");
+    for (u8 a = 0x03; a <= 0x77; a++) {
+        int err;
+        s_addr_w = (u8)(a << 1);
+        s_addr_r = (u8)((a << 1) | 1);
+        err = dev_ioctl(s_iic, IIC_IOCTL_START, 0);
+        err |= dev_ioctl(s_iic, IIC_IOCTL_TX_WITH_START_BIT, s_addr_w);
+        dev_ioctl(s_iic, IIC_IOCTL_STOP, 0);
+        if (err == 0) {
+            printf("[icm42607]   ACK @0x%02x\n", a);
+            found++;
+        }
+        wdt_clear();
+    }
+    if (!found) {
+        printf("[icm42607]   no device acked (bus dead or all wiring off)\n");
+    }
 }
 
 int icm42607_init(void)
@@ -90,6 +120,8 @@ int icm42607_init(void)
         printf("[icm42607] iic0 open fail\n");
         return -1;
     }
+
+    icm_scan_bus();      /* 先扫总线确认实际地址(用户要求; 0x15=CST816 应在列) */
 
     if (probe_addr(ADDR7_AD0_L) && probe_addr(ADDR7_AD0_H)) {
         printf("[icm42607] WHO_AM_I probe fail (try 0x68/0x69)\n");

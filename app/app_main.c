@@ -313,8 +313,9 @@ static void lv_tick_10ms_cb(void *p)
 
 static void lcd_test_task(void *p)
 {
-    /* 延迟点屏, 避免开机 EMI 刷屏干扰 USB 枚举 */
-    os_time_dly(800);
+    /* 新启动序: 屏最先起(仅留 1s 电源稳定)。旧 8s 延迟是躲 USB 枚举窗,
+     * USB 已移到最后, 不再需要; 若 EMI 干扰 USB 枚举复现, 用枚举间隙窗口解决 */
+    os_time_dly(100);
     user_lcd_init();
 
     struct lcd_interface *lcd = lcd_get_hdl();
@@ -372,16 +373,12 @@ static void usb_mode_task(void *p)
     }
 }
 #else
-extern void msc_only_init(uint8_t busid, uintptr_t reg_base);
+extern void usb_dual_cdc_init(uint8_t busid, uintptr_t reg_base);
 static void usb_mode_task(void *p)
 {
     os_time_dly(100);    /* 等 boot 日志打完 */
-#if MINI_USB_CDC_ENABLE
-    printf("[usb] CherryUSB CDC(log) + MSC 3MB RAM disk composite\n");
-#else
-    printf("[usb] CherryUSB MSC-only 3MB RAM disk on EP1\n");
-#endif
-    msc_only_init(CHERRYUSB_BUSID, JL82_HUSB_SIE_BASE);
+    printf("[usb] CherryUSB Dual-CDC (2x serial, no MSC)\n");
+    usb_dual_cdc_init(CHERRYUSB_BUSID, JL82_HUSB_SIE_BASE);
 
     while (1) {
         os_time_dly(10000);
@@ -415,16 +412,18 @@ void app_main()
     // os_task_create(adc_task,         NULL,  8, 512,  0, "adc_task");
     os_task_create(hw_timer_task,    NULL,  8, 512,  0, "hw_timer");
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
+    /* 启动序(用户定): ①屏(lcd_test_task, 任务优先级 22 最先跑) */
     os_task_create(lcd_test_task,    NULL, 22, 2048, 0, "lcd_test");
 #endif
-    /* USB 设备模式: MSC 4MB RAM 盘(含虚拟U盘自动升级看门, 见 cdc_acm_msc_app.c) */
-    os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
-    os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
-    /* 按键框架先就绪; BT/WiFi 延后自启(避开 USB 枚举窗, 见 bt_wifi_start_deferred) */
+    /* ②BT/WiFi: 不再等 USB(见 bt_wifi_boot_task 注释) */
     extern void key_early_init(void);
     extern void bt_wifi_start_deferred(void);
     key_early_init();
     bt_wifi_start_deferred();
+    /* ③USB 设备模式最后起: MSC 4MB RAM 盘(含虚拟U盘自动升级看门,
+     * 见 cdc_acm_msc_app.c)。枚举窗与已运行射频共存, Win 代码10 若复现再调 */
+    os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
+    os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT && !MINI_BT_SPEAKER_EN
     /* 音箱模式走 A2DP/HFP, 不再跑 mic→DAC 回环自检(抢 audio 设备) */
     extern void audio_demo_start(void);

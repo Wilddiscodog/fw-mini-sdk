@@ -39,19 +39,13 @@
 #define MINI_USB_MODE_HOST     1   /* MSC 主机(U盘) */
 #define MINI_USB_MODE          MINI_USB_MODE_DEVICE
 
-/* ================ 固件升级: MSC 虚拟U盘自动升级(双备份) =================
- * 用法: 把构建产出的 update-ota.ufw 拖入设备虚拟U盘 → 文件静默 3s 后
- *       自动校验 CRC → 写备用 bank → 烧 boot info → 2s 后复位进新固件。
- * 前提(重要):
- *   - 双备份改变 flash 布局(app 区双份), 切换后必须整体烧录一次 jl_isd.ufw,
- *     之后的版本才能走虚拟U盘升级
- *   - 升级文件由 isd_download 产出: download.bat 带 -update_files normal 时生成
- *     cpu/wl82/tools/db_update_files_data.bin(明文 JL_FILE_HEAD, name=update_data),
- *     自动改名复制为 update-ota.ufw。注意: 同目录的 db_update_data.bin 是密文头,
- *     设备端 jl_file_head_valid_check(纯 CRC16-XMODEM, 不解密)校验不过, 不能用
- * 实现: driver/update/update.c + net_update.c(原厂 net_update.c 移植) +
- *       liba/update.a(双备份烧写) + cdc_acm_msc_app.c(检测/触发) */
-#define CONFIG_DOUBLE_BANK_ENABLE  1   /* 0=单备份(不支持虚拟U盘升级) */
+/* ================ 固件升级: 双备份烧写后端(网页 OTA 用) =================
+ * 升级途径: WiFi 网页 OTA(wifi_prov.c, 上传整包→SDRAM→net_update 流式烧写)
+ * → 备用 bank → 烧 boot info → 2s 后复位进新固件。
+ * 历史注: 旧"虚拟U盘拖拽升级"随 MSC 接口删除一并移除(2026-10, USB 改双 CDC),
+ * TCFG_VIR_UPDATE_ENABLE 现仅作为 net_update.c 双备份烧写后端的编译门。
+ * 前提: 双备份改变 flash 布局(app 区双份), 切换后必须整体烧录一次 jl_isd.ufw */
+#define CONFIG_DOUBLE_BANK_ENABLE  1   /* 0=单备份(不支持在线升级) */
 #define TCFG_VIR_UPDATE_ENABLE     CONFIG_DOUBLE_BANK_ENABLE
 
 //*********************************************************************************//
@@ -73,13 +67,12 @@
 #define CONFIG_PRESS_LONG_KEY_POWERON
 
 #define CONFIG_DEBUG_ENABLE
-/* 日志镜像到 USB CDC: 打开后 putbyte 把日志写入环形缓冲, usb_log_task 经
- * cdc_write_data 从 CDC 口发出(同时仍镜像 UART0, 双通道都有日志)。
- * 电脑端打开 CDC 串口(DTR 置位)即收日志; 串口未开时日志只入缓冲不外发。 */
-#define CONFIG_USB_DEBUG_ENABLE
+/* 历史注: 旧"日志镜像到 USB CDC"(CONFIG_USB_DEBUG_ENABLE, putbyte→环形缓冲
+ * →cdc_write_data)已随 USB 改双 CDC 彻底移除(2026-10)。日志只走 UART0(PB2);
+ * WiFi 库日志由 wifi_log_mute.c 静音(其启用条件含 !CONFIG_USB_DEBUG_ENABLE,
+ * 现恒满足)。两个 CDC 均为数据串口, 不承载日志。 */
 
-/* USB 设备形态: 1=CDC+MSC 组合(CDC 为日志输出口); 0=MSC-only(无日志口)。 */
-#define MINI_USB_CDC_ENABLE    1
+/* USB 设备形态: 双 CDC-ACM 虚拟串口(无 MSC), 见 cdc_dual_app.c */
 
 /* ================ 内置音频(MIC + DAC + AEC, MINI_AUDIO_SUPPORT) =================
  * Makefile: MINI_AUDIO_SUPPORT 默认 1(蓝牙音箱需要)。

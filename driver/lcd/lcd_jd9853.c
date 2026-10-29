@@ -36,9 +36,10 @@
 #define ROTATE_DEGREE_270  3
 
 #if HORIZONTAL_SCREEN
-#define JD9853_INIT_ROTATE  ROTATE_DEGREE_90
+#define JD9853_INIT_ROTATE  ROTATE_DEGREE_270
 #else
-#define JD9853_INIT_ROTATE  ROTATE_DEGREE_0
+/* 上电实测基准方向反 180°, 故竖屏默认 180(用户 2026-10 现场校准) */
+#define JD9853_INIT_ROTATE  ROTATE_DEGREE_180
 #endif
 
 void msleep(unsigned int ms);

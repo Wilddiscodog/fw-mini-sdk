@@ -643,27 +643,18 @@ void bt_wifi_start(void)
 /* 延后自启: 必须等 USB SET_CONFIGURATION 完成后再拉射频。
  * 旧策略固定延后 5s, 但主机常在 5~8s 才配完 MSC, 与 BT/WiFi 初始化重叠 → Win 代码10。 */
 #ifndef BT_WIFI_USB_WAIT_TICKS
-#define BT_WIFI_USB_WAIT_TICKS  1500  /* 最长等 15s; tick=10ms */
-#endif
-
-#if (MINI_USB_MODE == MINI_USB_MODE_DEVICE) && !MINI_USB_CDC_ENABLE
-extern volatile u8 g_usb_host_configured;
-#else
-static volatile u8 g_usb_host_configured = 1; /* 非 MSC 设备模式: 不挡 */
+#define BT_WIFI_USB_WAIT_TICKS  1500  /* 最长等 15s; tick=10ms(已停用, 见下) */
 #endif
 
 static void bt_wifi_boot_task(void *p)
 {
     (void)p;
-    int waited = 0;
-    printf("[boot] wait USB configured (max %d ms)...\n", BT_WIFI_USB_WAIT_TICKS * 10);
-    while (waited < BT_WIFI_USB_WAIT_TICKS && !g_usb_host_configured) {
-        os_time_dly(1);
-        waited++;
-    }
+    /* 启动序改为 屏→BT/WiFi→USB(用户定)后, 射频不再等 USB 配置——
+     * 旧等待与 New 顺序矛盾(USB 在后, 等它会反向阻塞 BT/WiFi)。
+     * 风险: USB 枚举窗与已运行射频共存, 旧版"Win 代码10"问题可能回归,
+     * 若复现再以射频间隙窗口解决 */
+    printf("[boot] starting BT + WiFi immediately (usb starts last)\n");
     mini_ensure_stable_mac();
-    printf("[boot] usb_cfg=%u waited=%dms, starting BT + WiFi\n",
-           (unsigned)g_usb_host_configured, waited * 10);
     bt_wifi_start();
     while (1) {
         os_time_dly(10000);
