@@ -125,6 +125,19 @@ int icm42607_init(void)
 
     if (probe_addr(ADDR7_AD0_L) && probe_addr(ADDR7_AD0_H)) {
         printf("[icm42607] WHO_AM_I probe fail (try 0x68/0x69)\n");
+        /* 0x18 = LIS3DH/SC7A20/BMA250 系三轴加速度计典型地址: 读 ST 系
+         * WHO_AM_I(0x0F) 认芯片, 判断板上实际焊的是不是六轴 */
+        {
+            u8 id = 0;
+            s_addr_w = (u8)(0x18 << 1);
+            s_addr_r = (u8)((0x18 << 1) | 1);
+            if (icm_read_regs(0x0F, &id, 1) == 0) {
+                printf("[icm42607] 0x18 reg0x0F(WHO_AM_I_ST)=0x%02x"
+                       " (LIS3DH=0x33, SC7A20=0x11)\n", id);
+            } else {
+                printf("[icm42607] 0x18 reg0x0F read NACK\n");
+            }
+        }
         return -2;
     }
     printf("[icm42607] WHO_AM_I=0x%02x addr=0x%02x\n", s_whoami, s_addr_w >> 1);
