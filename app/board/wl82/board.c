@@ -246,7 +246,26 @@ void sys_power_poweroff_wait_powerkey_up(void)
 void sys_power_poweroff(void)
 {
 	printf("[power] soft poweroff enter\n");
+	/*
+	 * V1.7.0 关机/唤醒曾正常; 之后双 CDC(先 CherryUSB 后原厂栈)在 USB 线
+	 * 仍插着时, 关机过程 OUT/枚举中断会拖住双核同步, 卡在 other cpu hold,
+	 * 实际没进 P33 → 按键无法唤醒。关机前必须先停 USB。
+	 */
+#if MINI_USB_STACK_CHERRYUSB
+	{
+		extern int usbd_deinitialize(u8 busid);
+		usbd_deinitialize(0);
+		printf("[power] cherryusb stopped\n");
+	}
+#elif defined(TCFG_PC_ENABLE) && TCFG_PC_ENABLE
+	{
+		extern void usb_stop(const u8 usbfd);
+		usb_stop((u8)MINI_USB_JL_ID);
+		printf("[power] jl usb%d stopped\n", MINI_USB_JL_ID);
+	}
+#endif
 	sys_power_poweroff_wait_powerkey_up();
+	printf("[power] key up, soft_poweroff...\n");
 	power_set_soft_poweroff(0);
 }
 

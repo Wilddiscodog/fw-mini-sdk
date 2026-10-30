@@ -7,11 +7,25 @@
 extern "C" {
 #endif
 
+#ifndef CDC_DUAL_ENABLE
+#define CDC_DUAL_ENABLE     0
+#endif
+
+#if CDC_DUAL_ENABLE
+#define CDC_PORT_NUM        2
+#else
+#define CDC_PORT_NUM        1
+#endif
+
 u32 cdc_desc_config(const usb_dev usb_id, u8 *ptr, u32 *itf);
 void cdc_set_wakeup_handler(const usb_dev usb_id, void (*handle)(struct usb_device_t *usb_device));
 void cdc_set_output_handle(const usb_dev usb_id, void *priv, int (*output_handler)(void *priv, u8 *buf, u32 len));
+void cdc_set_output_handle_port(const usb_dev usb_id, u8 port, void *priv,
+                                int (*output_handler)(void *priv, u8 *buf, u32 len));
 u32 cdc_read_data(const usb_dev usb_id, u8 *buf, u32 len);
+u32 cdc_read_data_port(const usb_dev usb_id, u8 port, u8 *buf, u32 len);
 u32 cdc_write_data(const usb_dev usb_id, u8 *buf, u32 len);
+u32 cdc_write_data_port(const usb_dev usb_id, u8 port, u8 *buf, u32 len);
 u32 cdc_write_inir(const usb_dev usb_id, u8 *buf, u32 len);
 void cdc_register(const usb_dev usb_id);
 void cdc_release(const usb_dev usb_id);

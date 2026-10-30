@@ -49,27 +49,29 @@ echo "copy /b text.bin+data.bin+ram0_data.bin+cache_ram_data.bin app.bin" >> ${P
 #if defined CONFIG_UI_FILE_SAVE_IN_RESERVED_EXPAND_ZONE || defined CONFIG_UI_FILE_SAVE_IN_RESERVED_ZONE
 echo "packres\packres.exe -n ui -o packres/UIPACKRES ui_res" >> ${PROJ_BUILD}
 #else
-echo "set UI_RES=ui_res" >> ${PROJ_BUILD}
+/* fw-mini-sdk: LVGL watch drops legacy ui_res; keep slot empty */
+echo "set UI_RES=" >> ${PROJ_BUILD}
 #endif
 #endif
 #if defined CONFIG_AUDIO_ENABLE && defined CONFIG_VOICE_PROMPT_FILE_PATH
 #if defined CONFIG_VOICE_PROMPT_FILE_SAVE_IN_RESERVED_EXPAND_ZONE || defined CONFIG_VOICE_PROMPT_FILE_SAVE_IN_RESERVED_ZONE
 echo "packres\packres.exe -n tone -o packres/AUPACKRES audlogo" >> ${PROJ_BUILD}
 #else
-echo "set AUDIO_RES=audlogo" >> ${PROJ_BUILD}
+/* slim prompts: audlogo_mini (~0.3MB) instead of full audlogo (~1.25MB) */
+echo "set AUDIO_RES=audlogo_mini" >> ${PROJ_BUILD}
 #endif
 #endif
 #if CONFIG_DOUBLE_BANK_ENABLE
 echo "set UPDATE_FILES=-update_files normal" >> ${PROJ_BUILD}
 #endif
 #if defined CONFIG_SFC_ENABLE
-echo "isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.bin cfg_tool.bin -res %AUDIO_RES% %UI_RES% cfg -reboot 500 %UPDATE_FILES%" >> ${PROJ_BUILD}
+echo "isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.bin cfg_tool.bin -res %AUDIO_RES% cfg -reboot 500 %UPDATE_FILES%" >> ${PROJ_BUILD}
 #else
 echo "set run_addr=0x2000" >> ${PROJ_BUILD}
 echo "set load_addr=0x4000" >> ${PROJ_BUILD}
 echo "set mask_addr=0x100000" >> ${PROJ_BUILD}
 echo "uboot_lz4.exe app.bin app.lz4 %run_addr% %load_addr% rom.image %mask_addr%" >> ${PROJ_BUILD}
-echo "isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.lz4 cfg_tool.bin -res %AUDIO_RES% %UI_RES% cfg -reboot 500 %UPDATE_FILES% -expend-bin" >> ${PROJ_BUILD}
+echo "isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.lz4 cfg_tool.bin -res %AUDIO_RES% cfg -reboot 500 %UPDATE_FILES% -expend-bin" >> ${PROJ_BUILD}
 #endif
 
 
@@ -145,7 +147,13 @@ copy /b text.bin+data.bin+ram0_data.bin+cache_ram_data.bin app.bin
 #if (defined CONFIG_UI_FILE_SAVE_IN_RESERVED_EXPAND_ZONE || defined CONFIG_UI_FILE_SAVE_IN_RESERVED_ZONE)
 packres\packres.exe -n ui -o packres/UIPACKRES ui_res
 #else
-set UI_RES=ui_res
+/* 手表 PNG 图标等(可选); LVGL 另有 C 数组回退, 无此包也能显示 */
+if exist ui_res\watch (
+packres\packres.exe -n ui -o packres/UIPACKRES ui_res
+set UI_RES=packres/UIPACKRES
+) else (
+set UI_RES=
+)
 #endif
 #endif
 
@@ -153,9 +161,17 @@ set UI_RES=ui_res
 #if defined CONFIG_VOICE_PROMPT_FILE_PATH && \
 (defined CONFIG_VOICE_PROMPT_FILE_SAVE_IN_RESERVED_EXPAND_ZONE || defined CONFIG_VOICE_PROMPT_FILE_SAVE_IN_RESERVED_ZONE)
 packres\packres.exe -n tone -o packres/AUPACKRES audlogo
+set AUDIO_RES=packres/AUPACKRES
 #else
-set AUDIO_RES=audlogo
+REM slim prompts; must stay on isd -res line (empty AUDIO_RES -> FLASH ~0x207000, EQ crash)
+set AUDIO_RES=audlogo_mini
+if not exist audlogo_mini (
+echo [ERR] missing tools\audlogo_mini , abort download
+exit /b 1
+)
 #endif
+#else
+set AUDIO_RES=
 #endif
 
 REM Chip KEY must ride an EXISTING template line: fixbat drops newly-added
@@ -194,11 +210,12 @@ set mask_addr=0x100000
 uboot_lz4.exe app.bin app.lz4 %run_addr% %load_addr% rom.image %mask_addr%
 REM @@@@@@@@@@@@@@@
 
-isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.lz4 cfg_tool.bin -res %AUDIO_RES% %UI_RES% %CFG_FILE% -reboot 500 %KEY_FILE% %UPDATE_FILES% -expend-bin
+isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.lz4 cfg_tool.bin -res %AUDIO_RES% %CFG_FILE% -reboot 500 %KEY_FILE% %UPDATE_FILES% -expend-bin
 
 #else
 
-isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.bin cfg_tool.bin -res %AUDIO_RES% %UI_RES% %CFG_FILE% -reboot 500 %KEY_FILE% %UPDATE_FILES% -expend-bin
+REM Keep audlogo_mini literal so fixbat/%var% loss cannot drop voice res
+isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.bin cfg_tool.bin -res audlogo_mini cfg -reboot 500 %KEY_FILE% %UPDATE_FILES% -expend-bin
 
 #endif
 

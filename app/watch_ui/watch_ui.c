@@ -10,6 +10,10 @@
 #include "watch_backlight.h"
 #include "watch_volume.h"
 #include "watch_power.h"
+#include "assets/watch_icons.h"
+#if LV_USE_PNG
+#include "extra/libs/png/lv_png.h"
+#endif
 
 static lv_obj_t *s_home;
 static lv_obj_t *s_app_layer;
@@ -18,12 +22,12 @@ static lv_timer_t *s_toast_tm;
 static u8 s_app_open;
 
 static const struct watch_app_desc s_apps[WATCH_APP_COUNT] = {
-    { "陀螺仪", "G",  app_gyro_create },
-    { "网络",   "N",  app_net_music_create },
-    { "蓝牙",   "B",  app_bt_music_create },
-    { "对讲",   "T",  app_walkie_create },
-    { "录音",   "R",  app_recorder_create },
-    { "设置",   "S",  app_settings_create },
+    { "陀螺仪", "G", &watch_icon_gyro,     0x00BCD4, app_gyro_create },
+    { "网络",   "N", &watch_icon_net,      0x7C4DFF, app_net_music_create },
+    { "蓝牙",   "B", &watch_icon_bt,       0x2979FF, app_bt_music_create },
+    { "对讲",   "T", &watch_icon_walkie,   0xFF6D00, app_walkie_create },
+    { "录音",   "R", &watch_icon_rec,      0xFF1744, app_recorder_create },
+    { "设置",   "S", &watch_icon_settings, 0x00E676, app_settings_create },
 };
 
 const struct watch_app_desc *watch_ui_app_table(void)
@@ -177,9 +181,23 @@ static void apply_theme(void)
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 }
 
+#if (defined WATCH_AUTO_OPEN_GYRO) && WATCH_AUTO_OPEN_GYRO
+static void auto_open_gyro_cb(lv_timer_t *t)
+{
+    (void)t;
+    printf("[watch] auto-open gyro app (input_en=%u)\n",
+           watch_power_input_enabled());
+    watch_ui_open_app(WATCH_APP_GYRO);
+    printf("[watch] gyro app_open=%u\n", watch_ui_app_is_open());
+}
+#endif
+
 void watch_ui_start(void)
 {
     printf("[watch] UI start %dx%d\n", LCD_W, LCD_H);
+#if LV_USE_PNG
+    lv_png_init();
+#endif
     watch_backlight_init();
     watch_volume_init();
     apply_theme();
@@ -201,5 +219,12 @@ void watch_ui_start(void)
     watch_power_init();
     lv_timer_create(watch_power_poll, 50, NULL);
     watch_power_boot_anim();
+#if (defined WATCH_AUTO_OPEN_GYRO) && WATCH_AUTO_OPEN_GYRO
+    /* 开机动画约 1.65s; 延时后再开 App(此时 s_busy 已清) */
+    {
+        lv_timer_t *tm = lv_timer_create(auto_open_gyro_cb, 2000, NULL);
+        lv_timer_set_repeat_count(tm, 1);
+    }
+#endif
     printf("[watch] UI ready\n");
 }

@@ -1,11 +1,7 @@
 /* fw-mini-sdk 演示应用：GPIO / UART / SPI / USB / 时钟 + FreeRTOS 任务
  *
- * 现象（烧录后）：
- *  - PA6 LED 每 500ms 翻转          —— GPIO 输出
- *  - 调试口(PB2)每 2s 打印时钟树    —— 时钟控制 clk_get()
- *  - UART1(PB3=TX,PB4=RX)回显数据   —— UART 设备框架 dev_open/dev_read
- *  - 上电 5s 后读一次 W25Qxx ID(PA1~PA4) —— SPI 主机 dev_ioctl
- *  - USB1(高速)枚举为 CDC 串口      —— CherryUSB 设备栈(回显 + 定时上行)
+ * USB: 默认原厂 driver/usb 单 CDC(MINI_USB_STACK_CHERRYUSB=0);
+ *      CherryUSB 双 CDC 暂关, 见 doc/CherryUSB_双CDC问题记录.md。
  */
 #include "app_config.h"
 #include "system/includes.h"
@@ -24,11 +20,12 @@
 #include "lcd_config.h"         /* LCD_W/H, 汉字冒烟布局用 */
 #endif
 
-/* CherryUSB 组合设备 2×CDC + MSC(RAM 盘) (高速口 USB1) */
-/* 实现在 cdc_acm_msc_app.c, 声明见下方 usb_mode_task 前 */
-
+#if MINI_USB_STACK_CHERRYUSB
 #define CHERRYUSB_BUSID     0
 #define JL82_HUSB_SIE_BASE  0x16000UL
+#else
+#include "usb/device/usb_stack.h"
+#endif
 
 /*============================ 中断列表 ============================ */
 const struct irq_info irq_info_table[] = {
@@ -356,29 +353,45 @@ static void lcd_test_task(void *p)
 }
 #endif
 
-/*============================ USB：按 MINI_USB_MODE 选择角色 ================= */
+/*============================ USB ================= */
+#if MINI_USB_STACK_CHERRYUSB
 #if (MINI_USB_MODE == MINI_USB_MODE_HOST)
 extern void usbh_host_demo_start(void);
 extern void usbh_host_poll(void);
 static void usb_mode_task(void *p)
 {
     os_time_dly(100);
-    usbh_host_demo_start();     /* 单 host bus 上统一启动，自动分流 CDC/HID/MSC */
+    usbh_host_demo_start();
 
-    /* 主机传输完成改为轮询模式(与闭源 usb_ctrl_transfer 轮询 CSR0 同款):
-     * 主机角色下 EP0 完成中断不触发(实测), 轮询是可靠路径。 */
     while (1) {
-        os_time_dly(1);         /* 10ms 轮询周期 */
-        usbh_host_poll();       /* 窗口读挂起集, 有挂起才处理(读即清除) */
+        os_time_dly(1);
+        usbh_host_poll();
     }
 }
 #else
 extern void usb_dual_cdc_init(uint8_t busid, uintptr_t reg_base);
 static void usb_mode_task(void *p)
 {
-    os_time_dly(100);    /* 等 boot 日志打完 */
+    os_time_dly(100);
     printf("[usb] CherryUSB Dual-CDC (2x serial, no MSC)\n");
     usb_dual_cdc_init(CHERRYUSB_BUSID, JL82_HUSB_SIE_BASE);
+
+    while (1) {
+        os_time_dly(10000);
+    }
+}
+#endif
+#else
+/* 原厂从机栈: 无 OTG 检测, 直接 usb_start(MINI_USB_JL_ID) */
+static void usb_mode_task(void *p)
+{
+    os_time_dly(100);
+#if CDC_DUAL_ENABLE
+    printf("[usb] JL dual-CDC id=%d: CDC1=idle, CDC2=userlog (no notify)\n", MINI_USB_JL_ID);
+#else
+    printf("[usb] JL stack CDC (id=%d, CherryUSB off)\n", MINI_USB_JL_ID);
+#endif
+    usb_start((usb_dev)MINI_USB_JL_ID);
 
     while (1) {
         os_time_dly(10000);
@@ -420,8 +433,7 @@ void app_main()
     extern void bt_wifi_start_deferred(void);
     key_early_init();
     bt_wifi_start_deferred();
-    /* ③USB 设备模式最后起: MSC 4MB RAM 盘(含虚拟U盘自动升级看门,
-     * 见 cdc_acm_msc_app.c)。枚举窗与已运行射频共存, Win 代码10 若复现再调 */
+    /* ③USB 最后起: 原厂单 CDC 或 CherryUSB(见 MINI_USB_STACK_CHERRYUSB) */
     os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
     os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT && !MINI_BT_SPEAKER_EN

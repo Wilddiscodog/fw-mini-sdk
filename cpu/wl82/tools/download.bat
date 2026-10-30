@@ -1,3 +1,4 @@
+
 @echo off
 
 @echo *********************************************************************
@@ -27,37 +28,27 @@ copy /b text.bin+data.bin+ram0_data.bin+cache_ram_data.bin app.bin
 
 
 
-set UI_RES=ui_res
-set AUDIO_RES=audlogo
 
-
+if exist ui_res\watch (
+packres\packres.exe -n ui -o packres/UIPACKRES ui_res
+set UI_RES=packres/UIPACKRES
+) else (
+set UI_RES=
+)
+REM 必须带 audlogo_mini: 缺了 FLASH_BIN 会从 ~0x259000 缩成 ~0x207000, 易在 EQ/VM 启动崩
+if not exist audlogo_mini (
+  echo [ERR] missing tools\audlogo_mini , abort download
+  exit /b 1
+)
 
 REM Chip KEY must ride an EXISTING template line: fixbat drops newly-added
 REM lines when download.bat already has accumulated multi-CR endings.
 set KEY_FILE=-key 0x7DF1.key
 REM set KEY_FILE=-key1 JL_791N-XXXX.key1 -mkey JL_791N-XXXX.mkey
 
-set CFG_FILE=cfg
-
-REM ����²���-update_files˵��
-REM 1/normal������ͨ���ļ�Ŀ¼�ṹ
-REM 2/embedded����ÿ���ļ�����ǰ������һ��ͷ
-
-REM ֻ����code + res�����ļ�
-REM -update_files normal
-REM ���ɵ��ļ�����Ϊ��db_update_files_data.bin
-
-REM ֻ����Ԥ������Դ�����ļ�
-REM -update_files embedded_only $(files) ,����$(files)Ϊ��Ҫ��ӵ���Դ�ļ�
-REM ���ɵ��ļ�����Ϊ��db_update_files_data.bin
-
-REM ����code + res + Ԥ������Դ�����ļ�
-REM -update_files embedded $(files) ,����$(files)Ϊ��Ҫ��ӵ���Դ�ļ�
-REM ���ɵ��ļ�����Ϊ��db_update_files_data.bin
-
-
 set UPDATE_FILES=-update_files normal
-isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.bin cfg_tool.bin -res %AUDIO_RES% %UI_RES% %CFG_FILE% -reboot 500 %KEY_FILE% %UPDATE_FILES% -expend-bin
+REM -res 写死路径, 避免 %AUDIO_RES% 未展开导致漏打包
+isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.bin cfg_tool.bin -res audlogo_mini cfg -reboot 500 %KEY_FILE% %UPDATE_FILES% -expend-bin
 
 
 

@@ -1,34 +1,35 @@
 /*
  * CherryUSB 设备 —— 双 CDC-ACM 虚拟串口(无 MSC)
  *
- * 端点规划(HUSB, bulk 512 @ HS):
- *   CDC1: EP2(0x02 OUT / 0x82 IN) 数据 + EP5(0x85 INT) 通知
- *   CDC2: EP3(0x03 OUT / 0x83 IN) 数据 + EP4(0x84 INT) 通知
+ * 端点规划(HUSB, bulk 512 @ HS; 避开 EP3 bulk=MSC 大缓冲特殊路径):
+ *   CDC1: EP1(0x01 OUT / 0x81 IN) 数据 + EP5(0x85 INT) 通知 —— 数据口(echo)
+ *   CDC2: EP2(0x02 OUT / 0x82 IN) 数据 + EP6(0x86 INT) 通知 —— 用户专用日志
  * 接口: IAD 复合, intf0/1=CDC1(comm/data), intf2/3=CDC2(comm/data)
  *
- * 行为: 两口独立, 均为数据串口 —— OUT 收到即回显(echo); DTR 打开时每 5s
- * 各发一行状态。历史注: 旧形态为 CDC(日志口)+MSC(3MB RAM 盘拖拽升级),
- * 2026-10 改双 CDC, 日志镜像(CONFIG_USB_DEBUG_ENABLE)与 U 盘升级
- * (TCFG_VIR_UPDATE_ENABLE)链路一并移除, 升级走 WiFi 网页 OTA(双备份保留)。
+ * CDC2 不对接系统 UART/printf; 仅通过 user_cdc_puts()/user_cdc_printf() 输出。
+ * 系统日志仍只走 UART0(PB2)。
  */
 #include "app_config.h"
 
 #include "os/os_api.h"
 #include "usbd_core.h"
 #include "usbd_cdc_acm.h"
+#include "user_cdc_log.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 #include <stdbool.h>
 
-#define CDC1_IN_EP    0x82
-#define CDC1_OUT_EP   0x02
+
+#define CDC1_IN_EP    0x81
+#define CDC1_OUT_EP   0x01
 #define CDC1_INT_EP   0x85
-#define CDC2_IN_EP    0x83
-#define CDC2_OUT_EP   0x03
-#define CDC2_INT_EP   0x84
+#define CDC2_IN_EP    0x82
+#define CDC2_OUT_EP   0x02
+#define CDC2_INT_EP   0x86
 
 #define USBD_VID           0xFFFF
-#define USBD_PID           0x0004    /* 形态变更递增 PID, 主机免残留旧枚举 */
+#define USBD_PID           0x0006    /* clear-halt 修复后再递增, 强制主机重枚举 */
 #define USBD_MAX_POWER     100
 #define USBD_LANGID_STRING 1033
 
@@ -70,7 +71,7 @@ static const uint8_t other_speed_config_descriptor_fs[] = {
 static const char *string_descriptors[] = {
     (const char[]){ 0x09, 0x04 }, /* Langid */
     "fw-mini-sdk",                /* Manufacturer */
-    "WL82 Dual-CDC",              /* Product */
+    "WL82 CDC1+UserLog",          /* Product */
     "WL82-0001",                  /* Serial Number */
 };
 
@@ -153,8 +154,6 @@ static struct cdc_port cdc_ports[CDC_PORT_NUM] = {
 volatile uint8_t dtr_intf_mask = 0;
 volatile uint8_t cdc_configured = 0;     /* SET_CONFIGURATION 完成 */
 
-static void usbd_cdc_send_serial_state(uint8_t busid, uint8_t ep, uint8_t intf, uint16_t state);
-
 static void usbd_event_handler(uint8_t busid, uint8_t event)
 {
     switch (event) {
@@ -178,25 +177,22 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
     }
 }
 
-/* ---- echo: OUT 收到即回显(数据口); 写复用各自 write_buf, IN 完成后重新武装 OUT ---- */
+/* ---- 两口均不 echo: 避免 EP IN 主动发送触发 JL clear-halt 风暴。
+ * CDC1=静默数据口; CDC2=仅 user_cdc_* 主动写。OUT 丢弃后重新武装。 ---- */
 static void usbd_cdc_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
     struct cdc_port *p = NULL;
+    (void)nbytes;
     for (int i = 0; i < CDC_PORT_NUM; i++) {
         if (cdc_ports[i].out_ep == ep) {
             p = &cdc_ports[i];
             break;
         }
     }
-    if (!p || nbytes > CDC_BUF_SIZE) {
-        if (p) {
-            usbd_ep_start_read(busid, p->out_ep, p->read_buf, CDC_BUF_SIZE);
-        }
+    if (!p) {
         return;
     }
-    memcpy(p->write_buf, p->read_buf, nbytes);
-    p->tx_busy = true;
-    usbd_ep_start_write(busid, p->in_ep, p->write_buf, nbytes);
+    usbd_ep_start_read(busid, p->out_ep, p->read_buf, CDC_BUF_SIZE);
 }
 
 static void usbd_cdc_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
@@ -215,7 +211,6 @@ static void usbd_cdc_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
         usbd_ep_start_write(busid, p->in_ep, NULL, 0);   /* ZLP 收尾 */
     } else {
         p->tx_busy = false;
-        usbd_ep_start_read(busid, p->out_ep, p->read_buf, CDC_BUF_SIZE);
     }
 }
 
@@ -225,29 +220,12 @@ struct usbd_endpoint cdc1_in_ep  = { .ep_addr = CDC1_IN_EP,  .ep_cb = usbd_cdc_b
 struct usbd_endpoint cdc2_out_ep = { .ep_addr = CDC2_OUT_EP, .ep_cb = usbd_cdc_bulk_out };
 struct usbd_endpoint cdc2_in_ep  = { .ep_addr = CDC2_IN_EP,  .ep_cb = usbd_cdc_bulk_in };
 
-/* ---- 通知端点(INT): 注册完成 ep_open 硬件配置; DTR 变化发 SERIAL_STATE ---- */
-USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc_notify_buf[16];
-
+/* ---- 通知端点: 仅完成 ep_open; 暂不主动发 SERIAL_STATE ---- */
 static void usbd_cdc_notify_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
     (void)busid;
     (void)ep;
     (void)nbytes;
-}
-
-static void usbd_cdc_send_serial_state(uint8_t busid, uint8_t ep, uint8_t intf, uint16_t state)
-{
-    cdc_notify_buf[0] = 0xA1;      /* bmRequestType: D2H | Class | Interface */
-    cdc_notify_buf[1] = 0x20;      /* SERIAL_STATE */
-    cdc_notify_buf[2] = 0;         /* wValue */
-    cdc_notify_buf[3] = 0;
-    cdc_notify_buf[4] = intf;      /* wIndex = comm 接口号 */
-    cdc_notify_buf[5] = 0;
-    cdc_notify_buf[6] = 2;         /* wLength */
-    cdc_notify_buf[7] = 0;
-    cdc_notify_buf[8] = (uint8_t)state;   /* UART 状态位图: bit0 DCD, bit1 DSR */
-    cdc_notify_buf[9] = (uint8_t)(state >> 8);
-    usbd_ep_start_write(busid, ep, cdc_notify_buf, 10);
 }
 
 struct usbd_endpoint cdc1_notify_ep = { .ep_addr = CDC1_INT_EP, .ep_cb = usbd_cdc_notify_in };
@@ -258,48 +236,81 @@ struct usbd_interface intf1; /* CDC1 data */
 struct usbd_interface intf2; /* CDC2 comm */
 struct usbd_interface intf3; /* CDC2 data */
 
-/* ---- DTR 弱回调覆盖: intf0=CDC1 comm, intf2=CDC2 comm ---- */
+/* ---- DTR: 只记掩码, 不发 SERIAL_STATE(通知 EP MPS=8, 10B 通知会截断且易搅乱 IN) ---- */
 void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
 {
+    (void)busid;
     if (intf == 0) {
         dtr_intf_mask = dtr ? (dtr_intf_mask | 0x01) : (dtr_intf_mask & ~0x01);
-        usbd_cdc_send_serial_state(busid, CDC1_INT_EP, 0, dtr ? 0x0003 : 0x0000);
         printf("[cdc1] DTR=%d\n", dtr);
     } else if (intf == 2) {
         dtr_intf_mask = dtr ? (dtr_intf_mask | 0x02) : (dtr_intf_mask & ~0x02);
-        usbd_cdc_send_serial_state(busid, CDC2_INT_EP, 2, dtr ? 0x0003 : 0x0000);
-        printf("[cdc2] DTR=%d\n", dtr);
+        printf("[cdc2] DTR=%d (user log)\n", dtr);
+        if (dtr && cdc_configured) {
+            const char *hi = "[userlog] CDC2 ready\r\n";
+            struct cdc_port *p = &cdc_ports[1];
+            if (!p->tx_busy) {
+                uint32_t n = (uint32_t)strlen(hi);
+                memcpy(p->write_buf, hi, n);
+                p->tx_busy = true;
+                usbd_ep_start_write(busid, p->in_ep, p->write_buf, n);
+            }
+        }
     }
 }
 
-/* ---- 状态行: DTR 打开的口每 5s 各发一行(标签区分两口) ---- */
-static void usb_cdc_status_task(void *arg)
+/* ---- CDC2 用户日志 API(与 printf/UART0 无关) ----
+ * 不在此 os_time_dly: 常从 LVGL 定时器调用, 忙则直接丢弃本条。
+ * 需主机打开 CDC2 并拉高 DTR(多数串口助手默认会)。 */
+static int user_cdc2_write(const uint8_t *data, uint32_t len)
 {
-    (void)arg;
-    os_time_dly(300);                    /* 等枚举稳定 */
-    while (1) {
-        for (int i = 0; i < CDC_PORT_NUM; i++) {
-            if (!cdc_configured || !(dtr_intf_mask & (1u << i))) {
-                continue;
-            }
-            struct cdc_port *p = &cdc_ports[i];
-            int n = snprintf((char *)p->write_buf, CDC_BUF_SIZE,
-                             "[wl82] cdc%d alive\r\n", i + 1);
-            if (n <= 0) {
-                continue;
-            }
-            int wait = 0;
-            while (p->tx_busy && ++wait < 300) {
-                os_time_dly(1);
-            }
-            if (p->tx_busy) {
-                continue;                /* 主机暂停读取: 本轮跳过 */
-            }
-            p->tx_busy = true;
-            usbd_ep_start_write(0, p->in_ep, p->write_buf, (uint32_t)n);
-        }
-        os_time_dly(500);                /* 5s */
+    struct cdc_port *p = &cdc_ports[1];
+
+    if (!data || !len) {
+        return 0;
     }
+    if (!cdc_configured || !(dtr_intf_mask & 0x02)) {
+        return -1;                       /* 主机未打开 CDC2 */
+    }
+    if (len > CDC_BUF_SIZE) {
+        len = CDC_BUF_SIZE;
+    }
+    if (p->tx_busy) {
+        return -2;                       /* 上一帧未完成: 丢弃, 避免堵 UI */
+    }
+    memcpy(p->write_buf, data, len);
+    p->tx_busy = true;
+    usbd_ep_start_write(0, p->in_ep, p->write_buf, len);
+    return (int)len;
+}
+
+int user_cdc_puts(const char *s)
+{
+    if (!s) {
+        return -1;
+    }
+    return user_cdc2_write((const uint8_t *)s, (uint32_t)strlen(s));
+}
+
+int user_cdc_printf(const char *fmt, ...)
+{
+    char buf[256];
+    va_list ap;
+    int n;
+
+    if (!fmt) {
+        return -1;
+    }
+    va_start(ap, fmt);
+    n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (n <= 0) {
+        return n;
+    }
+    if (n >= (int)sizeof(buf)) {
+        n = (int)sizeof(buf) - 1;
+    }
+    return user_cdc2_write((const uint8_t *)buf, (uint32_t)n);
 }
 
 void usb_dual_cdc_init(uint8_t busid, uintptr_t reg_base)
@@ -318,6 +329,5 @@ void usb_dual_cdc_init(uint8_t busid, uintptr_t reg_base)
     usbd_add_endpoint(busid, &cdc2_notify_ep);
 
     usbd_initialize(busid, reg_base, usbd_event_handler);
-
-    os_task_create(usb_cdc_status_task, NULL, 9, 1024, 0, "cdc_status");
+    printf("[usb] dual-CDC ready CDC1=EP1/5 CDC2=EP2/6 (no echo/alive)\n");
 }

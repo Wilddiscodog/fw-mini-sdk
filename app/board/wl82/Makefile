@@ -30,6 +30,9 @@ MINI_HW_CRYPTO_SUPPORT ?= 0
 MINI_KEY_EXTRA_SUPPORT ?= 0
 # 内置音频: 蓝牙音箱 MIC1/MIC3/DAC + AEC(默认开)
 MINI_AUDIO_SUPPORT ?= 1
+# USB 协议栈: 0=原厂 driver/usb 双 CDC(默认); 1=CherryUSB
+# 改后务必 make clean
+MINI_USB_STACK_CHERRYUSB ?= 0
 # 音频库注入 LFLAGS 用(LFLAGS 是 := 立即展开, 此变量必须先于其定义)
 # audio_server.a: 音频服务+audio_dev_ops; libaec/libdns/libjlsp: AEC 回采算法库
 # (jl_math 源码在 LCD 条件块之后追加——必须在 c_SRC_FILES := 主赋值之后)
@@ -39,6 +42,7 @@ ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
 # M4A/AAC: 用 lib_m4a_dec_seek(与 lib_m4a_dec 符号冲突, 不可双链)
 AUDIO_LIB := \
 	../../../cpu/wl82/liba/audio_server.a \
+	../../../cpu/wl82/liba/media_app.a \
 	../../../cpu/wl82/liba/libaec.a \
 	../../../cpu/wl82/liba/libdns.a \
 	../../../cpu/wl82/liba/libjlsp.a \
@@ -52,6 +56,7 @@ AUDIO_LIB := \
 	../../../cpu/wl82/liba/lib_dts_dec.a \
 	../../../cpu/wl82/liba/lib_ogg_vorbis_dec.a \
 	../../../cpu/wl82/liba/libdrc.a \
+	../../../cpu/wl82/liba/lib_crossover_coff.a \
 	../../../cpu/wl82/liba/network_download.a \
 	../../../cpu/wl82/liba/libmpeg.a \
 	../../../cpu/wl82/liba/libdlna.a \
@@ -183,6 +188,7 @@ DEFINES += -DMINI_SD_SUPPORT=$(MINI_SD_SUPPORT) -DMINI_GPCNT_SUPPORT=$(MINI_GPCN
 DEFINES += -DMINI_HW_CRYPTO_SUPPORT=$(MINI_HW_CRYPTO_SUPPORT)
 DEFINES += -DMINI_KEY_EXTRA_SUPPORT=$(MINI_KEY_EXTRA_SUPPORT)
 DEFINES += -DMINI_AUDIO_SUPPORT=$(strip $(MINI_AUDIO_SUPPORT))
+DEFINES += -DMINI_USB_STACK_CHERRYUSB=$(strip $(MINI_USB_STACK_CHERRYUSB))
 ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
 DEFINES += -DCONFIG_AUDIO_ENABLE
 endif
@@ -217,6 +223,8 @@ INCLUDES := \
 	-I../../../include_lib/server \
 	-I../../../include_lib/net/network_download \
 	-I../../../driver \
+	-I../../../driver/usb \
+	-I../../../driver/usb/include \
 	-I../../../third/CherryUSB/core \
 	-I../../../third/CherryUSB/common \
 	-I../../../third/CherryUSB/class/cdc \
@@ -232,7 +240,7 @@ INCLUDES := \
 	-I$(SYS_INC_DIR) \
 
 # 需要编译的 .c 文件（按目录分组，增删源码只改这里）
-# USB: CherryUSB 设备栈(CDC) —— 旧杰理从机栈 driver/usb 已不再参与编译, 文件保留备查
+# USB 源码见下方 MINI_USB_STACK_CHERRYUSB 条件块
 c_SRC_FILES := \
 	../../../app/app_main.c \
 	../../../app/bt_wifi_app.c \
@@ -241,11 +249,8 @@ c_SRC_FILES := \
 	../../../app/bt_decode.c \
 	../../../app/net_music.c \
 	../../../app/audio_config.c \
-	../../../app/cdc_dual_app.c \
 	../../../app/audio_demo.c \
 	../../../app/periph_demo.c \
-	../../../app/usbh_msc_app.c \
-	../../../app/usbh_cdc_hid_app.c \
 	../../../app/common_ble/le_hogp.c \
 	../../../app/common_ble/le_trans_data.c \
 	../../../app/key/key_driver.c \
@@ -257,21 +262,6 @@ c_SRC_FILES := \
 	../../../driver/config/log_config/lib_btctrler_config.c \
 	../../../driver/config/log_config/lib_btstack_config.c \
 	../../../app/board/wl82/board.c \
-	../../../third/CherryUSB/core/usbd_core.c \
-	../../../third/CherryUSB/core/usbh_core.c \
-	../../../third/CherryUSB/class/cdc/usbd_cdc_acm.c \
-	../../../third/CherryUSB/class/msc/usbd_msc.c \
-	../../../third/CherryUSB/class/serial/usbh_serial.c \
-	../../../third/CherryUSB/class/serial/usbh_cdc_acm.c \
-	../../../third/CherryUSB/class/hid/usbh_hid.c \
-	../../../third/CherryUSB/class/msc/usbh_msc.c \
-	../../../third/CherryUSB/third_party/fatfs-0.14/source/ff.c \
-	../../../third/CherryUSB/class/hub/usbh_hub.c \
-	../../../third/CherryUSB/osal/usb_osal_freertos.c \
-	../../../third/CherryUSB/port/jl82/usb_hc_jl82.c \
-	../../../third/CherryUSB/port/jl82/usb_glue_jl82_host.c \
-	../../../third/CherryUSB/port/jl82/usb_dc_jl82.c \
-	../../../third/CherryUSB/port/jl82/usb_glue_jl82.c \
 	../../../driver/config/log_config/lib_driver_config.c \
 	../../../driver/config/log_config/lib_system_config.c \
 	../../../driver/config/log_config/lib_update_config.c \
@@ -401,9 +391,41 @@ c_SRC_FILES += ../../../driver/lcd/lcd_te_stub.c
 INCLUDES    += -I../../../driver/lcd/include
 endif
 
-# ICM-42607 六轴 (PH0/PH1 iic0, 与触摸共总线)
-c_SRC_FILES += ../../../driver/imu/icm42607.c
+# SC7U22 六轴 (PH0/PH1 iic0, 与触摸共总线)
+c_SRC_FILES += ../../../driver/imu/sc7u22.c
 INCLUDES    += -I../../../driver/imu/include
+
+# ---------------- USB: CherryUSB 或原厂从机栈 ----------------
+ifeq ($(strip $(MINI_USB_STACK_CHERRYUSB)),1)
+c_SRC_FILES += ../../../app/cdc_dual_app.c
+c_SRC_FILES += ../../../app/usbh_msc_app.c
+c_SRC_FILES += ../../../app/usbh_cdc_hid_app.c
+c_SRC_FILES += ../../../third/CherryUSB/core/usbd_core.c
+c_SRC_FILES += ../../../third/CherryUSB/core/usbh_core.c
+c_SRC_FILES += ../../../third/CherryUSB/class/cdc/usbd_cdc_acm.c
+c_SRC_FILES += ../../../third/CherryUSB/class/msc/usbd_msc.c
+c_SRC_FILES += ../../../third/CherryUSB/class/serial/usbh_serial.c
+c_SRC_FILES += ../../../third/CherryUSB/class/serial/usbh_cdc_acm.c
+c_SRC_FILES += ../../../third/CherryUSB/class/hid/usbh_hid.c
+c_SRC_FILES += ../../../third/CherryUSB/class/msc/usbh_msc.c
+c_SRC_FILES += ../../../third/CherryUSB/third_party/fatfs-0.14/source/ff.c
+c_SRC_FILES += ../../../third/CherryUSB/class/hub/usbh_hub.c
+c_SRC_FILES += ../../../third/CherryUSB/osal/usb_osal_freertos.c
+c_SRC_FILES += ../../../third/CherryUSB/port/jl82/usb_hc_jl82.c
+c_SRC_FILES += ../../../third/CherryUSB/port/jl82/usb_glue_jl82_host.c
+c_SRC_FILES += ../../../third/CherryUSB/port/jl82/usb_dc_jl82.c
+c_SRC_FILES += ../../../third/CherryUSB/port/jl82/usb_glue_jl82.c
+else
+# 原厂从机栈双 CDC; 主机/MSD/UAC/UVC 源码不编
+c_SRC_FILES += ../../../app/user_cdc_jl.c
+c_SRC_FILES += ../../../driver/usb/usb_config.c
+c_SRC_FILES += ../../../driver/usb/usb_epbuf_manager.c
+c_SRC_FILES += ../../../driver/usb/device/cdc.c
+c_SRC_FILES += ../../../driver/usb/device/descriptor.c
+c_SRC_FILES += ../../../driver/usb/device/task_pc.c
+c_SRC_FILES += ../../../driver/usb/device/usb_device.c
+c_SRC_FILES += ../../../driver/usb/device/user_setup.c
+endif
 
 # ---------------- jl_math 源码库(MINI_AUDIO_SUPPORT, AEC 回采用) ----------------
 # 原厂 apps/common/jl_math 同目录: AEC/DNS 的 WOLA 滤波器组引用 flrfft/flrifft
@@ -415,6 +437,11 @@ c_SRC_FILES += ../../../app/jl_math/jl_math.c
 c_SRC_FILES += ../../../app/jl_math/kiss_fft.c
 c_SRC_FILES += ../../../app/jl_math/nn_function_vec.c
 INCLUDES    += -I../../../app/jl_math
+# 本地 EQ/音效默认参数(非 USB 在线调音); TCFG_EQ_ONLINE_ENABLE=0
+c_SRC_FILES += ../../../app/audio_music/audio_eff_default_parm.c
+c_SRC_FILES += ../../../app/audio_music/eq_config_new.c
+c_SRC_FILES += ../../../app/audio_music/effects_adj.c
+INCLUDES    += -I../../../app/audio_music -I../../../include_lib/media/eq
 endif
 
 # LVGL 8.2.0 + watch_ui 智能手表 Demo
@@ -427,11 +454,13 @@ c_SRC_FILES += ../../../third/lvgl_port/driver/lv_port_disp.c
 c_SRC_FILES += ../../../third/lvgl_port/driver/lv_port_indev.c
 c_SRC_FILES += ../../../app/watch_ui/watch_ui.c
 c_SRC_FILES += ../../../app/watch_ui/watch_home.c
+c_SRC_FILES += ../../../app/watch_ui/watch_clock.c
 c_SRC_FILES += ../../../app/watch_ui/watch_dropdown.c
 c_SRC_FILES += ../../../app/watch_ui/watch_backlight.c
 c_SRC_FILES += ../../../app/watch_ui/watch_volume.c
 c_SRC_FILES += ../../../app/watch_ui/watch_power.c
 c_SRC_FILES += ../../../app/watch_ui/watch_apps.c
+c_SRC_FILES += ../../../app/watch_ui/assets/watch_icons.c
 INCLUDES    += -I../../../third/lvgl -I$(LVGL_DIR) -I$(LVGL_DIR)/src
 INCLUDES    += -I../../../third/lvgl_port/driver -I../../../driver/lcd/include
 INCLUDES    += -I../../../app/watch_ui -I../../../app/include
@@ -515,8 +544,9 @@ $(BUILD_DIR)/%.c.o : $(ROOT_PREFIX)/%.c
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
 
 # CherryUSB 源文件注入配置头（限定范围, 避免与 SDK 宏冲突）
+ifeq ($(strip $(MINI_USB_STACK_CHERRYUSB)),1)
 $(BUILD_DIR)/third/CherryUSB/%.c.o $(BUILD_DIR)/app/cdc_acm_app.c.o : CFLAGS += -include usb_config.h
-$(BUILD_DIR)/app/usbh_msc_app.c.o : CFLAGS += -include usb_config.h
+$(BUILD_DIR)/app/cdc_dual_app.c.o : CFLAGS += -include usb_config.h
 $(BUILD_DIR)/app/usbh_msc_app.c.o : CFLAGS += -include usb_config.h
 $(BUILD_DIR)/third/CherryUSB/third_party/fatfs-0.14/source/ff.c.o : CFLAGS += \
 	-Df_open=usbh_fatfs_open -Df_close=usbh_fatfs_close -Df_read=usbh_fatfs_read -Df_write=usbh_fatfs_write \
@@ -530,6 +560,7 @@ $(BUILD_DIR)/third/CherryUSB/third_party/fatfs-0.14/source/ff.c.o : CFLAGS += \
 	-Df_expand=usbh_fatfs_expand -Df_mount=usbh_fatfs_mount -Df_mkfs=usbh_fatfs_mkfs \
 	-Df_fdisk=usbh_fatfs_fdisk -Df_setcp=usbh_fatfs_setcp -Df_putc=usbh_fatfs_putc \
 	-Df_puts=usbh_fatfs_puts -Df_printf=usbh_fatfs_printf -Df_gets=usbh_fatfs_gets
+endif
 
 $(BUILD_DIR)/%.S.o : $(ROOT_PREFIX)/%.S
 	$(info +AS $<)

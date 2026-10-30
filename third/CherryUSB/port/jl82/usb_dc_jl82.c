@@ -657,14 +657,13 @@ int usbd_ep_open(uint8_t busid, const struct usb_endpoint_descriptor *ep)
             ui32Register |= USB_TXCSRH1_ISO;
         }
 
-        /* JL 原厂 usb_g_ep_config: INT 类型端点无条件写 TXCSR bit14(CSRH bit6)——
-         * EP3/EP4 特殊通道的模式门控(配套 0x16850/54 模式位/打包计数)。CherryUSB
-         * 从不设它 → 通知端点 IN 令牌被打回 STALL → 主机 clear-halt 循环。 */
+        /* JL: TXCSR bit14(CSRH bit6) 仅 EP3/EP4 特殊通道需要(配套 0x16850/54)。
+         * EP1/2/5/6 的 INT/BULK 走普通模式, 误置 bit14 会导致 STALL/clear-halt 风暴。 */
         uint8_t is_int = (USB_GET_ENDPOINT_TYPE(ep->bmAttributes) == 0x03);
+        uint8_t need_bit14 = (bigsz != 0) || (is_int && (ep_idx == 3 || ep_idx == 4));
 
-        /* JL 大缓冲: bit14 + 0x16850/54 bit0(TX 模式位) */
         uint32_t csrh = ui32Register | USB_TXCSRH1_MODE;
-        if (is_int || bigsz) {
+        if (need_bit14) {
             csrh |= 0x40;
         }
         if (bigsz) {
@@ -730,19 +729,26 @@ int usbd_ep_clear_stall(uint8_t busid, const uint8_t ep)
         if (ep_idx == 0x00) {
             HWREGB(USB_TXCSRL_BASE(ep_idx)) &= ~USB_CSRL0_STALLED;
         } else {
-            // Clear the stall on an OUT endpoint.
-            HWREGB(USB_RXCSRL_BASE(ep_idx)) &= ~(USB_RXCSRL1_STALL | USB_RXCSRL1_STALLED);
-            // Reset the data toggle.
-            HWREGB(USB_RXCSRL_BASE(ep_idx)) |= USB_RXCSRL1_CLRDT;
+            /* 对齐原厂: RMW 清 SendStall|SentStall, 再 CLRDT(+必要时 FLUSH) */
+            uint8_t csr = HWREGB(USB_RXCSRL_BASE(ep_idx));
+            csr &= (uint8_t)~(USB_RXCSRL1_STALL | USB_RXCSRL1_STALLED);
+            if (csr & USB_RXCSRL1_RXRDY) {
+                csr |= USB_RXCSRL1_FLUSH;
+            }
+            csr |= USB_RXCSRL1_CLRDT;
+            HWREGB(USB_RXCSRL_BASE(ep_idx)) = csr;
         }
     } else {
         if (ep_idx == 0x00) {
             HWREGB(USB_TXCSRL_BASE(ep_idx)) &= ~USB_CSRL0_STALLED;
         } else {
-            // Clear the stall on an IN endpoint.
-            HWREGB(USB_TXCSRL_BASE(ep_idx)) &= ~(USB_TXCSRL1_STALL | USB_TXCSRL1_STALLED);
-            // Reset the data toggle.
-            HWREGB(USB_TXCSRL_BASE(ep_idx)) |= USB_TXCSRL1_CLRDT;
+            uint8_t csr = HWREGB(USB_TXCSRL_BASE(ep_idx));
+            csr &= (uint8_t)~(USB_TXCSRL1_STALL | USB_TXCSRL1_STALLED);
+            if (csr & USB_TXCSRL1_TXRDY) {
+                csr |= USB_TXCSRL1_FLUSH;
+            }
+            csr |= USB_TXCSRL1_CLRDT;
+            HWREGB(USB_TXCSRL_BASE(ep_idx)) = csr;
         }
     }
 
@@ -759,13 +765,14 @@ int usbd_ep_is_stalled(uint8_t busid, const uint8_t ep, uint8_t *stalled)
     musb_set_active_ep(ep_idx);
 
     if (USB_EP_DIR_IS_OUT(ep)) {
-        if (HWREGB(USB_RXCSRL_BASE(ep_idx)) & USB_RXCSRL1_STALL) {
+        /* SentStall 粘滞位也要算 halted, 否则主机清不掉会狂刷 CLEAR_FEATURE */
+        if (HWREGB(USB_RXCSRL_BASE(ep_idx)) & (USB_RXCSRL1_STALL | USB_RXCSRL1_STALLED)) {
             *stalled = 1;
         } else {
             *stalled = 0;
         }
     } else {
-        if (HWREGB(USB_TXCSRL_BASE(ep_idx)) & USB_TXCSRL1_STALL) {
+        if (HWREGB(USB_TXCSRL_BASE(ep_idx)) & (USB_TXCSRL1_STALL | USB_TXCSRL1_STALLED)) {
             *stalled = 1;
         } else {
             *stalled = 0;

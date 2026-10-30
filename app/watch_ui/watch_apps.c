@@ -21,7 +21,9 @@ extern int get_app_music_volume(void);
 #endif
 
 #include "bt_music.h"
-#include "icm42607.h"
+#include "sc7u22.h"
+#include "user_cdc_log.h"
+
 
 static lv_obj_t *make_app_root(lv_obj_t *parent, const char *title)
 {
@@ -55,39 +57,70 @@ static void stub_btn_cb(lv_event_t *e)
     watch_ui_toast("功能开发中");
 }
 
-/* -------- 陀螺仪 ICM-42607 -------- */
+/* -------- 陀螺仪 SC7U22 -------- */
 static lv_obj_t *s_gyro_lab;
 static lv_timer_t *s_gyro_tm;
+
+/* JL newlib 无 %f: 转定点再 %d 打印 */
+static int q_round(float v, int scale)
+{
+    float s = (float)scale;
+    return (int)(v * s + (v >= 0.0f ? 0.5f : -0.5f));
+}
+
+static int snprint_q(char *dst, int dst_sz, int q, int scale)
+{
+    int neg = q < 0;
+    int a = neg ? -q : q;
+    int ip = a / scale;
+    int fp = a % scale;
+    if (scale == 100) {
+        return snprintf(dst, dst_sz, "%s%d.%02d", neg ? "-" : "+", ip, fp);
+    }
+    return snprintf(dst, dst_sz, "%s%d.%d", neg ? "-" : "+", ip, fp);
+}
 
 static void gyro_refresh(lv_timer_t *t)
 {
     char buf[192];
-    struct icm42607_si s;
+    char ax[12], ay[12], az[12], gx[12], gy[12], gz[12], tc[12];
+    struct sc7u22_si s;
     (void)t;
 
     if (!s_gyro_lab) {
         return;
     }
-    if (!icm42607_ready()) {
-        lv_label_set_text(s_gyro_lab, "ICM-42607 未就绪\n检查 PH0/PH1 总线");
+    if (!sc7u22_ready()) {
+        lv_label_set_text(s_gyro_lab, "SC7U22 未就绪\n检查 PH0/PH1 总线");
+        user_cdc_puts("[gyro] SC7U22 not ready\r\n");
         return;
     }
-    if (icm42607_read_si(&s)) {
+    if (sc7u22_read_si(&s)) {
         lv_label_set_text(s_gyro_lab, "读数失败");
+        user_cdc_puts("[gyro] read fail\r\n");
         return;
     }
+    snprint_q(ax, sizeof(ax), q_round(s.ax, 100), 100);
+    snprint_q(ay, sizeof(ay), q_round(s.ay, 100), 100);
+    snprint_q(az, sizeof(az), q_round(s.az, 100), 100);
+    snprint_q(gx, sizeof(gx), q_round(s.gx, 10), 10);
+    snprint_q(gy, sizeof(gy), q_round(s.gy, 10), 10);
+    snprint_q(gz, sizeof(gz), q_round(s.gz, 10), 10);
+    snprint_q(tc, sizeof(tc), q_round(s.temp_c, 10), 10);
+
     snprintf(buf, sizeof(buf),
              "ID:0x%02X\n"
              "Acc g:\n"
-             " X:%+.2f Y:%+.2f Z:%+.2f\n"
+             " X:%s Y:%s Z:%s\n"
              "Gyro dps:\n"
-             " X:%+.1f Y:%+.1f Z:%+.1f\n"
-             "T:%.1fC",
-             icm42607_whoami(),
-             s.ax, s.ay, s.az,
-             s.gx, s.gy, s.gz,
-             s.temp_c);
+             " X:%s Y:%s Z:%s\n"
+             "T:%sC",
+             sc7u22_whoami(),
+             ax, ay, az, gx, gy, gz, tc);
     lv_label_set_text(s_gyro_lab, buf);
+    /* CDC2: 不用 %f (库未链浮点 printf) */
+    user_cdc_printf("[gyro] id=%02X acc=%s,%s,%s gyr=%s,%s,%s T=%s\r\n",
+                    sc7u22_whoami(), ax, ay, az, gx, gy, gz, tc);
 }
 
 static void gyro_del(lv_event_t *e)
@@ -106,9 +139,14 @@ lv_obj_t *app_gyro_create(lv_obj_t *parent)
     lv_obj_t *body = make_body(root);
     lv_obj_add_event_cb(root, gyro_del, LV_EVENT_DELETE, NULL);
 
-    if (icm42607_init()) {
+    printf("[gyro] app create\n");
+    if (sc7u22_init()) {
+        printf("[gyro] sc7u22_init fail\n");
         watch_ui_toast("陀螺仪初始化失败");
+    } else {
+        printf("[gyro] sc7u22 ready whoami=0x%02x\n", sc7u22_whoami());
     }
+    user_cdc_puts("[gyro] app open\r\n");
 
     s_gyro_lab = lv_label_create(body);
     lv_obj_set_style_text_font(s_gyro_lab, &lv_font_simsun_16_cjk, 0);

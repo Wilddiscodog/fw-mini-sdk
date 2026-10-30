@@ -32,12 +32,46 @@
 
 /* C++ 支持开关在 Makefile: make MINI_CXX_SUPPORT=1 (改后 make clean)
  * 开启时 -DCONFIG_CXX_SUPPORT 自动注入, app_main 会先调 cpp_run_init() */
-/* USB 协议栈已替换为 CherryUSB(third/CherryUSB)，其配置见 app/include/usb_config.h。
- * 使用高速口 USB1(HUSB 2.0)；USB0(FUSB 1.1) 为全速。两控制器共用同一组 D+/D-，勿同时启动。
- * 旧杰理从机栈源码保留在 driver/usb 备查，不参与编译。 */
-#define MINI_USB_MODE_DEVICE   0   /* CDC 从机(主机模式不行, 二选一) */
+
+/* ================ USB 协议栈开关 ================
+ * MINI_USB_STACK_CHERRYUSB:
+ *   0 = 原厂 driver/usb 从机栈(当前默认; 单 CDC)
+ *   1 = CherryUSB 双 CDC(暂关; 问题见 doc/CherryUSB_双CDC问题记录.md)
+ * Makefile 同步注入 -D; 改后务必 make clean。
+ * USB0=FUSB / USB1=HUSB 共用 D+/D-，勿同时启动。 */
+#ifndef MINI_USB_STACK_CHERRYUSB
+#define MINI_USB_STACK_CHERRYUSB    0
+#endif
+
+#if MINI_USB_STACK_CHERRYUSB
+#define MINI_USB_MODE_DEVICE   0   /* CDC 从机 */
 #define MINI_USB_MODE_HOST     1   /* MSC 主机(U盘) */
 #define MINI_USB_MODE          MINI_USB_MODE_DEVICE
+#else
+/* 原厂从机: 双 CDC-ACM(无 INT 通知)。不注册 OTG，由 app_main 直接 usb_start()。
+ * CDC1=EP1 bulk(数据口); CDC2=EP2 bulk(user_cdc_* 日志)。见 driver/usb/device/cdc.c */
+#define CONFIG_USB_ENABLE
+#define TCFG_PC_ENABLE                      1
+#define USB_PC_NO_APP_MODE                  2
+#define USB_MALLOC_ENABLE                   1
+#define USB_DEVICE_CLASS_CONFIG             (CDC_CLASS)
+#define CDC_DUAL_ENABLE                     1
+#define CDC_INTR_EP_ENABLE                  0
+#define TCFG_HOST_AUDIO_ENABLE              0
+#define TCFG_HOST_UVC_ENABLE                0
+#define TCFG_HID_HOST_ENABLE                0
+#define TCFG_UDISK_ENABLE                   0
+/* 1=HUSB(USB1, HS, 与先前 CherryUSB 同口); 0=FUSB(USB0, FS) */
+#ifndef MINI_USB_JL_ID
+#define MINI_USB_JL_ID                      1
+#endif
+/* user_cdc_* 走 CDC2(port1) */
+#ifndef MINI_USER_CDC_PORT
+#define MINI_USER_CDC_PORT                  1
+#endif
+#include "usb_std_class_def.h"
+#include "usb_common_def.h"
+#endif
 
 /* ================ 固件升级: 双备份烧写后端(网页 OTA 用) =================
  * 升级途径: WiFi 网页 OTA(wifi_prov.c, 上传整包→SDRAM→net_update 流式烧写)
@@ -67,12 +101,14 @@
 #define CONFIG_PRESS_LONG_KEY_POWERON
 
 #define CONFIG_DEBUG_ENABLE
-/* 历史注: 旧"日志镜像到 USB CDC"(CONFIG_USB_DEBUG_ENABLE, putbyte→环形缓冲
- * →cdc_write_data)已随 USB 改双 CDC 彻底移除(2026-10)。日志只走 UART0(PB2);
- * WiFi 库日志由 wifi_log_mute.c 静音(其启用条件含 !CONFIG_USB_DEBUG_ENABLE,
- * 现恒满足)。两个 CDC 均为数据串口, 不承载日志。 */
+/* 系统日志只走 UART0(PB2); WiFi 库日志由 wifi_log_mute.c 静音。
+ * 原厂双 CDC: user_cdc_* → CDC2(EP2); CherryUSB: 同为 CDC2 日志口。 */
 
-/* USB 设备形态: 双 CDC-ACM 虚拟串口(无 MSC), 见 cdc_dual_app.c */
+/* 临时: 开机动画结束后自动打开陀螺仪 App(调试 SC7U22 / CDC 日志) */
+#ifndef WATCH_AUTO_OPEN_GYRO
+#define WATCH_AUTO_OPEN_GYRO        1
+#endif
+
 
 /* ================ 内置音频(MIC + DAC + AEC, MINI_AUDIO_SUPPORT) =================
  * Makefile: MINI_AUDIO_SUPPORT 默认 1(蓝牙音箱需要)。
@@ -133,15 +169,32 @@
 #define CONFIG_AEC_ADC_CHANNEL              3     /* MIC3 回采 */
 #define CONFIG_AEC_AUDIO_ADC_GAIN           80
 
-/* EQ(audio_config.c / EQ_CORE_V1 需要); 在线调试默认关, 先用文件/关闭 */
-#define TCFG_EQ_ENABLE                      0
+/* EQ: 本地播放用; 已移除 USB CDC1 在线调音(cfg_tool)。
+ * CDC1 闲置数据口; CDC2=user_cdc_* 日志。 */
+#define TCFG_EQ_ENABLE                      1
 #define TCFG_EQ_ONLINE_ENABLE               0
-#define TCFG_EQ_FILE_ENABLE                 0
-#define TCFG_HW_SOFT_EQ_ENABLE              0
-#define TCFG_LIMITER_ENABLE                 0
-#define TCFG_DRC_ENABLE                     0
+#define TCFG_EQ_FILE_ENABLE                 1
+#define TCFG_HW_SOFT_EQ_ENABLE              1
+#define TCFG_LIMITER_ENABLE                 1
+#define TCFG_DRC_ENABLE                     TCFG_LIMITER_ENABLE
 #define TCFG_AUDIO_OUT_EQ_ENABLE            0
 #define TCFG_EQ_DIVIDE_ENABLE               0
+#define TCFG_PHONE_EQ_ENABLE                0
+#define TCFG_AEC_UL_EQ_ENABLE               0
+#define TCFG_DYNAMIC_EQ_ENABLE              0
+#define TCFG_MIC_EFFECT_ENABLE              0
+#define TCFG_PHONE_DRC_ENABLE               0
+#define TCFG_AUDIO_OUT_DRC_ENABLE           0
+#define TCFG_DRC_SPILT_ENABLE               0
+#define TCFG_AUDIO_MDRC_ENABLE              0
+#define TCFG_LAST_WHOLE_DRC_ENABLE          0
+#define CONFIG_EQ_FILE_NAME                 "mnt/sdfile/res/cfg/eq_cfg_hw.bin"
+#define TCFG_NULL_COMM                      0
+#define TCFG_USB_COMM                       1
+#define TCFG_UART_COMM                      2
+#define TCFG_SPP_COMM                       3
+#define TCFG_COMM_TYPE                      TCFG_NULL_COMM
+#define TCFG_ONLINE_ENABLE                  0
 #endif  /* MINI_AUDIO_SUPPORT */
 
 #if !defined CONFIG_DEBUG_ENABLE || defined CONFIG_LIB_DEBUG_DISABLE
@@ -159,10 +212,11 @@
 #define TCFG_TOUCH_CST816_ENABLE    0
 #endif
 
-/* ICM-42607 六轴: 与 CST816 同挂 PH0/PH1(iic0) */
-#ifndef TCFG_ICM42607_ENABLE
-#define TCFG_ICM42607_ENABLE        1
+/* SC7U22 六轴: 与 CST816 同挂 PH0/PH1(iic0), 地址 0x18, WHO_AM_I=0x6A */
+#ifndef TCFG_SC7U22_ENABLE
+#define TCFG_SC7U22_ENABLE          1
 #endif
+
 
 /* ================ ADC 按键(原厂 key_driver/adkey 框架, PB01 电阻梯) ================
  * 实测: 空闲 raw=1014(3.13V), 按键1 raw=162(500mV), 按键2 raw=0(0mV)。

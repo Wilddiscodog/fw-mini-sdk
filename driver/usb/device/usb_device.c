@@ -1,3 +1,4 @@
+#include "app_config.h"
 #include "usb/device/usb_stack.h"
 #include "usb_config.h"
 #include "usb/device/msd.h"
@@ -9,7 +10,6 @@
 #include "irq.h"
 #include "init.h"
 #include "gpio.h"
-#include "app_config.h"
 
 #define LOG_TAG_CONST       USB
 #define LOG_TAG             "[USB]"

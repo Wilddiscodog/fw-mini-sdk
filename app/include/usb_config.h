@@ -20,7 +20,7 @@
 
 /* ================ USB Device Stack ================ */
 #define CONFIG_USBDEV_MAX_BUS           1
-#define CONFIG_USBDEV_EP_NUM            2   /* MSC-only test: EP0 + EP1 */
+#define CONFIG_USBDEV_EP_NUM            7   /* EP0 + CDC1/2 data/notify 最大到 EP6 */
 #define CONFIG_USBDEV_REQUEST_BUFFER_LEN 512
 #define CONFIG_USBDEV_ADVANCE_DESC      1   /* 使用描述符回调接口 */
 /* MSC 设备类: 3MB SDRAM 盘, IRQ-safe queue 唤醒专用 worker */
@@ -60,9 +60,9 @@
 
 /* ================ MUSB DCD (port/jl82) ================ */
 #define CONFIG_USB_MUSB_JL82            1   /* JL 变体: 读清中断/无FIFO配置寄存器/桥接器同步 */
-/* 复合设备端点上限(数组维度, 必须 > 实际最大 EP 号): MSC=EP1, CDC=EP2/EP5。
- * ⚠ V0.8 MSC-only 时代设 2, 开 CDC 后 EP2/EP5 越界 → 枚举即崩/重启循环(2026-10-25 实锤)。 */
-#define CONFIG_USB_MUSB_EP_NUM          6   /* EP0~EP5 */
+/* 复合设备端点上限(数组维度, 必须 > 实际最大 EP 号)。
+ * 双 CDC: data EP1/EP2, notify EP5/EP6 —— 不可用 EP3 bulk(驱动里绑 MSC 4KB 大缓冲)。 */
+#define CONFIG_USB_MUSB_EP_NUM          7   /* EP0~EP6 */
 #define CONFIG_USB_HS                   1   /* HUSB 2.0 高速 */
 
 #endif

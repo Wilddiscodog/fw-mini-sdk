@@ -48,7 +48,10 @@ static usb_interrupt usb_interrupt_rx[USB_MAX_HW_NUM][MAX_EP_RX];// SEC(.usb_h_b
 #endif
 
 #if TCFG_USB_SLAVE_CDC_ENABLE
-#if CDC_INTR_EP_ENABLE
+#if CDC_DUAL_ENABLE
+/* 双 CDC: 对齐原厂 64B MPS, 每口 IN+OUT 各 64 */
+#define     CDC_DMA_SIZE    (64 * 4)
+#elif CDC_INTR_EP_ENABLE
 #define     CDC_DMA_SIZE    (64*3)
 #else
 #define     CDC_DMA_SIZE    (64*2)

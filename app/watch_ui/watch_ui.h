@@ -1,6 +1,7 @@
 #ifndef WATCH_UI_H
 #define WATCH_UI_H
 
+#include "generic/typedef.h"
 #include "lvgl.h"
 
 enum watch_app_id {
@@ -17,7 +18,9 @@ typedef lv_obj_t *(*watch_app_create_cb)(lv_obj_t *parent);
 
 struct watch_app_desc {
     const char *name;
-    const char *icon;   /* short ASCII / symbol for tile */
+    const char *glyph;          /* 圆形图标上的短字母 */
+    const lv_img_dsc_t *icon;   /* C 数组图标, 可为 NULL */
+    u32 color;                  /* 强调色 RGB888 */
     watch_app_create_cb create;
 };
 

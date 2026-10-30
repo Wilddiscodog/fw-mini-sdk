@@ -32,12 +32,22 @@ static const u8 sDeviceDescriptor[] = { //<Device Descriptor
 #else
 #error "USB_SPEED_MODE not defined"
 #endif
+#if CDC_DUAL_ENABLE
+    0xEF,       // bDeviceClass: Miscellaneous (IAD)
+    0x02,       // bDeviceSubClass: Common
+    0x01,       // bDeviceProtocol: IAD
+#else
     0x00,       // bDeviceClass: none
     0x00,       // bDeviceSubClass: none
     0x00,       // bDeviceProtocol: none
+#endif
     EP0_SETUP_LEN,//EP0_LEN,      // bMaxPacketSize0: 8/64 bytes
     'J', 'L',     // idVendor: 0x4a4c - JL
+#if CDC_DUAL_ENABLE
+    'D', 'C',     // idProduct: dual CDC — 强制主机重新枚举
+#else
     'U', 'A',     // idProduct: chip id
+#endif
     0x00, 0x01,     // bcdDevice: version 1.0
     0x01,       // iManufacturer: Index to string descriptor that contains the string <Your Name> in Unicode
     0x02,       // iProduct: Index to string descriptor that contains the string <Your Product Name> in Unicode
@@ -50,6 +60,16 @@ static const u8 LANGUAGE_STR[] = {
 };
 
 
+#if CDC_DUAL_ENABLE
+static const u8 product_string[] = {
+    30,
+    0x03,
+    'W', 0x00, 'L', 0x00, '8', 0x00, '2', 0x00,
+    ' ', 0x00,
+    'D', 0x00, 'u', 0x00, 'a', 0x00, 'l', 0x00,
+    'C', 0x00, 'D', 0x00, 'C', 0x00,
+};
+#else
 static const u8 product_string[] = {
     42,
     0x03,
@@ -74,6 +94,7 @@ static const u8 product_string[] = {
     'c', 0x00,
     'e', 0x00,
 };
+#endif
 
 static const u8 MANUFACTURE_STR[] = {
     34,         //该描述符的长度为34字节
