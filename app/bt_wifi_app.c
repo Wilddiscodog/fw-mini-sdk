@@ -80,11 +80,18 @@ static void key_sys_event_handler(struct sys_event *event)
         return;
     }
     struct key_event *e = (struct key_event *)event->payload;
-    /* KEY_POWER(0) 长按: 关机动画 → P33 真关机 */
+    /* KEY_POWER(0) 长按: → P33 真关机 */
     if (e->value == KEY_POWER && e->action == KEY_EVENT_LONG) {
+        printf("[key] POWER long -> P33 poweroff\n");
+#if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT && \
+    (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
         extern void watch_power_key_long(void);
         watch_power_key_long();
-        printf("[key] POWER long -> P33 poweroff\n");
+#else
+        /* 无 UI: 直接走原厂 soft_poweroff(长按已松开前会 wait_key_up) */
+        extern void sys_power_poweroff(void);
+        sys_power_poweroff();
+#endif
         return;
     }
     if (e->action == KEY_EVENT_CLICK || e->action == KEY_EVENT_UP) {

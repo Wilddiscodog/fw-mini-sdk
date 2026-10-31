@@ -20,9 +20,9 @@
 #include "device/iic.h"
 #include "os/os_api.h"
 #include "app_config.h"
-#include "lcd_config.h"          /* LCD_W/H: 横屏时触摸坐标需映射 */
 
 #if TCFG_TOUCH_CST816_ENABLE
+#include "lcd_config.h"          /* LCD_W/H: 横屏时触摸坐标需映射 */
 
 #define CST816_ADDR_W    0x2A    /* 7bit 0x15 << 1 */
 #define CST816_ADDR_R    0x2B

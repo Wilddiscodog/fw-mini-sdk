@@ -95,7 +95,11 @@ struct lcd_device {
     void (*LCD_ClearScreen)(u32 color);
     void (*Reset)(void);
     void (*BackLightCtrl)(u8);
+    void (*EnterSleep)(void);   /* Display Off + Sleep In; 关机前调用 */
 };
+
+/* 关机路径: 关背光 → 面板休眠 → 关 EMI(停 IRQ_EMI) */
+void user_lcd_poweroff(void);
 
 struct lcd_interface {
     int (*init)(void *);

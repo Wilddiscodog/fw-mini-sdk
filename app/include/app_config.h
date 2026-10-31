@@ -8,48 +8,44 @@
 #define __FLASH_SIZE__    (16 * 1024 * 1024)
 #define __SDRAM_SIZE__    (8 * 1024 * 1024)
 
-//*********************************************************************************//
-//                                  USB配置                                         //
-//*********************************************************************************//
+/*
+ * 软关机二分 (与 Makefile MINI_PWR_BISECT 一致, 改后 make clean):
+ *   0 仅 ADKEY+原厂 P33    1 +LCD/LVGL    2 +USB
+ *   3 +音频                4 +BT          5 +WiFi
+ *   99 手动(Makefile 各开关)
+ */
+#ifndef MINI_PWR_BISECT
+#define MINI_PWR_BISECT                 5
+#endif
+
 //*********************************************************************************//
 //                                  LCD 显示配置                                    //
 //*********************************************************************************//
-/* MINI_LCD_SUPPORT / MINI_LVGL_SUPPORT 开关在 Makefile(经 -D 注入此处):
- * MINI_LCD_SUPPORT=1  EMI 8080-8bit 并口 LCD(ili9341 参考驱动)
- * MINI_LVGL_SUPPORT=1 LVGL 8.2.0(需先按 README 获取 lvgl 源码到 third/lvgl/lvgl) */
 #if MINI_LCD_SUPPORT
 #define CONFIG_UI_ENABLE
-/* xiaolu-R2: 只编 lcd_jd9853.c(Makefile); 必须打开本宏, 否则 REGISTER_LCD_DEV
- * 被裁掉 → "err no lcd_dev" 后 draw_lvgl 空指针 axi_rd_inv 复位 */
 #define TCFG_LCD_JD9853_ENABLE          1
 #define TCFG_LCD_ILI9341_ENABLE         0
 #define TCFG_LCD_ST7789S_ENABLE         0
 #define TCFG_LCD_ST7789V_ENABLE         0
 #define TCFG_LCD_ST7735S_ENABLE         0
 #define TCFG_LCD_480x272_8BITS          0
-#define HORIZONTAL_SCREEN               1   /* 1=横屏 320x240(逆时针旋转 90°) */
+#define HORIZONTAL_SCREEN               1
 #endif
 
-/* C++ 支持开关在 Makefile: make MINI_CXX_SUPPORT=1 (改后 make clean)
- * 开启时 -DCONFIG_CXX_SUPPORT 自动注入, app_main 会先调 cpp_run_init() */
-
-/* ================ USB 协议栈开关 ================
- * MINI_USB_STACK_CHERRYUSB:
- *   0 = 原厂 driver/usb 从机栈(当前默认; 单 CDC)
- *   1 = CherryUSB 双 CDC(暂关; 问题见 doc/CherryUSB_双CDC问题记录.md)
- * Makefile 同步注入 -D; 改后务必 make clean。
- * USB0=FUSB / USB1=HUSB 共用 D+/D-，勿同时启动。 */
+/* ================ USB ================ */
 #ifndef MINI_USB_STACK_CHERRYUSB
 #define MINI_USB_STACK_CHERRYUSB    0
 #endif
+#ifndef MINI_USB_ENABLE
+#define MINI_USB_ENABLE             1
+#endif
 
+#if MINI_USB_ENABLE
 #if MINI_USB_STACK_CHERRYUSB
-#define MINI_USB_MODE_DEVICE   0   /* CDC 从机 */
-#define MINI_USB_MODE_HOST     1   /* MSC 主机(U盘) */
+#define MINI_USB_MODE_DEVICE   0
+#define MINI_USB_MODE_HOST     1
 #define MINI_USB_MODE          MINI_USB_MODE_DEVICE
 #else
-/* 原厂从机: 双 CDC-ACM(无 INT 通知)。不注册 OTG，由 app_main 直接 usb_start()。
- * CDC1=EP1 bulk(数据口); CDC2=EP2 bulk(user_cdc_* 日志)。见 driver/usb/device/cdc.c */
 #define CONFIG_USB_ENABLE
 #define TCFG_PC_ENABLE                      1
 #define USB_PC_NO_APP_MODE                  2
@@ -61,17 +57,16 @@
 #define TCFG_HOST_UVC_ENABLE                0
 #define TCFG_HID_HOST_ENABLE                0
 #define TCFG_UDISK_ENABLE                   0
-/* 1=HUSB(USB1, HS, 与先前 CherryUSB 同口); 0=FUSB(USB0, FS) */
 #ifndef MINI_USB_JL_ID
 #define MINI_USB_JL_ID                      1
 #endif
-/* user_cdc_* 走 CDC2(port1) */
 #ifndef MINI_USER_CDC_PORT
 #define MINI_USER_CDC_PORT                  1
 #endif
 #include "usb_std_class_def.h"
 #include "usb_common_def.h"
 #endif
+#endif /* MINI_USB_ENABLE */
 
 /* ================ 固件升级: 双备份烧写后端(网页 OTA 用) =================
  * 升级途径: WiFi 网页 OTA(wifi_prov.c, 上传整包→SDRAM→net_update 流式烧写)
@@ -104,10 +99,6 @@
 /* 系统日志只走 UART0(PB2); WiFi 库日志由 wifi_log_mute.c 静音。
  * 原厂双 CDC: user_cdc_* → CDC2(EP2); CherryUSB: 同为 CDC2 日志口。 */
 
-/* 临时: 开机动画结束后自动打开陀螺仪 App(调试 SC7U22 / CDC 日志) */
-#ifndef WATCH_AUTO_OPEN_GYRO
-#define WATCH_AUTO_OPEN_GYRO        1
-#endif
 
 
 /* ================ 内置音频(MIC + DAC + AEC, MINI_AUDIO_SUPPORT) =================
@@ -138,9 +129,10 @@
 #define CONFIG_ADPCM_DEC_ENABLE
 #define CONFIG_VIRTUAL_DEV_ENC_ENABLE
 
-/* 网络播放 + DLNA MediaRenderer(demo_audio 同款, STA 拿到 IP 后启动) */
-#define CONFIG_NET_MUSIC_MODE_ENABLE
-#define CONFIG_DLNA_SDK_ENABLE
+/* 网络播放 + DLNA MediaRenderer(demo_audio 同款, STA 拿到 IP 后启动)
+ * 暂时屏蔽: 不启 ai_server/libdlna, 表盘隐藏「网络」入口 */
+/* #define CONFIG_NET_MUSIC_MODE_ENABLE */
+/* #define CONFIG_DLNA_SDK_ENABLE */
 
 #define AUDIO_ENC_SAMPLE_SOURCE_MIC         0
 #define AUDIO_ENC_SAMPLE_SOURCE_PLNK0       1
@@ -212,9 +204,13 @@
 #define TCFG_TOUCH_CST816_ENABLE    0
 #endif
 
-/* SC7U22 六轴: 与 CST816 同挂 PH0/PH1(iic0), 地址 0x18, WHO_AM_I=0x6A */
+/* SC7U22 六轴: 与 CST816 同挂 PH0/PH1(iic0); 二分档<1 时关 */
 #ifndef TCFG_SC7U22_ENABLE
+#if MINI_PWR_BISECT >= 1
 #define TCFG_SC7U22_ENABLE          1
+#else
+#define TCFG_SC7U22_ENABLE          0
+#endif
 #endif
 
 
@@ -234,12 +230,25 @@
 #define TCFG_ADKEY_IR_IO_REUSE      0
 #define TCFG_ADKEY_LED_SPI_IO_REUSE 0
 
-/* ================ 蓝牙/WiFi 外设(原厂栈移植) ================ */
-#define MINI_BT_SUPPORT             1   /* 0=关闭; 1=链接 btctrler/btstack 并开机自启 */
-#define MINI_BT_SPEAKER_EN          1   /* 经典蓝牙音箱: A2DP 播放 + HFP 通话 */
-#define MINI_BT_BLE_TRANS_EN        1   /* BLE 透传(与音箱双模并存) */
-#define CONFIG_BT_ENABLE            1
+/* ================ 蓝牙/WiFi (受 MINI_PWR_BISECT 约束) ================ */
+#if MINI_PWR_BISECT >= 4
+#define MINI_BT_SUPPORT             1
+#else
+#define MINI_BT_SUPPORT             0
+#endif
+#if MINI_PWR_BISECT >= 5
 #define MINI_WIFI_SUPPORT           1
+#else
+#define MINI_WIFI_SUPPORT           0
+#endif
+#if MINI_BT_SUPPORT
+#define MINI_BT_SPEAKER_EN          1
+#define MINI_BT_BLE_TRANS_EN        1
+#define CONFIG_BT_ENABLE            1
+#else
+#define MINI_BT_SPEAKER_EN          0
+#define MINI_BT_BLE_TRANS_EN        0
+#endif
 
 #if MINI_BT_SUPPORT
 #ifdef CONFIG_BT_ENABLE

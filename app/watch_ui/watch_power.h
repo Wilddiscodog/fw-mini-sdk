@@ -5,16 +5,15 @@
 #include "lvgl.h"
 
 void watch_power_init(void);
-/* 开机动画(UI 建好后调用) */
 void watch_power_boot_anim(void);
 
 u8 watch_power_is_on(void);
 u8 watch_power_input_enabled(void);
 
-/* 关机动画 → P33 真关机 (不可再「软开机」) */
+/* LVGL 内只准备关机; lcd_test 轮询 take 后再 sys_power_poweroff */
 void watch_power_off(void);
+u8 watch_power_take_off_request(void);
 
-/* 按键任务置位; LVGL 定时器 poll 后播关机动画 */
 void watch_power_key_long(void);
 void watch_power_poll(lv_timer_t *timer);
 

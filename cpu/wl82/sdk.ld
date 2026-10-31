@@ -97,7 +97,6 @@ dts_decoder
 ogg_vorbis_decoder
 vir_dev_sub
 subdev_aec_enc
-dlna_sdk_api
 );
 
 

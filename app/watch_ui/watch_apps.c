@@ -118,9 +118,9 @@ static void gyro_refresh(lv_timer_t *t)
              sc7u22_whoami(),
              ax, ay, az, gx, gy, gz, tc);
     lv_label_set_text(s_gyro_lab, buf);
-    /* CDC2: 不用 %f (库未链浮点 printf) */
-    user_cdc_printf("[gyro] id=%02X acc=%s,%s,%s gyr=%s,%s,%s T=%s\r\n",
-                    sc7u22_whoami(), ax, ay, az, gx, gy, gz, tc);
+    // /* CDC2: 不用 %f (库未链浮点 printf) */
+    // user_cdc_printf("[gyro] id=%02X acc=%s,%s,%s gyr=%s,%s,%s T=%s\r\n",
+    //                 sc7u22_whoami(), ax, ay, az, gx, gy, gz, tc);
 }
 
 static void gyro_del(lv_event_t *e)

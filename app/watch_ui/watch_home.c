@@ -88,10 +88,14 @@ static lv_obj_t *make_app_icon(lv_obj_t *parent, int x, int y,
 static void fill_apps_page(lv_obj_t *page)
 {
     const struct watch_app_desc *tab = watch_ui_app_table();
-    int i;
+    int i, slot = 0;
 
     for (i = 0; i < WATCH_APP_COUNT; i++) {
-        make_app_icon(page, i % 3, i / 3, &tab[i], (enum watch_app_id)i);
+        if (!tab[i].create) {
+            continue;
+        }
+        make_app_icon(page, slot % 3, slot / 3, &tab[i], (enum watch_app_id)i);
+        slot++;
     }
 }
 

@@ -184,6 +184,21 @@ void user_lcd_init(void)
     }
 }
 
+/*
+ * 软关机前只关背光+面板 Sleep。不要 dev_close(emi):
+ * close/SFC 与 power_set_soft_poweroff 的 other-cpu-hold 易双核死锁。
+ * IO 高阻由 board_set_soft_poweroff 统一做。
+ */
+void user_lcd_poweroff(void)
+{
+    if (lcd_dev && lcd_dev->BackLightCtrl) {
+        lcd_dev->BackLightCtrl(0);
+    }
+    if (lcd_dev && lcd_dev->EnterSleep) {
+        lcd_dev->EnterSleep();
+    }
+}
+
 void user_ui_lcd_init(void)
 {
 #if TCFG_USE_SD_ADD_UI_FILE

@@ -291,7 +291,13 @@ int eSystemConfirmStopStatus(void)
     return 0;
 }
 
+/* 无 BT 时不要用跨核 bt_lock 包 local_irq_*: 易与 soft_poweroff
+ * 的 other-cpu softIRQ 互锁(bisect=0 仍 other cpu hold 即此因之一) */
+#if (defined MINI_BT_SUPPORT) && MINI_BT_SUPPORT
 #define CONFIG_BT_ENABLE_SPINLOCK	1
+#else
+#define CONFIG_BT_ENABLE_SPINLOCK	0
+#endif
 
 #if CONFIG_BT_ENABLE_SPINLOCK && CPU_CORE_NUM > 1
 

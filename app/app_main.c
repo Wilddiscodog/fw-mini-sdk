@@ -20,16 +20,25 @@
 #include "lcd_config.h"         /* LCD_W/H, 汉字冒烟布局用 */
 #endif
 
+#if (defined MINI_USB_ENABLE) && MINI_USB_ENABLE
 #if MINI_USB_STACK_CHERRYUSB
 #define CHERRYUSB_BUSID     0
 #define JL82_HUSB_SIE_BASE  0x16000UL
 #else
 #include "usb/device/usb_stack.h"
 #endif
+#endif
 
-/*============================ 中断列表 ============================ */
+/*============================ 中断列表 ============================
+ * 双核必须把 SOFT5→CPU0 / SOFT4→CPU1 钉死: FreeRTOS 跨核 IPI 与
+ * soft_poweroff→cpu_enter_sfc_critical 的 another_cpu softIRQ 都依赖它。
+ * 原厂表写在 CONFIG_IPMASK_ENABLE 下; 双核无 IPMASK 时也要注册, 否则
+ * 易卡 "other cpu hold"。 */
 const struct irq_info irq_info_table[] = {
-#ifdef CONFIG_IPMASK_ENABLE
+#if CPU_CORE_NUM > 1
+    { IRQ_SOFT5_IDX,      6,   0    },
+    { IRQ_SOFT4_IDX,      6,   1    },
+#elif defined(CONFIG_IPMASK_ENABLE)
     { IRQ_SOFT5_IDX,      6,   0    },
     { IRQ_SOFT4_IDX,      6,   1    },
 #endif
@@ -344,6 +353,19 @@ static void lcd_test_task(void *p)
     watch_ui_start();
     while (1) {
         lv_task_handler();
+        /* 关机请求在 LVGL timer 里只置位; 必须离开 handler 后再 soft_poweroff,
+         * 否则另一核若仍走 EMI/Flash SFC, 会卡死在 other cpu hold */
+        {
+            extern u8 watch_power_take_off_request(void);
+            extern void sys_power_poweroff(void);
+            if (watch_power_take_off_request()) {
+                printf("[lcd] leave LVGL, soft poweroff\n");
+                sys_power_poweroff();
+                while (1) {
+                    os_time_dly(1000);
+                }
+            }
+        }
         os_time_dly(1);         /* 10ms: LVGL 建议 5-10ms 轮询一次 */
     }
 #else
@@ -354,6 +376,7 @@ static void lcd_test_task(void *p)
 #endif
 
 /*============================ USB ================= */
+#if (defined MINI_USB_ENABLE) && MINI_USB_ENABLE
 #if MINI_USB_STACK_CHERRYUSB
 #if (MINI_USB_MODE == MINI_USB_MODE_HOST)
 extern void usbh_host_demo_start(void);
@@ -382,7 +405,6 @@ static void usb_mode_task(void *p)
 }
 #endif
 #else
-/* 原厂从机栈: 无 OTG 检测, 直接 usb_start(MINI_USB_JL_ID) */
 static void usb_mode_task(void *p)
 {
     os_time_dly(100);
@@ -398,6 +420,7 @@ static void usb_mode_task(void *p)
     }
 }
 #endif
+#endif /* MINI_USB_ENABLE */
 
 /*============================ 应用入口 ============================ */
 void app_main()
@@ -432,12 +455,19 @@ void app_main()
     extern void key_early_init(void);
     extern void bt_wifi_start_deferred(void);
     key_early_init();
+#if (defined MINI_BT_SUPPORT && MINI_BT_SUPPORT) || \
+    (defined MINI_WIFI_SUPPORT && MINI_WIFI_SUPPORT)
     bt_wifi_start_deferred();
-    /* ③USB 最后起: 原厂单 CDC 或 CherryUSB(见 MINI_USB_STACK_CHERRYUSB) */
-    os_task_create(usb_mode_task,    NULL,  8, 2048, 0, "usb_mode");
+#else
+    printf("[boot] BT/WiFi off (MINI_PWR_BISECT=%d)\n", MINI_PWR_BISECT);
+#endif
+#if (defined MINI_USB_ENABLE) && MINI_USB_ENABLE
+    os_task_create(usb_mode_task, NULL, 8, 2048, 0, "usb_mode");
+#else
+    printf("[boot] USB off (MINI_PWR_BISECT=%d)\n", MINI_PWR_BISECT);
+#endif
     os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT && !MINI_BT_SPEAKER_EN
-    /* 音箱模式走 A2DP/HFP, 不再跑 mic→DAC 回环自检(抢 audio 设备) */
     extern void audio_demo_start(void);
     // audio_demo_start();
 #endif

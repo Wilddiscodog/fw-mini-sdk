@@ -6,33 +6,65 @@
 #
 # 工具链：C:\JL\pi32 (杰理 pi32v2 clang/LTO)
 
-# ================ LCD / LVGL 开关 ================
-#   MINI_LCD_SUPPORT=0  关闭 EMI 8080 并口 LCD(JD9853 + CST816 触摸, xiaolu-R2)
-#   ⚠ USB 排查期(V0.9.x)保持 0: 实测彩条真实刷 EMI 后 USB 不再枚举, 待隔离
-#   MINI_LVGL_SUPPORT=1 启用 LVGL(third/lvgl/lvgl 已内置 v8.2.0; 改配置后 make clean)
+# ================ 软关机二分排查 (改后务必 make clean) ================
+#   make MINI_PWR_BISECT=N
+#   0 = 仅 ADKEY + 原厂 soft_poweroff (关 LCD/USB/音频; BT/WiFi 见 app_config)
+#   1 = +LCD+LVGL
+#   2 = +USB CDC
+#   3 = +音频
+#   4 = +蓝牙 (app_config 同步)
+#   5 = +WiFi  (=接近全功能)
+#   99= 手动: 下面各 MINI_* ?= 自行指定, 不覆盖
+MINI_PWR_BISECT ?= 5
+
+ifeq ($(strip $(MINI_PWR_BISECT)),99)
 MINI_LCD_SUPPORT  ?= 1
 MINI_LVGL_SUPPORT ?= 1
+MINI_AUDIO_SUPPORT ?= 1
+MINI_USB_ENABLE ?= 1
+else ifeq ($(strip $(MINI_PWR_BISECT)),0)
+MINI_LCD_SUPPORT := 0
+MINI_LVGL_SUPPORT := 0
+MINI_AUDIO_SUPPORT := 0
+MINI_USB_ENABLE := 0
+else ifeq ($(strip $(MINI_PWR_BISECT)),1)
+MINI_LCD_SUPPORT := 1
+MINI_LVGL_SUPPORT := 1
+MINI_AUDIO_SUPPORT := 0
+MINI_USB_ENABLE := 0
+else ifeq ($(strip $(MINI_PWR_BISECT)),2)
+MINI_LCD_SUPPORT := 1
+MINI_LVGL_SUPPORT := 1
+MINI_AUDIO_SUPPORT := 0
+MINI_USB_ENABLE := 1
+else ifeq ($(strip $(MINI_PWR_BISECT)),3)
+MINI_LCD_SUPPORT := 1
+MINI_LVGL_SUPPORT := 1
+MINI_AUDIO_SUPPORT := 1
+MINI_USB_ENABLE := 1
+else
+# 4/5/...
+MINI_LCD_SUPPORT := 1
+MINI_LVGL_SUPPORT := 1
+MINI_AUDIO_SUPPORT := 1
+MINI_USB_ENABLE := 1
+endif
 
 # ================= C++ 支持开关 =================
-#   make MINI_CXX_SUPPORT=1   启用 C++ 运行时(全局对象构造/new-delete/STL, -fno-exceptions -fno-rtti)
-#   make clean 后再编译生效; 关闭时为纯 C 固件
 MINI_CXX_SUPPORT ?= 0
 
-# ================ 外设开关(见 doc/外设移植计划.md, 默认全关) ================
-#   启用后 board.c 对应设备表项生效 + periph_demo.c 演示任务运行
-#   引脚/频率在 app/board/wl82/board.c 平台数据中核对
+# ================ 外设开关(见 doc/外设移植计划.md) ================
 MINI_PWM_SUPPORT       ?= 0
 MINI_RTC_SUPPORT       ?= 0
 MINI_SD_SUPPORT        ?= 0
 MINI_GPCNT_SUPPORT     ?= 0
 MINI_HW_CRYPTO_SUPPORT ?= 0
-# 注意: ?= 值与 # 注释之间勿留空格, 否则 ifeq ($(VAR),1) 会因尾部空格失败
 MINI_KEY_EXTRA_SUPPORT ?= 0
-# 内置音频: 蓝牙音箱 MIC1/MIC3/DAC + AEC(默认开)
-MINI_AUDIO_SUPPORT ?= 1
-# USB 协议栈: 0=原厂 driver/usb 双 CDC(默认); 1=CherryUSB
-# 改后务必 make clean
+# USB 协议栈: 0=原厂 driver/usb; 1=CherryUSB (改后 make clean)
 MINI_USB_STACK_CHERRYUSB ?= 0
+ifndef MINI_USB_ENABLE
+MINI_USB_ENABLE ?= 1
+endif
 # 音频库注入 LFLAGS 用(LFLAGS 是 := 立即展开, 此变量必须先于其定义)
 # audio_server.a: 音频服务+audio_dev_ops; libaec/libdns/libjlsp: AEC 回采算法库
 # (jl_math 源码在 LCD 条件块之后追加——必须在 c_SRC_FILES := 主赋值之后)
@@ -165,8 +197,6 @@ DEFINES := \
 	-DVM_MAX_PAGE_ALIGN_SIZE_CONFIG=64*1024 \
 	-DVM_MAX_SECTOR_ALIGN_SIZE_CONFIG=64*1024 \
 	-DVM_ITEM_MAX_NUM=256 \
-	-DCONFIG_BT_ENABLE=1 \
-	-DCONFIG_NET_ENABLE=1 \
 	-DCONFIG_UPDATA_ENABLE \
 	-DCONFIG_OTA_UPDATA_ENABLE \
 	-DCONFIG_ITEM_FORMAT_VM \
@@ -182,7 +212,9 @@ DEFINES += $(EXT_CFLAGS)
 ifeq ($(MINI_CXX_SUPPORT),1)
 DEFINES += -DMINI_CXX_SUPPORT=1 -DCONFIG_CXX_SUPPORT
 endif
+DEFINES += -DMINI_PWR_BISECT=$(strip $(MINI_PWR_BISECT))
 DEFINES += -DMINI_LCD_SUPPORT=$(MINI_LCD_SUPPORT) -DMINI_LVGL_SUPPORT=$(MINI_LVGL_SUPPORT)
+DEFINES += -DMINI_USB_ENABLE=$(strip $(MINI_USB_ENABLE))
 DEFINES += -DMINI_PWM_SUPPORT=$(MINI_PWM_SUPPORT) -DMINI_RTC_SUPPORT=$(MINI_RTC_SUPPORT)
 DEFINES += -DMINI_SD_SUPPORT=$(MINI_SD_SUPPORT) -DMINI_GPCNT_SUPPORT=$(MINI_GPCNT_SUPPORT)
 DEFINES += -DMINI_HW_CRYPTO_SUPPORT=$(MINI_HW_CRYPTO_SUPPORT)
@@ -191,6 +223,17 @@ DEFINES += -DMINI_AUDIO_SUPPORT=$(strip $(MINI_AUDIO_SUPPORT))
 DEFINES += -DMINI_USB_STACK_CHERRYUSB=$(strip $(MINI_USB_STACK_CHERRYUSB))
 ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
 DEFINES += -DCONFIG_AUDIO_ENABLE
+endif
+# BT/WiFi 与 app_config MINI_PWR_BISECT 档位一致 (4=+BT, 5=+WiFi)
+ifeq ($(strip $(MINI_PWR_BISECT)),99)
+DEFINES += -DCONFIG_BT_ENABLE=1 -DCONFIG_NET_ENABLE=1
+else
+ifneq ($(filter $(strip $(MINI_PWR_BISECT)),4 5),)
+DEFINES += -DCONFIG_BT_ENABLE=1
+endif
+ifeq ($(strip $(MINI_PWR_BISECT)),5)
+DEFINES += -DCONFIG_NET_ENABLE=1
+endif
 endif
 
 # 头文件搜索路径
@@ -395,7 +438,8 @@ endif
 c_SRC_FILES += ../../../driver/imu/sc7u22.c
 INCLUDES    += -I../../../driver/imu/include
 
-# ---------------- USB: CherryUSB 或原厂从机栈 ----------------
+# ---------------- USB: CherryUSB 或原厂从机栈 (MINI_USB_ENABLE) ----------------
+ifeq ($(strip $(MINI_USB_ENABLE)),1)
 ifeq ($(strip $(MINI_USB_STACK_CHERRYUSB)),1)
 c_SRC_FILES += ../../../app/cdc_dual_app.c
 c_SRC_FILES += ../../../app/usbh_msc_app.c
@@ -416,7 +460,6 @@ c_SRC_FILES += ../../../third/CherryUSB/port/jl82/usb_glue_jl82_host.c
 c_SRC_FILES += ../../../third/CherryUSB/port/jl82/usb_dc_jl82.c
 c_SRC_FILES += ../../../third/CherryUSB/port/jl82/usb_glue_jl82.c
 else
-# 原厂从机栈双 CDC; 主机/MSD/UAC/UVC 源码不编
 c_SRC_FILES += ../../../app/user_cdc_jl.c
 c_SRC_FILES += ../../../driver/usb/usb_config.c
 c_SRC_FILES += ../../../driver/usb/usb_epbuf_manager.c
@@ -425,6 +468,7 @@ c_SRC_FILES += ../../../driver/usb/device/descriptor.c
 c_SRC_FILES += ../../../driver/usb/device/task_pc.c
 c_SRC_FILES += ../../../driver/usb/device/usb_device.c
 c_SRC_FILES += ../../../driver/usb/device/user_setup.c
+endif
 endif
 
 # ---------------- jl_math 源码库(MINI_AUDIO_SUPPORT, AEC 回采用) ----------------
@@ -459,6 +503,7 @@ c_SRC_FILES += ../../../app/watch_ui/watch_dropdown.c
 c_SRC_FILES += ../../../app/watch_ui/watch_backlight.c
 c_SRC_FILES += ../../../app/watch_ui/watch_volume.c
 c_SRC_FILES += ../../../app/watch_ui/watch_power.c
+c_SRC_FILES += ../../../app/watch_ui/watch_battery.c
 c_SRC_FILES += ../../../app/watch_ui/watch_apps.c
 c_SRC_FILES += ../../../app/watch_ui/assets/watch_icons.c
 INCLUDES    += -I../../../third/lvgl -I$(LVGL_DIR) -I$(LVGL_DIR)/src

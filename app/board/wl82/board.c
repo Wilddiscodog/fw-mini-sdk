@@ -7,6 +7,8 @@
 #include "asm/pwm.h"
 #include "asm/power_interface.h"
 #include "asm/system_reset_reason.h"
+#include "asm/wdt.h"
+#include "os/os_api.h"
 #include "key/adkey.h"
 #include "sys_power.h"
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
@@ -184,10 +186,11 @@ static const struct port_wakeup port0 = {
 	.low_power  = POWER_SLEEP_WAKEUP | POWER_OFF_WAKEUP,
 };
 
+/* P33 长按复位: 与 isd RESET=PB01_08_0 一致, 假死时按住电源键 ~8s 可硬件复位 */
 static const struct long_press lpres_port = {
-	.enable     = FALSE,
-	.use_sec4   = TRUE,
-	.edge       = FALLING_EDGE,
+	.enable     = TRUE,
+	.use_sec4   = FALSE,	/* 0→8s, 1→4s */
+	.edge       = FALLING_EDGE,	/* 低电平有效(ADKEY 按下拉低) */
 	.iomap      = PORT_WAKEUP_IO,
 };
 
@@ -229,13 +232,16 @@ static unsigned int read_power_key(int dly)
 
 void sys_power_poweroff_wait_powerkey_up(void)
 {
+	extern void wdt_clear(void);
 	JL_TIMER1->CON = 0;
 	JL_TIMER1->CON = 0;
 	JL_TIMER1->CON = 0;
 	JL_ADC->CON = 0;
 	JL_ADC->CON = 0;
 	JL_ADC->CON = 0;
-	while (read_power_key(1));
+	while (read_power_key(1)) {
+		wdt_clear();
+	}
 }
 #else
 void sys_power_poweroff_wait_powerkey_up(void)
@@ -243,30 +249,58 @@ void sys_power_poweroff_wait_powerkey_up(void)
 }
 #endif
 
+/*
+ * 关机必须延后到独立 #C0 任务:
+ *  - 不可在 sys_event/按键回调里直接 soft_poweroff(双核 SFC hold 易死锁)
+ *  - 不可把 CPU1 忙等驻留(会堵 softIRQ, 日志停在 soft_poweroff... 无 other cpu hold)
+ * 调用方只置位后 return, 让 CPU1 回到正常调度再由 CPU0 执行关机。
+ */
+static volatile u8 s_pwr_off_req;
+static volatile u8 s_pwr_off_task;
+
+static void poweroff_task(void *p)
+{
+	(void)p;
+	while (1) {
+		if (s_pwr_off_req) {
+			s_pwr_off_req = 0;
+			printf("[power] do soft_poweroff cpu=%d\n", current_cpu_id());
+			/* 等按键回调/sys_event 完全离开 */
+			os_time_dly(2);
+			sys_power_poweroff_wait_powerkey_up();
+			printf("[power] key up, soft_poweroff...\n");
+			os_time_dly(2);
+			power_set_soft_poweroff(0);
+			while (1) {
+				os_time_dly(1000);
+			}
+		}
+		os_time_dly(1);
+	}
+}
+
 void sys_power_poweroff(void)
 {
-	printf("[power] soft poweroff enter\n");
-	/*
-	 * V1.7.0 关机/唤醒曾正常; 之后双 CDC(先 CherryUSB 后原厂栈)在 USB 线
-	 * 仍插着时, 关机过程 OUT/枚举中断会拖住双核同步, 卡在 other cpu hold,
-	 * 实际没进 P33 → 按键无法唤醒。关机前必须先停 USB。
-	 */
-#if MINI_USB_STACK_CHERRYUSB
-	{
-		extern int usbd_deinitialize(u8 busid);
-		usbd_deinitialize(0);
-		printf("[power] cherryusb stopped\n");
-	}
-#elif defined(TCFG_PC_ENABLE) && TCFG_PC_ENABLE
-	{
-		extern void usb_stop(const u8 usbfd);
-		usb_stop((u8)MINI_USB_JL_ID);
-		printf("[power] jl usb%d stopped\n", MINI_USB_JL_ID);
-	}
+	printf("[power] soft poweroff req (bisect=%d) from cpu=%d\n",
+#if defined(MINI_PWR_BISECT)
+	       MINI_PWR_BISECT,
+#else
+	       -1,
 #endif
-	sys_power_poweroff_wait_powerkey_up();
-	printf("[power] key up, soft_poweroff...\n");
-	power_set_soft_poweroff(0);
+	       current_cpu_id());
+
+	if (!s_pwr_off_task) {
+		/* 优先级低于 sys_event(29), 钉在 CPU0 */
+		if (thread_fork("#C0poweroff", 12, 1024, 0, 0, poweroff_task, NULL) == 0) {
+			s_pwr_off_task = 1;
+		} else {
+			printf("[power] #C0poweroff fork fail, inline\n");
+			sys_power_poweroff_wait_powerkey_up();
+			power_set_soft_poweroff(0);
+			return;
+		}
+	}
+	s_pwr_off_req = 1;
 }
 
 /* 进软关机前 IO 高阻(除 SDRAM 相关 PD/PE/PF/PG) */
@@ -421,29 +455,51 @@ void debug_uart_init()
 
 void board_early_init()
 {
-    /* 官方 demo_edr 同款: DAC 模拟通道早期配置 + VCM 稳定等待
-     * (差分模式按 ch_num 选 0x3/0xf, 非差分用 hw_channel) */
+#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
+    /* 官方 demo_edr 同款: DAC 模拟通道早期配置 + VCM 稳定等待 */
     dac_early_init(0, dac_data.differ_output ? (dac_data.ch_num > 1 ? 0xf : 0x3) : dac_data.hw_channel, 1000);
+#endif
     devices_init();
 }
 
 static void board_power_init(void)
 {
+	int rst = system_reset_reason_get();
+
 	power_init(&power_param);
 	power_set_callback(TCFG_LOWPOWER_LOWPOWER_SEL, sleep_enter_callback,
 			   sleep_exit_callback, board_set_soft_poweroff);
 	power_keep_state(POWER_KEEP_RESET | POWER_KEEP_DACVDD);
 	power_wakeup_init(&wk_param);
 
+	printf("[power] reset_reason=0x%x%s\n", rst,
+	       (rst == SYS_RST_PORT_WKUP) ? " PORT_WKUP" : "");
+
 #ifdef CONFIG_PRESS_LONG_KEY_POWERON
-	/* 端口唤醒后若电源键已松开 → 视为误触, 立刻再关机 */
-	if (system_reset_reason_get() == SYS_RST_PORT_WKUP) {
+	/* PORT_WKUP 后须连续按住约 1.5s(500×3ms), 与原厂一致; 中途松开再软关机 */
+	if (rst == SYS_RST_PORT_WKUP) {
+		JL_ADC->CON = 0;
+		JL_ADC->CON = 0;
+		JL_ADC->CON = 0;
+		printf("[power] PORT_WKUP long-press check...\n");
 		for (int i = 0; i < 500; i++) {
-			if (0 == read_power_key(1)) {
-				sys_power_poweroff();
-				break;
+			unsigned int down = read_power_key(1);
+
+			if (i == 0 || i == 100 || i == 250 || i == 499) {
+				printf("[power] i=%d down=%u adc=%u\n", i, down, JL_ADC->RES);
+			}
+			if (0 == down) {
+				printf("[power] key released @%d, re-poweroff\n", i);
+				sys_power_poweroff_wait_powerkey_up();
+				/* 松手毛刺易连触发 PORT_WKUP, 稍等再关 */
+				delay_us(5000);
+				power_set_soft_poweroff(0);
+				while (1) {
+					;
+				}
 			}
 		}
+		printf("[power] long-press OK, boot\n");
 	}
 #endif
 	extern void clean_wakeup_source_port(void);
