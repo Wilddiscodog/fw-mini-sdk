@@ -96,13 +96,14 @@ PWM_PLATFORM_DATA_END();
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 static const struct emi_platform_data emi_data = {
 	.bits_mode      = EMI_8BITS_MODE,       /* 8 位 8080 并口 */
-	/* HSB≈120M: DIV5 → ~20MHz 写时钟(原 DIV8≈15MHz); DIV4 曾花屏, 取中间档 */
-	.baudrate       = EMI_BAUD_DIV5,
+	/* HSB≈120M: DIV4 → ~30MHz 写时钟(DIV5≈24M 上一档; 早年 DIV4 花屏
+	 * 是初始化序列错误所致, 与速度无关——2026-10-31 用户确认提速) */
+	.baudrate       = EMI_BAUD_DIV4,
 	.colection      = EMI_FALLING_COLT,     /* 下降沿采样 */
 	.time_out       = 1 * 1000,             /* 写超时 ms */
 	.th             = EMI_TWIDTH_NO_HALF,
 	.ts             = 0,
-	.tw             = EMI_BAUD_DIV5,   /* WR 脉宽与 baud 同档 */
+	.tw             = EMI_BAUD_DIV4,   /* WR 脉宽与 baud 同档 */
 	.data_bit_en    = 0,
 };
 

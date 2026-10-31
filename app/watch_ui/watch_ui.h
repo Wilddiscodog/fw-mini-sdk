@@ -11,6 +11,7 @@ enum watch_app_id {
     WATCH_APP_WALKIE,
     WATCH_APP_RECORDER,
     WATCH_APP_SETTINGS,
+    WATCH_APP_BALL,
     WATCH_APP_COUNT,
 };
 

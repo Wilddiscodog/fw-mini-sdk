@@ -90,6 +90,17 @@ static void fill_apps_page(lv_obj_t *page)
     const struct watch_app_desc *tab = watch_ui_app_table();
     int i, slot = 0;
 
+    /* 3 列 flex 网格, 超过 6 个 app 可纵向滚动(7 号 app 起自动翻行) */
+    lv_obj_set_flex_flow(page, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(page, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_column(page, 14, 0);
+    lv_obj_set_style_pad_row(page, 10, 0);
+    lv_obj_set_style_pad_top(page, 28, 0);
+    lv_obj_set_style_pad_bottom(page, 8, 0);
+    lv_obj_add_flag(page, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(page, LV_DIR_VER);
+
     for (i = 0; i < WATCH_APP_COUNT; i++) {
         if (!tab[i].create) {
             continue;

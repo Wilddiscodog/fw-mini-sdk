@@ -33,6 +33,7 @@ static const struct watch_app_desc s_apps[WATCH_APP_COUNT] = {
     { "对讲",   "T", &watch_icon_walkie,   0xFF6D00, app_walkie_create },
     { "录音",   "R", &watch_icon_rec,      0xFF1744, app_recorder_create },
     { "设置",   "S", &watch_icon_settings, 0x00E676, app_settings_create },
+    { "游戏",   "P", NULL,                 0xFFD600, app_ball_create },
 };
 
 const struct watch_app_desc *watch_ui_app_table(void)

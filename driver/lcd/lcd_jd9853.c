@@ -174,13 +174,21 @@ static void JD9853_reg_cfg(void)
     lcd_delay(50);             /* zc 日志: init_start→config succes ~300ms, 吻合 */
 }
 
+/* 面板 GRAM 每行 320 列, 可视窗起始在列 24(实屏 296 列): 所有窗口寻址
+ * 统一 +X 偏移, 逻辑坐标不变(LVGL/触摸仍按 296x240)。方向翻转后若发现
+ * 偏移出现在另一侧, 换 JUMP_COL(x2) 或并入 Y。 */
+#define LCD_GRAM_COL_OFFSET   24u
+
 static void JD9853_SetRange(u16 xs, u16 xe, u16 ys, u16 ye)
 {
+    u32 a = (u32)xs + LCD_GRAM_COL_OFFSET;
+    u32 b = (u32)xe + LCD_GRAM_COL_OFFSET;
+
     WriteCOM(0x2A);
-    WriteDAT_8(xs >> 8);
-    WriteDAT_8(xs);
-    WriteDAT_8(xe >> 8);
-    WriteDAT_8(xe);
+    WriteDAT_8((u8)(a >> 8));
+    WriteDAT_8((u8)a);
+    WriteDAT_8((u8)(b >> 8));
+    WriteDAT_8((u8)b);
     WriteCOM(0x2B);
     WriteDAT_8(ys >> 8);
     WriteDAT_8(ys);

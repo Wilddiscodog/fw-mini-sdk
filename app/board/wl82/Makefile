@@ -505,6 +505,7 @@ c_SRC_FILES += ../../../app/watch_ui/watch_volume.c
 c_SRC_FILES += ../../../app/watch_ui/watch_power.c
 c_SRC_FILES += ../../../app/watch_ui/watch_battery.c
 c_SRC_FILES += ../../../app/watch_ui/watch_apps.c
+c_SRC_FILES += ../../../app/watch_ui/watch_ball.c
 c_SRC_FILES += ../../../app/watch_ui/assets/watch_icons.c
 INCLUDES    += -I../../../third/lvgl -I$(LVGL_DIR) -I$(LVGL_DIR)/src
 INCLUDES    += -I../../../third/lvgl_port/driver -I../../../driver/lcd/include
