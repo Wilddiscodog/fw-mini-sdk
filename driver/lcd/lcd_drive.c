@@ -149,19 +149,16 @@ static int lcd_init(void *p)
 
         list_for_each_lcd_driver(lcd_dev) {
             if (lcd_dev && lcd_dev->LCD_Init) {
-                printf("LCD find %s\n", lcd_dev->name);
                 find_lcd = true;
                 break;
             }
 
         }
         if (!find_lcd) {
-            printf("err no lcd_dev (check TCFG_LCD_*_ENABLE vs compiled panel)\n");
             lcd_dev = NULL;
             return -1;
         }
         if (lcd_interface_init() != 0) {
-            printf("err unknow lcd port \n\n\n");
             lcd_dev = NULL;
             return -1;
         }
@@ -178,9 +175,7 @@ void user_lcd_init(void)
 {
     if (!lcd_hdl) {
         extern const struct ui_devices_cfg ui_cfg_data;
-        if (lcd_init(&ui_cfg_data) != 0) {
-            printf("[lcd] user_lcd_init failed\n");
-        }
+        (void)lcd_init(&ui_cfg_data);
     }
 }
 
@@ -364,10 +359,55 @@ void lcd_show_frame(u8 *buf, u32 len)//该接口主要用于用户显示数据 /
     lcd_draw(buf, len, 0);
 }
 
+void lcd_te_gpio_init(void)
+{
+    u32 pin;
+
+    if (!lcd_pdata) {
+        return;
+    }
+    pin = lcd_pdata->te_pin;
+    if (pin == (u32) - 1) {
+        return;
+    }
+    gpio_latch_en(pin, 0);
+    gpio_set_die(pin, 1);
+    gpio_set_pull_up(pin, 0);
+    gpio_set_pull_down(pin, 0);
+    gpio_direction_input(pin);
+}
+
+void lcd_wait_te(void)
+{
+    u32 pin;
+    u32 t;
+
+    if (!lcd_pdata) {
+        return;
+    }
+    pin = lcd_pdata->te_pin;
+    if (pin == (u32) - 1) {
+        return;
+    }
+    /* 等低再等高 = 上升沿; 超时约数 ms, 避免 TE 未开时卡死 */
+    t = 80000;
+    while (gpio_read(pin) && --t) {
+        ;
+    }
+    t = 80000;
+    while (!gpio_read(pin) && --t) {
+        ;
+    }
+}
+
 void lcd_lvgl_full(u16 xs, u16 xe, u16 ys, u16 ye, char *img)
 {
     if (!lcd_dev || !lcd_dev->LCD_Lvgl_Full) {
         return;
+    }
+    /* 每帧首片(顶行)对齐 TE, 后续行条直接写, 兼顾防撕裂与吞吐 */
+    if (ys == 0) {
+        lcd_wait_te();
     }
     lcd_dev->LCD_Lvgl_Full(xs, xe, ys, ye, img);
 }

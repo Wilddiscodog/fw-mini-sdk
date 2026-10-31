@@ -1,9 +1,6 @@
 /*
- * TE(撕裂同步)/相机合成路径桩 —— mini-sdk 未移植 te_driver 框架。
- * 仅 LVGL/直写路径（LCD_Lvgl_Full / lcd_show_frame）不需要这些函数；
- * 屏驱动注册表(.LCD_Draw/.LCD_Draw_1)引用它们以保证链接完整。
- * 若后续需要 TE 撕裂同步或摄像头合成显示，再从官方
- * apps/common/ui/lcd_driver/te_driver/ 移植。
+ * TE 同步(轻量实现): 面板 TEON 后 PC0 输出场消隐脉冲;
+ * LVGL 路径在 lcd_lvgl_full 首片等上升沿。相机合成队列未移植。
  */
 #include "typedef.h"
 #include "lcd_drive.h"
@@ -12,7 +9,7 @@
 void init_TE(void (*cb)(u8 *buf, u32 buf_size))
 {
     (void)cb;
-    /* TE 撕裂同步未启用: LVGL 直写路径不依赖 */
+    lcd_te_gpio_init();
 }
 
 u8 get_lcd_show_data_mode(void)
@@ -39,6 +36,15 @@ void camera_send_data_ready(u8 *data_buf, u32 data_size)
 
 void get_lcd_ui_x_y(u16 xstart, u16 xend, u16 ystart, u16 yend)
 {
-    /* TE 合成路径未移植: 空实现 */
-    (void)xstart; (void)xend; (void)ystart; (void)yend;
+    (void)xstart;
+    (void)xend;
+    (void)ystart;
+    (void)yend;
+}
+
+void get_te_fps(char *fps)
+{
+    if (fps) {
+        *fps = 0;
+    }
 }

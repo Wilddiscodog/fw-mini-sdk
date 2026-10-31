@@ -29,11 +29,7 @@
 #endif
 #endif
 
-/*============================ 中断列表 ============================
- * 双核必须把 SOFT5→CPU0 / SOFT4→CPU1 钉死: FreeRTOS 跨核 IPI 与
- * soft_poweroff→cpu_enter_sfc_critical 的 another_cpu softIRQ 都依赖它。
- * 原厂表写在 CONFIG_IPMASK_ENABLE 下; 双核无 IPMASK 时也要注册, 否则
- * 易卡 "other cpu hold"。 */
+/* 双核: SOFT5→CPU0 / SOFT4→CPU1 (FreeRTOS IPI 与 soft_poweroff 跨核同步) */
 const struct irq_info irq_info_table[] = {
 #if CPU_CORE_NUM > 1
     { IRQ_SOFT5_IDX,      6,   0    },
@@ -327,7 +323,6 @@ static void lcd_test_task(void *p)
     struct lcd_interface *lcd = lcd_get_hdl();
     u16 lcd_w = 0, lcd_h = 0;
     if (lcd == NULL || lcd->draw_lvgl == NULL) {
-        printf("[lcd] no panel driver matched, park lcd_test\n");
         while (1) { os_time_dly(10000); }
     }
     {
@@ -339,37 +334,36 @@ static void lcd_test_task(void *p)
         lcd_w = li.width;
         lcd_h = li.height;
         if (lcd_w == 0 || lcd_h == 0) {
-            printf("[lcd] panel not ready (lcd_dev missing), park lcd_test\n");
             while (1) { os_time_dly(10000); }
         }
     }
 
 #if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
-    printf("[lcd] panel ready %dx%d, start watch UI\n", lcd_w, lcd_h);
     lv_init();
     sys_timer_add(NULL, lv_tick_10ms_cb, 10);
     lv_port_disp_init();
     lv_port_indev_init();
     watch_ui_start();
     while (1) {
-        lv_task_handler();
-        /* 关机请求在 LVGL timer 里只置位; 必须离开 handler 后再 soft_poweroff,
-         * 否则另一核若仍走 EMI/Flash SFC, 会卡死在 other cpu hold */
+        u32 next_ms = lv_task_handler();
         {
             extern u8 watch_power_take_off_request(void);
             extern void sys_power_poweroff(void);
             if (watch_power_take_off_request()) {
-                printf("[lcd] leave LVGL, soft poweroff\n");
                 sys_power_poweroff();
                 while (1) {
                     os_time_dly(1000);
                 }
             }
         }
-        os_time_dly(1);         /* 10ms: LVGL 建议 5-10ms 轮询一次 */
+        /* OS tick=10ms: 有更近定时器则少睡, 提高动画刷新上限 */
+        if (next_ms == 0 || next_ms < 10) {
+            os_time_dly(1);
+        } else {
+            os_time_dly((next_ms + 9) / 10);
+        }
     }
 #else
-    printf("[lcd] panel ready, park (MINI_LVGL_SUPPORT=0)\n");
     while (1) { os_time_dly(10000); }
 #endif
 }
@@ -396,7 +390,6 @@ extern void usb_dual_cdc_init(uint8_t busid, uintptr_t reg_base);
 static void usb_mode_task(void *p)
 {
     os_time_dly(100);
-    printf("[usb] CherryUSB Dual-CDC (2x serial, no MSC)\n");
     usb_dual_cdc_init(CHERRYUSB_BUSID, JL82_HUSB_SIE_BASE);
 
     while (1) {
@@ -408,11 +401,6 @@ static void usb_mode_task(void *p)
 static void usb_mode_task(void *p)
 {
     os_time_dly(100);
-#if CDC_DUAL_ENABLE
-    printf("[usb] JL dual-CDC id=%d: CDC1=idle, CDC2=userlog (no notify)\n", MINI_USB_JL_ID);
-#else
-    printf("[usb] JL stack CDC (id=%d, CherryUSB off)\n", MINI_USB_JL_ID);
-#endif
     usb_start((usb_dev)MINI_USB_JL_ID);
 
     while (1) {
@@ -458,13 +446,9 @@ void app_main()
 #if (defined MINI_BT_SUPPORT && MINI_BT_SUPPORT) || \
     (defined MINI_WIFI_SUPPORT && MINI_WIFI_SUPPORT)
     bt_wifi_start_deferred();
-#else
-    printf("[boot] BT/WiFi off (MINI_PWR_BISECT=%d)\n", MINI_PWR_BISECT);
 #endif
 #if (defined MINI_USB_ENABLE) && MINI_USB_ENABLE
     os_task_create(usb_mode_task, NULL, 8, 2048, 0, "usb_mode");
-#else
-    printf("[boot] USB off (MINI_PWR_BISECT=%d)\n", MINI_PWR_BISECT);
 #endif
     os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT && !MINI_BT_SPEAKER_EN

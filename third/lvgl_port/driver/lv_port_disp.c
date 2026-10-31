@@ -50,12 +50,12 @@ void lv_port_disp_init(void)
 //    lv_disp_draw_buf_init(&draw_buf_dsc_1, buf_1, NULL, LCD_W * 10);   /*Initialize the display buffer*/
 
     /* Example for 2) */
-    /* 40 行双缓冲(2×19.2KB): flush 粒度越大, SetRange+DMA 启动开销越少,
-     * EMI 同步写下每帧满屏仅 8 次 flush; 静态数组天然 4 字节对齐(EMI DMA 要求) */
+    /* 80 行双缓冲: 满屏 296x240 约 3 次 flush, 减少 SetRange+DMA 启动开销;
+     * 静态数组天然 4 字节对齐(EMI DMA 要求) */
     static lv_disp_draw_buf_t draw_buf_dsc_2;
-    static lv_color_t buf_2_1[LCD_W * 40];                        /*A buffer for 40 rows*/
-    static lv_color_t buf_2_2[LCD_W * 40];                        /*An other buffer for 40 rows*/
-    lv_disp_draw_buf_init(&draw_buf_dsc_2, buf_2_1, buf_2_2, LCD_W * 40);   /*Initialize the display buffer*/
+    static lv_color_t buf_2_1[LCD_W * 80];
+    static lv_color_t buf_2_2[LCD_W * 80];
+    lv_disp_draw_buf_init(&draw_buf_dsc_2, buf_2_1, buf_2_2, LCD_W * 80);
 
     /* Example for 3) also set disp_drv.full_refresh = 1 below*/
 //    static lv_disp_draw_buf_t draw_buf_dsc_3;

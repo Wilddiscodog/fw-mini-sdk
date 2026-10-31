@@ -107,18 +107,12 @@ static int cst816_init(void)
 
     iic = dev_open("iic0", NULL);        /* PH0/PH1, board.c sw_iic0 */
     if (!iic) {
-        printf("[cst816] iic0 open fail\n");
         return -1;
     }
 
     cst816_reset();
-    if (cst816_read_regs(CST816_REG_ID, &id, 1) == 0) {
-        printf("[cst816] id=0x%02x\n", id);
-    }
-    if (id == 0xB6 || (id & 0x0f) == 0x06 || 1) {
-        /* 0xB6=原机实测; 其他 CST81x 变体同样数据格式, 全放行 */
-        printf("[cst816] touch id CST716/CST816/CST820\n");
-    }
+    (void)cst816_read_regs(CST816_REG_ID, &id, 1);
+    (void)id;   /* 0xB6 等变体同数据格式, 全放行 */
     return 0;
 }
 
@@ -135,9 +129,6 @@ static int cst816_init(void)
 #define TOUCH_CAL_ROT180    3   /* x_d=239-ty, y_d=319-tx */
 #define TOUCH_CAL_MODE  TOUCH_CAL_NORMAL
 
-/* 最近一次原始触点数据(触下时打印, 便于核对坐标布局) */
-static u8 last_raw[6];
-
 static u8 cst816_read_point(u16 *x, u16 *y)
 {
     u8 d[6] = {0};
@@ -147,39 +138,35 @@ static u8 cst816_read_point(u16 *x, u16 *y)
     if (cst816_read_regs(CST816_REG_DATA, d, 6)) {
         return 0;
     }
-    memcpy(last_raw, d, sizeof(last_raw));
 
     press = d[0] & 0x0f;                 /* FingerNum: 0=无触, 1=单指 */
     if (press) {
-        tx = ((u16)(d[1] & 0x0f) << 8) | d[2];   /* X: 0..319 (IC 横向坐标) */
-        ty = ((u16)(d[3] & 0x0f) << 8) | d[4];   /* Y: 0..239 */
-        if (tx > 320 - 1) {
-            tx = 320 - 1;
+        tx = ((u16)(d[1] & 0x0f) << 8) | d[2];
+        ty = ((u16)(d[3] & 0x0f) << 8) | d[4];
+        if (tx > LCD_W - 1) {
+            tx = LCD_W - 1;
         }
-        if (ty > 240 - 1) {
-            ty = 240 - 1;
+        if (ty > LCD_H - 1) {
+            ty = LCD_H - 1;
         }
 #if HORIZONTAL_SCREEN
-        /* 横屏显示 320x240: 现场校准确认(2026-10-29)——恒等映射, 原点左上,
-         * X 右向 0..319, Y 下向 0..239, 触点与显示位置完全对应 */
-        tx = tx;
-        ty = ty;
+        /* 横屏 296x240: 触控与显示坐标一致 */
 #else
-        /* 竖屏显示 240x320: 轴交换(x←ty 0..239, y←tx 0..319) + 贴装校准 4 选 1 */
-        u16 ax = ty;                     /* 0..239, 对应显示 x 轴 */
-        u16 ay = tx;                     /* 0..319, 对应显示 y 轴 */
+        /* 竖屏 240x296: 轴交换 + 贴装校准 */
+        u16 ax = ty;
+        u16 ay = tx;
 #if TOUCH_CAL_MODE == TOUCH_CAL_NORMAL
         tx = ax;
         ty = ay;
 #elif TOUCH_CAL_MODE == TOUCH_CAL_MIRROR_X
-        tx = 240 - 1 - ax;
+        tx = LCD_H - 1 - ax;
         ty = ay;
 #elif TOUCH_CAL_MODE == TOUCH_CAL_MIRROR_Y
         tx = ax;
-        ty = 320 - 1 - ay;
+        ty = LCD_W - 1 - ay;
 #else   /* TOUCH_CAL_ROT180 */
-        tx = 240 - 1 - ax;
-        ty = 320 - 1 - ay;
+        tx = LCD_H - 1 - ax;
+        ty = LCD_W - 1 - ay;
 #endif
 #endif
         *x = tx;
@@ -206,9 +193,6 @@ static void cst816_task(void *priv)
                 tp_hdl.x = x;            /* LVGL 桥: 常驻结构体, 每拍直写 */
                 tp_hdl.y = y;
                 tp_hdl.status = 1;
-                printf("[cst816] down (%d,%d) raw %02x %02x %02x %02x %02x %02x\n",
-                       x, y, last_raw[0], last_raw[1], last_raw[2],
-                       last_raw[3], last_raw[4], last_raw[5]);
                 if (cst816_event_cb) {
                     cst816_event_cb(1, x, y);
                 }
@@ -224,7 +208,6 @@ static void cst816_task(void *priv)
         } else if (touch_status) {
             touch_status = 0;
             tp_hdl.status = 0;
-            printf("[cst816] up (%d,%d)\n", touch_x, touch_y);
             if (cst816_event_cb) {
                 cst816_event_cb(0, touch_x, touch_y);
             }

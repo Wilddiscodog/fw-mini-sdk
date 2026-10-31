@@ -242,20 +242,8 @@ void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
     (void)busid;
     if (intf == 0) {
         dtr_intf_mask = dtr ? (dtr_intf_mask | 0x01) : (dtr_intf_mask & ~0x01);
-        printf("[cdc1] DTR=%d\n", dtr);
     } else if (intf == 2) {
         dtr_intf_mask = dtr ? (dtr_intf_mask | 0x02) : (dtr_intf_mask & ~0x02);
-        printf("[cdc2] DTR=%d (user log)\n", dtr);
-        if (dtr && cdc_configured) {
-            const char *hi = "[userlog] CDC2 ready\r\n";
-            struct cdc_port *p = &cdc_ports[1];
-            if (!p->tx_busy) {
-                uint32_t n = (uint32_t)strlen(hi);
-                memcpy(p->write_buf, hi, n);
-                p->tx_busy = true;
-                usbd_ep_start_write(busid, p->in_ep, p->write_buf, n);
-            }
-        }
     }
 }
 
@@ -329,5 +317,4 @@ void usb_dual_cdc_init(uint8_t busid, uintptr_t reg_base)
     usbd_add_endpoint(busid, &cdc2_notify_ep);
 
     usbd_initialize(busid, reg_base, usbd_event_handler);
-    printf("[usb] dual-CDC ready CDC1=EP1/5 CDC2=EP2/6 (no echo/alive)\n");
 }

@@ -6,7 +6,6 @@
 #include "lcd_config.h"
 #include "watch_battery.h"
 #include "watch_style.h"
-#include "user_cdc_log.h"
 
 /* 4.2V 锂电线性估算: 3.50V→0%, 4.20V→100% */
 #define BAT_MV_EMPTY    3500
@@ -21,7 +20,6 @@ static u16 s_mv;
 static u8 s_pct;
 static u8 s_usb;
 static u8 s_full;
-static u8 s_cdc_div;
 
 static void gpio_in_ext(u32 pin)
 {
@@ -80,15 +78,6 @@ static void battery_ui_refresh(lv_timer_t *t)
 		}
 		lv_label_set_text(s_lbl, buf);
 	}
-
-	/* CDC2: 约每 2s 打一次 (定时器 500ms) */
-	if (++s_cdc_div >= 4) {
-		s_cdc_div = 0;
-		user_cdc_printf("[bat] %umV %u%% usb=%u full=%u chg=%u\r\n",
-				(unsigned)s_mv, (unsigned)s_pct,
-				(unsigned)s_usb, (unsigned)s_full,
-				(unsigned)watch_battery_charging());
-	}
 }
 
 void watch_battery_init(void)
@@ -112,8 +101,6 @@ void watch_battery_init(void)
 	}
 	s_tm = lv_timer_create(battery_ui_refresh, 500, NULL);
 	battery_ui_refresh(NULL);
-	printf("[bat] init PA0=CHRG PA8=USB_DET mv=%u pct=%u\n",
-	       (unsigned)s_mv, (unsigned)s_pct);
 }
 
 u16 watch_battery_voltage_mv(void)

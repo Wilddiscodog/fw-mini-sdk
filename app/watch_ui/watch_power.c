@@ -27,13 +27,8 @@ void watch_power_off(void)
     watch_ui_close_dropdown();
     watch_ui_close_app();
     watch_backlight_set(0);
-    /*
-     * 只置位: 真正 soft_poweroff 必须在 lcd_test 跳出 lv_task_handler 之后做。
-     * 若在 LVGL 回调/另起任务里进 power_set_soft_poweroff, 另一核仍可能正跑
-     * LVGL→EMI/Flash(SFC critical), 双核互相等 → 永久 "other cpu hold"。
-     */
+    /* 只置位: soft_poweroff 在 lcd_test 离开 lv_task_handler 后执行 */
     s_do_poweroff = 1;
-    printf("[watch] poweroff requested (wait lcd_test leave LVGL)\n");
 }
 
 u8 watch_power_take_off_request(void)

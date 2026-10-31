@@ -49,12 +49,13 @@
 #endif
 
 #if TCFG_LCD_JD9853_ENABLE
+/* 实屏 296x240 (横); 竖屏 240x296 */
 #if HORIZONTAL_SCREEN
-#define LCD_W     320
+#define LCD_W     296
 #define LCD_H     240
 #else
 #define LCD_W     240
-#define LCD_H     320
+#define LCD_H     296
 #endif
 #endif
 

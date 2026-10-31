@@ -17,7 +17,6 @@ void watch_backlight_init(void)
     s_saved = WATCH_BL_DEFAULT;
     s_pwm = dev_open("pwm_bl", &s_pwm_cfg);
     if (!s_pwm) {
-        printf("[watch] pwm_bl open fail, GPIO backlight fallback\n");
         lcd_bl_pinstate(BL_ON);
         return;
     }
@@ -28,7 +27,6 @@ void watch_backlight_init(void)
     s_pwm_cfg.point_bit = 0;
     dev_ioctl(s_pwm, PWM_SET_FREQ, (u32)&s_pwm_cfg);
     dev_ioctl(s_pwm, PWM_RUN, (u32)&s_pwm_cfg);
-    printf("[watch] backlight PWM ready %d%%\n", s_percent);
 }
 
 void watch_backlight_set(u8 percent)

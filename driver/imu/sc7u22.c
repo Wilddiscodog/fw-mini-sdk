@@ -94,37 +94,13 @@ static int probe_addr(u8 addr7)
     s_addr_r = (u8)((addr7 << 1) | 1);
     err = sc_read_regs(REG_WHO_AM_I, &id, 1);
     if (err) {
-        printf("[sc7u22] probe 0x%02x: NACK/IO err=%d\n", addr7, err);
         return -1;
     }
     if (id != WHO_AM_I_VAL) {
-        printf("[sc7u22] probe 0x%02x: WHO_AM_I=0x%02x (expect 0x%02x)\n",
-               addr7, id, WHO_AM_I_VAL);
         return -2;
     }
     s_whoami = id;
     return 0;
-}
-
-static void sc_scan_bus(void)
-{
-    u8 found = 0;
-    printf("[sc7u22] i2c0 scan 0x03-0x77:\n");
-    for (u8 a = 0x03; a <= 0x77; a++) {
-        int err;
-        s_addr_w = (u8)(a << 1);
-        err = dev_ioctl(s_iic, IIC_IOCTL_START, 0);
-        err |= dev_ioctl(s_iic, IIC_IOCTL_TX_WITH_START_BIT, s_addr_w);
-        dev_ioctl(s_iic, IIC_IOCTL_STOP, 0);
-        if (err == 0) {
-            printf("[sc7u22]   ACK @0x%02x\n", a);
-            found++;
-        }
-        wdt_clear();
-    }
-    if (!found) {
-        printf("[sc7u22]   no device acked\n");
-    }
 }
 
 int sc7u22_init(void)
@@ -136,16 +112,12 @@ int sc7u22_init(void)
     }
     s_iic = dev_open("iic0", NULL);
     if (!s_iic) {
-        printf("[sc7u22] iic0 open fail\n");
         return -1;
     }
 
     if (probe_addr(ADDR7_SA0_L) && probe_addr(ADDR7_SA0_H)) {
-        printf("[sc7u22] WHO_AM_I fail (try 0x18/0x19)\n");
-        sc_scan_bus();
         return -2;
     }
-    printf("[sc7u22] WHO_AM_I=0x%02x addr=0x%02x\n", s_whoami, s_addr_w >> 1);
 
     /* soft reset: Addr_Auto 开启后向 SOFT_RST 写两次 0xA5 */
     sc_write_reg(REG_COM_CONF, COM_CONF_DEFAULT);
@@ -156,7 +128,6 @@ int sc7u22_init(void)
     /* 重新选地址(复位后通信仍在同地址) */
     if (probe_addr(s_addr_w >> 1)) {
         if (probe_addr(ADDR7_SA0_L) && probe_addr(ADDR7_SA0_H)) {
-            printf("[sc7u22] post-reset WHO_AM_I fail\n");
             return -3;
         }
     }
@@ -172,7 +143,7 @@ int sc7u22_init(void)
     os_time_dly(5);     /* 配置后建议延时再读 */
 
     sc_read_regs(REG_DATA_STAT, &stat, 1);
-    printf("[sc7u22] ready DATA_STAT=0x%02x\n", stat);
+    (void)stat;
     s_ready = 1;
     return 0;
 }

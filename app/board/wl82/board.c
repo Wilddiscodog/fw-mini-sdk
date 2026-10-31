@@ -96,14 +96,13 @@ PWM_PLATFORM_DATA_END();
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 static const struct emi_platform_data emi_data = {
 	.bits_mode      = EMI_8BITS_MODE,       /* 8 位 8080 并口 */
-	.baudrate       = EMI_BAUD_DIV8,        /* clock = HSB/(baud+1) */
+	/* HSB≈120M: DIV5 → ~20MHz 写时钟(原 DIV8≈15MHz); DIV4 曾花屏, 取中间档 */
+	.baudrate       = EMI_BAUD_DIV5,
 	.colection      = EMI_FALLING_COLT,     /* 下降沿采样 */
 	.time_out       = 1 * 1000,             /* 写超时 ms */
 	.th             = EMI_TWIDTH_NO_HALF,
 	.ts             = 0,
-	.tw             = EMI_BAUD_DIV8,   /* WR 脉宽(HSB 周期数): 对齐官方 DevKitBoard
-	                                       (tw==baudrate 同为 DIV8)。曾用 DIV4(3 周期
-	                                       ≈25ns@120M)过快 → 面板采样错位花屏 */
+	.tw             = EMI_BAUD_DIV5,   /* WR 脉宽与 baud 同档 */
 	.data_bit_en    = 0,
 };
 
@@ -249,12 +248,7 @@ void sys_power_poweroff_wait_powerkey_up(void)
 }
 #endif
 
-/*
- * 关机必须延后到独立 #C0 任务:
- *  - 不可在 sys_event/按键回调里直接 soft_poweroff(双核 SFC hold 易死锁)
- *  - 不可把 CPU1 忙等驻留(会堵 softIRQ, 日志停在 soft_poweroff... 无 other cpu hold)
- * 调用方只置位后 return, 让 CPU1 回到正常调度再由 CPU0 执行关机。
- */
+/* 关机延后到 #C0 任务: 勿在按键/LVGL 回调里直接 soft_poweroff */
 static volatile u8 s_pwr_off_req;
 static volatile u8 s_pwr_off_task;
 
@@ -264,11 +258,8 @@ static void poweroff_task(void *p)
 	while (1) {
 		if (s_pwr_off_req) {
 			s_pwr_off_req = 0;
-			printf("[power] do soft_poweroff cpu=%d\n", current_cpu_id());
-			/* 等按键回调/sys_event 完全离开 */
 			os_time_dly(2);
 			sys_power_poweroff_wait_powerkey_up();
-			printf("[power] key up, soft_poweroff...\n");
 			os_time_dly(2);
 			power_set_soft_poweroff(0);
 			while (1) {
@@ -281,20 +272,10 @@ static void poweroff_task(void *p)
 
 void sys_power_poweroff(void)
 {
-	printf("[power] soft poweroff req (bisect=%d) from cpu=%d\n",
-#if defined(MINI_PWR_BISECT)
-	       MINI_PWR_BISECT,
-#else
-	       -1,
-#endif
-	       current_cpu_id());
-
 	if (!s_pwr_off_task) {
-		/* 优先级低于 sys_event(29), 钉在 CPU0 */
 		if (thread_fork("#C0poweroff", 12, 1024, 0, 0, poweroff_task, NULL) == 0) {
 			s_pwr_off_task = 1;
 		} else {
-			printf("[power] #C0poweroff fork fail, inline\n");
 			sys_power_poweroff_wait_powerkey_up();
 			power_set_soft_poweroff(0);
 			return;
@@ -472,26 +453,15 @@ static void board_power_init(void)
 	power_keep_state(POWER_KEEP_RESET | POWER_KEEP_DACVDD);
 	power_wakeup_init(&wk_param);
 
-	printf("[power] reset_reason=0x%x%s\n", rst,
-	       (rst == SYS_RST_PORT_WKUP) ? " PORT_WKUP" : "");
-
 #ifdef CONFIG_PRESS_LONG_KEY_POWERON
-	/* PORT_WKUP 后须连续按住约 1.5s(500×3ms), 与原厂一致; 中途松开再软关机 */
+	/* PORT_WKUP 后连续按住约 1.5s(500×3ms); 中途松开则再软关机 */
 	if (rst == SYS_RST_PORT_WKUP) {
 		JL_ADC->CON = 0;
 		JL_ADC->CON = 0;
 		JL_ADC->CON = 0;
-		printf("[power] PORT_WKUP long-press check...\n");
 		for (int i = 0; i < 500; i++) {
-			unsigned int down = read_power_key(1);
-
-			if (i == 0 || i == 100 || i == 250 || i == 499) {
-				printf("[power] i=%d down=%u adc=%u\n", i, down, JL_ADC->RES);
-			}
-			if (0 == down) {
-				printf("[power] key released @%d, re-poweroff\n", i);
+			if (0 == read_power_key(1)) {
 				sys_power_poweroff_wait_powerkey_up();
-				/* 松手毛刺易连触发 PORT_WKUP, 稍等再关 */
 				delay_us(5000);
 				power_set_soft_poweroff(0);
 				while (1) {
@@ -499,15 +469,10 @@ static void board_power_init(void)
 				}
 			}
 		}
-		printf("[power] long-press OK, boot\n");
 	}
 #endif
 	extern void clean_wakeup_source_port(void);
 	clean_wakeup_source_port();
-}
-
-__attribute__((weak)) void clean_wakeup_source_port(void)
-{
 }
 
 void board_init()

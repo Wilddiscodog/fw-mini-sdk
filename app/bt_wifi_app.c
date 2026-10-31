@@ -82,20 +82,14 @@ static void key_sys_event_handler(struct sys_event *event)
     struct key_event *e = (struct key_event *)event->payload;
     /* KEY_POWER(0) 长按: → P33 真关机 */
     if (e->value == KEY_POWER && e->action == KEY_EVENT_LONG) {
-        printf("[key] POWER long -> P33 poweroff\n");
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT && \
     (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
         extern void watch_power_key_long(void);
         watch_power_key_long();
 #else
-        /* 无 UI: 直接走原厂 soft_poweroff(长按已松开前会 wait_key_up) */
         extern void sys_power_poweroff(void);
         sys_power_poweroff();
 #endif
-        return;
-    }
-    if (e->action == KEY_EVENT_CLICK || e->action == KEY_EVENT_UP) {
-        printf("[key] v=%d action=%d\n", e->value, e->action);
     }
 }
 
@@ -104,9 +98,8 @@ static void key_framework_init(void)
     extern void adc_init(void);
     extern int key_driver_init(void);
     adc_init();
-    key_driver_init();                  /* 内部 adkey_init(&adkey_data) + 高精度定时器扫描 */
+    key_driver_init();
     register_sys_event_handler(SYS_KEY_EVENT, KEY_EVENT_FROM_KEY, 2, key_sys_event_handler);
-    printf("[key] adkey ready (PB01)\n");
 }
 /* 开机独立初始化: 与 BT 启动解耦(否则按键触发依赖按键框架, 循环依赖) */
 void key_early_init(void)
@@ -183,7 +176,6 @@ static void bt_status_event_handler(struct bt_event *bt)
 {
     switch (bt->event) {
         case BT_STATUS_INIT_OK:
-            printf("[bt] controller init ok\n");
 #if MINI_BT_BLE_TRANS_EN
             bt_ble_init();          /* GAP 名/广播 + 透传服务 */
 #endif
@@ -228,7 +220,6 @@ void app_default_event_handler(struct sys_event *event)
 void bt_module_init(void *p)
 {
     (void)p;
-    printf("[bt] task start\n");
     os_time_dly(200);   /* 等 boot 日志与 VM 就绪 */
 
 #if MINI_BT_BLE_TRANS_EN
@@ -236,25 +227,17 @@ void bt_module_init(void *p)
     u8 tmp_ble_addr[6];
     extern void lib_make_ble_address(u8 *ble_address, u8 *edr_address);
     extern int le_controller_set_mac(void *addr);
-    printf("[bt] read mac...\n");
     lib_make_ble_address(tmp_ble_addr, (u8 *)bt_get_mac_addr());
-    printf("[bt] set controller mac\n");
     le_controller_set_mac((void *)tmp_ble_addr);
-    printf("[bt] ble addr %02x:%02x:%02x:%02x:%02x:%02x\n",
-           tmp_ble_addr[0], tmp_ble_addr[1], tmp_ble_addr[2],
-           tmp_ble_addr[3], tmp_ble_addr[4], tmp_ble_addr[5]);
 #endif
 
 #if MINI_BT_SPEAKER_EN
-    printf("[bt] speaker(classic A2DP/HFP) + btstack_init\n");
     bt_ble_module_init();   /* function_select + bredr 注册 + btstack_init */
 #else
-    printf("[bt] register event + btstack_init\n");
     extern void lmp_set_sniff_disable(void);
     lmp_set_sniff_disable();
     btstack_init();
 #endif
-    printf("[bt] btstack_init done\n");
 
     while (1) {
         os_time_dly(600);
@@ -305,8 +288,6 @@ static void mini_ensure_stable_mac(void)
     }
     mac[0] &= 0xfe;                  /* 单播 */
     syscfg_write(CFG_BT_MAC_ADDR, mac, 6);
-    printf("[mac] SYSCFG miss/bad, saved %02x:%02x:%02x:%02x:%02x:%02x (UUID-derived)\n",
-           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 /* WiFi MAC 来源: 强定义覆盖库 weak 默认。先 ensure 再读。 */
@@ -596,13 +577,8 @@ static void wifi_app_task(void *p)
     os_time_dly(200);
     wifi_set_event_callback(wifi_event_callback);
     if (wifi_on()) {
-        printf("[wifi] wifi_on fail\n");
         while (1) { os_time_dly(600); }
     }
-    u8 wmac[6];
-    wifi_get_mac(wmac);
-    printf("[wifi] on, mac %02x:%02x:%02x:%02x:%02x:%02x\n",
-           wmac[0], wmac[1], wmac[2], wmac[3], wmac[4], wmac[5]);
 
     wifi_prov_run();                     /* 配网状态机, 不返回 */
 }
@@ -614,13 +590,10 @@ void bt_start(void)
 #if MINI_BT_SUPPORT
     static u8 started = 0;
     if (started) {
-        printf("[bt] already started\n");
         return;
     }
     started = 1;
-    printf("[bt] creating bt_app task...\n");
     os_task_create(bt_module_init, NULL, 12, 1024, 0, "bt_app");
-    printf("[bt] bt_app task created\n");
 #endif
 }
 
@@ -629,13 +602,10 @@ void wifi_start(void)
 #if MINI_WIFI_SUPPORT
     static u8 started = 0;
     if (started) {
-        printf("[wifi] already started\n");
         return;
     }
     started = 1;
-    printf("[wifi] creating wifi_app task...\n");
     os_task_create(wifi_app_task, NULL, 12, 2048, 0, "wifi_app");
-    printf("[wifi] wifi_app task created\n");
 #endif
 }
 
@@ -656,11 +626,7 @@ void bt_wifi_start(void)
 static void bt_wifi_boot_task(void *p)
 {
     (void)p;
-    /* 启动序改为 屏→BT/WiFi→USB(用户定)后, 射频不再等 USB 配置——
-     * 旧等待与 New 顺序矛盾(USB 在后, 等它会反向阻塞 BT/WiFi)。
-     * 风险: USB 枚举窗与已运行射频共存, 旧版"Win 代码10"问题可能回归,
-     * 若复现再以射频间隙窗口解决 */
-    printf("[boot] starting BT + WiFi immediately (usb starts last)\n");
+    /* 启动序: 屏→BT/WiFi→USB; 射频不再等 USB 配置 */
     mini_ensure_stable_mac();
     bt_wifi_start();
     while (1) {

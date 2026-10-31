@@ -1,5 +1,5 @@
 /*
- * LCD 驱动 —— JD9853 8bit 8080 并口 (xiaolu-R2 设备屏, 方形 240x320 QVGA TFT)
+ * LCD 驱动 —— JD9853 8bit 8080 并口 (实屏 296x240 横 / 240x296 竖)
  *
  * 来源与限制(重要):
  *  - 型号与流程来自 xiaolu-R2 原机串口日志: "LCD_JD9853 init_start, touch id[0xB6],
@@ -27,8 +27,7 @@
 
 #if TCFG_LCD_JD9853_ENABLE
 
-/* LCD_W/H 由 lcd_config.h 按 HORIZONTAL_SCREEN 给出:
- * 竖屏 240x320 / 横屏 320x240(逆时针 90°) */
+/* LCD_W/H 由 lcd_config.h: 横屏 296x240 / 竖屏 240x296 */
 
 #define ROTATE_DEGREE_0    0
 #define ROTATE_DEGREE_90   1
@@ -161,6 +160,13 @@ static void JD9853_reg_cfg(void)
                                 * 不置位则红蓝互换(实测 黑白红绿蓝→黑白蓝红绿) */
     WriteDAT_8(0x08);
 
+    /* TEON: V-blank 输出 TE 脉冲(PC0), 供 MCU 等场消隐再刷, 防撕裂 */
+    WriteCOM(0x35);
+    WriteDAT_8(0x00);
+    WriteCOM(0x44);            /* TE 触发行(靠近场消隐) */
+    WriteDAT_8(0x00);
+    WriteDAT_8(0x10);
+
     /* 不发 0x21(INVON): 本屏为 TN 型(常态白), 反相开会把整屏取反
      * (实测: 黑白红绿蓝→白黑黄青紫)。若换 IPS 屏色反了再加回。 */
 
@@ -201,17 +207,18 @@ void JD9853_set_direction(u8 dir)
 
 void JD9853_clear_screen(u16 color)
 {
-    WriteCOM(0x2C);
-    u8 *buf = malloc(LCD_W * LCD_H * 2);
+    u32 px = (u32)LCD_W * LCD_H;
+    u8 *buf = malloc(px * 2);
     if (!buf) {
-        printf("no mem in %s\n", __func__);
         return;
     }
-    for (u32 i = 0; i < LCD_W * LCD_H; i++) {
+    for (u32 i = 0; i < px; i++) {
         buf[2 * i] = (color >> 8) & 0xff;
         buf[2 * i + 1] = color & 0xff;
     }
-    WriteDAT_DMA(buf, LCD_W * LCD_H * 2);
+    JD9853_SetRange(0, LCD_W - 1, 0, LCD_H - 1);
+    WriteCOM(0x2C);
+    WriteDAT_DMA(buf, px * 2);
     free(buf);
 }
 
@@ -247,7 +254,6 @@ static void JD9853_enter_sleep(void)
     lcd_delay(20);
     WriteCOM(0x10);            /* Sleep In */
     lcd_delay(50);
-    printf("[lcd] JD9853 sleep in\n");
 }
 
 static int JD9853_init(void)
@@ -257,12 +263,9 @@ static int JD9853_init(void)
     lcd_bl_pinstate(BL_ON);
 
     JD9853_io_init();
-    printf("[lcd] LCD_JD9853 init_start %dx%d rot=%d\n",
-           LCD_W, LCD_H, JD9853_INIT_ROTATE);
     JD9853_reg_cfg();
     JD9853_set_direction(JD9853_INIT_ROTATE);
     init_TE(JD9853_Fill);
-    printf("[lcd] LCD_JD9853 config succes\n");
     return 0;
 }
 

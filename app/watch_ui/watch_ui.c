@@ -188,7 +188,6 @@ static void apply_theme(void)
 
 void watch_ui_start(void)
 {
-    printf("[watch] UI start %dx%d\n", LCD_W, LCD_H);
 #if LV_USE_PNG
     lv_png_init();
 #endif
@@ -214,5 +213,4 @@ void watch_ui_start(void)
     lv_timer_create(watch_power_poll, 50, NULL);
     watch_battery_init();
     watch_power_boot_anim();
-    printf("[watch] UI ready\n");
 }

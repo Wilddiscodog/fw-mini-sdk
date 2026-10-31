@@ -22,8 +22,6 @@ extern int get_app_music_volume(void);
 
 #include "bt_music.h"
 #include "sc7u22.h"
-#include "user_cdc_log.h"
-
 
 static lv_obj_t *make_app_root(lv_obj_t *parent, const char *title)
 {
@@ -92,12 +90,10 @@ static void gyro_refresh(lv_timer_t *t)
     }
     if (!sc7u22_ready()) {
         lv_label_set_text(s_gyro_lab, "SC7U22 未就绪\n检查 PH0/PH1 总线");
-        user_cdc_puts("[gyro] SC7U22 not ready\r\n");
         return;
     }
     if (sc7u22_read_si(&s)) {
         lv_label_set_text(s_gyro_lab, "读数失败");
-        user_cdc_puts("[gyro] read fail\r\n");
         return;
     }
     snprint_q(ax, sizeof(ax), q_round(s.ax, 100), 100);
@@ -118,9 +114,6 @@ static void gyro_refresh(lv_timer_t *t)
              sc7u22_whoami(),
              ax, ay, az, gx, gy, gz, tc);
     lv_label_set_text(s_gyro_lab, buf);
-    // /* CDC2: 不用 %f (库未链浮点 printf) */
-    // user_cdc_printf("[gyro] id=%02X acc=%s,%s,%s gyr=%s,%s,%s T=%s\r\n",
-    //                 sc7u22_whoami(), ax, ay, az, gx, gy, gz, tc);
 }
 
 static void gyro_del(lv_event_t *e)
@@ -139,14 +132,9 @@ lv_obj_t *app_gyro_create(lv_obj_t *parent)
     lv_obj_t *body = make_body(root);
     lv_obj_add_event_cb(root, gyro_del, LV_EVENT_DELETE, NULL);
 
-    printf("[gyro] app create\n");
     if (sc7u22_init()) {
-        printf("[gyro] sc7u22_init fail\n");
         watch_ui_toast("陀螺仪初始化失败");
-    } else {
-        printf("[gyro] sc7u22 ready whoami=0x%02x\n", sc7u22_whoami());
     }
-    user_cdc_puts("[gyro] app open\r\n");
 
     s_gyro_lab = lv_label_create(body);
     lv_obj_set_style_text_font(s_gyro_lab, &lv_font_simsun_16_cjk, 0);
