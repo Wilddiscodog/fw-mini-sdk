@@ -97,6 +97,7 @@ dts_decoder
 ogg_vorbis_decoder
 vir_dev_sub
 subdev_aec_enc
+
 );
 
 
@@ -140,7 +141,7 @@ SECTIONS
 
         *startup.S.o(.text)
         *(.boot_code)
-        *(.text*)
+        *(EXCLUDE_FILE(*wasm_interp_classic.c.o) .text*)
         *(.LOG_TAG_CONST*)
         *(.rodata*)
         *(.fat_data_code)
@@ -208,6 +209,7 @@ SECTIONS
         *(.ape_dec_const)
         *(.ape_dec_sparse_code)
         *(.ape_dec_sparse_const)
+
 
 
         . = ALIGN(4);
@@ -368,7 +370,8 @@ SECTIONS
         btctler_code_end = .;
 
   . = ALIGN(4);
- . = ALIGN(4);
+
+        . = ALIGN(4);
 
 
 
@@ -424,7 +427,8 @@ SECTIONS
 
 
         BTSTACK_CODE_TOTAL_SIZE = btstack_code_end - btstack_code_start;
- . = ALIGN(4);
+
+        . = ALIGN(4);
 
         lcd_interface_begin = .;
         KEEP(*(.lcd_if_info))
@@ -461,6 +465,7 @@ SECTIONS
         battery_notify_begin = .;
         *(.battery_notify)
         battery_notify_end = .;
+
 
         PROVIDE(__fsymtab_start = .);
         KEEP(*(.FSymTab))
@@ -642,6 +647,7 @@ SECTIONS
     _video_pkg_end = .;
     PROVIDE(video_pkg_end = .);
 
+
         . = ALIGN(4);
 
  _app_begin = .;
@@ -673,6 +679,7 @@ SECTIONS
     *(.clock_critical_txt)
  _clock_critical_handler_end = .;
  PROVIDE(clock_critical_handler_end = .);
+
 
    _audio_decoder_begin = .;
    PROVIDE(audio_decoder_begin = .);
@@ -742,6 +749,7 @@ SECTIONS
     _video_subdev_end = .;
     PROVIDE(video_subdev_end = .);
 
+
         . = ALIGN(4);
 
 
@@ -775,6 +783,7 @@ SECTIONS
  _net_video_stream_sub_end = .;
  PROVIDE(net_video_stream_sub_end = .);
 
+
         . = ALIGN(4);
 
 
@@ -797,6 +806,7 @@ SECTIONS
 
 
         btstack_data_end = .;
+
 
         . = ALIGN(4);
         *(.data)
@@ -841,6 +851,7 @@ SECTIONS
 
         btstack_bss_end = .;
 
+
         . = ALIGN(4);
     } > sdram
 
@@ -869,6 +880,8 @@ SECTIONS
 
         *(.flushinv_icache)
         *(.volatile_ram_code)
+
+        *wasm_interp_classic.c.o(.text .text.*)
 
         *(.m4a_dec_lib.text)
 
@@ -953,6 +966,7 @@ SECTIONS
 
         btctler_data_end = .;
 
+
         . = ALIGN(4);
     } > ram0
 
@@ -1020,6 +1034,7 @@ SECTIONS
 
         btctler_bss_end = .;
 
+
         . = ALIGN(4);
         *(.the_debug_isr_stack_c0)
         *(.the_debug_isr_stack_c1)
@@ -1073,6 +1088,7 @@ PROVIDE(usb_data_begin = .);
 *(.cdc_var)
 _usb_data_end = .;
 PROVIDE(usb_data_end = .);
+
 
         . = ALIGN(4);
     } > ram0

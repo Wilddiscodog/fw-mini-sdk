@@ -96,7 +96,7 @@
 #define CONFIG_PRESS_LONG_KEY_POWERON
 
 #define CONFIG_DEBUG_ENABLE
-/* 系统日志只走 UART0(PB2); WiFi 库日志由 wifi_log_mute.c 静音。
+/* 系统日志只走 UART0(PA3=TX, PA4=RX); WiFi 库日志由 wifi_log_mute.c 静音。
  * 原厂双 CDC: user_cdc_* → CDC2(EP2); CherryUSB: 同为 CDC2 日志口。 */
 
 

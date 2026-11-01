@@ -45,5 +45,13 @@ if ($text -notmatch '(?m)^set KEY_FILE=-key 0x7DF1\.key\r?$') {
     Write-Host "[ensure_download_key] KEY_FILE present"
 }
 
-[System.IO.File]::WriteAllText($BatPath, $text, [System.Text.UTF8Encoding]::new($false))
+try {
+    [System.IO.File]::WriteAllText($BatPath, $text, [System.Text.UTF8Encoding]::new($false))
+} catch {
+    if ($raw -match 'set KEY_FILE=-key 0x7DF1\.key') {
+        Write-Host "[ensure_download_key] file busy, KEY already present"
+        exit 0
+    }
+    throw
+}
 exit 0

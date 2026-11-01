@@ -5631,6 +5631,11 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
     }
 
     exec_env->attachment = attachment;
+    /* C 版 invokeNative 把第三个参数当作实参个数。ARC 汇编版才把
+     * 它当作寄存器之外的栈参数个数；本工程没有那份汇编。 */
+#if defined(BUILD_TARGET_ARC)
+    n_stacks += n_ints;
+#endif
     if (func_type->result_count == 0) {
         invokeNative_Void(func_ptr, argv1, n_stacks);
     }

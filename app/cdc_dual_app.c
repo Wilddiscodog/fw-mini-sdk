@@ -7,7 +7,7 @@
  * 接口: IAD 复合, intf0/1=CDC1(comm/data), intf2/3=CDC2(comm/data)
  *
  * CDC2 不对接系统 UART/printf; 仅通过 user_cdc_puts()/user_cdc_printf() 输出。
- * 系统日志仍只走 UART0(PB2)。
+ * 系统日志仍只走 UART0(PA3=TX, PA4=RX)。
  */
 #include "app_config.h"
 

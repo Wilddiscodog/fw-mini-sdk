@@ -104,27 +104,57 @@ STORE_V128(void *addr, V128 value)
         addr_u32[3] = (value).i32x4[3];      \
     } while (0)
 
-#define PUT_I64_TO_ADDR(addr, value)         \
-    do {                                     \
-        uint32 *addr_u32 = (uint32 *)(addr); \
-        union {                              \
-            int64 val;                       \
-            uint32 parts[2];                 \
-        } u;                                 \
-        u.val = (int64)(value);              \
-        addr_u32[0] = u.parts[0];            \
-        addr_u32[1] = u.parts[1];            \
+#define PUT_I64_TO_ADDR(addr, value)            \
+    do {                                        \
+        uintptr_t addr_ = (uintptr_t)(addr);    \
+        union {                                 \
+            int64 val;                          \
+            uint32 u32[2];                      \
+            uint16 u16[4];                      \
+            uint8 u8[8];                        \
+        } u;                                    \
+        u.val = (int64)(value);                 \
+        if ((addr_ & (uintptr_t)3) == 0) {      \
+            ((uint32 *)(addr))[0] = u.u32[0];   \
+            ((uint32 *)(addr))[1] = u.u32[1];   \
+        }                                       \
+        else if ((addr_ & (uintptr_t)1) == 0) { \
+            ((uint16 *)(addr))[0] = u.u16[0];   \
+            ((uint16 *)(addr))[1] = u.u16[1];   \
+            ((uint16 *)(addr))[2] = u.u16[2];   \
+            ((uint16 *)(addr))[3] = u.u16[3];   \
+        }                                       \
+        else {                                  \
+            int32 t;                            \
+            for (t = 0; t < 8; t++)             \
+                ((uint8 *)(addr))[t] = u.u8[t]; \
+        }                                       \
     } while (0)
-#define PUT_F64_TO_ADDR(addr, value)         \
-    do {                                     \
-        uint32 *addr_u32 = (uint32 *)(addr); \
-        union {                              \
-            float64 val;                     \
-            uint32 parts[2];                 \
-        } u;                                 \
-        u.val = (value);                     \
-        addr_u32[0] = u.parts[0];            \
-        addr_u32[1] = u.parts[1];            \
+#define PUT_F64_TO_ADDR(addr, value)            \
+    do {                                        \
+        uintptr_t addr_ = (uintptr_t)(addr);    \
+        union {                                 \
+            float64 val;                        \
+            uint32 u32[2];                      \
+            uint16 u16[4];                      \
+            uint8 u8[8];                        \
+        } u;                                    \
+        u.val = (value);                        \
+        if ((addr_ & (uintptr_t)3) == 0) {      \
+            ((uint32 *)(addr))[0] = u.u32[0];   \
+            ((uint32 *)(addr))[1] = u.u32[1];   \
+        }                                       \
+        else if ((addr_ & (uintptr_t)1) == 0) { \
+            ((uint16 *)(addr))[0] = u.u16[0];   \
+            ((uint16 *)(addr))[1] = u.u16[1];   \
+            ((uint16 *)(addr))[2] = u.u16[2];   \
+            ((uint16 *)(addr))[3] = u.u16[3];   \
+        }                                       \
+        else {                                  \
+            int32 t;                            \
+            for (t = 0; t < 8; t++)             \
+                ((uint8 *)(addr))[t] = u.u8[t]; \
+        }                                       \
     } while (0)
 #if UINTPTR_MAX == UINT64_MAX
 #define PUT_REF_TO_ADDR(addr, value)         \
@@ -157,26 +187,58 @@ GET_V128_FROM_ADDR(uint32 *addr)
 }
 
 static inline int64
-GET_I64_FROM_ADDR(uint32 *addr)
+GET_I64_FROM_ADDR(void *addr)
 {
+    uintptr_t addr1 = (uintptr_t)addr;
     union {
         int64 val;
         uint32 parts[2];
+        uint16 u16[4];
+        uint8 u8[8];
     } u;
-    u.parts[0] = addr[0];
-    u.parts[1] = addr[1];
+    if ((addr1 & (uintptr_t)3) == 0) {
+        u.parts[0] = ((uint32 *)addr)[0];
+        u.parts[1] = ((uint32 *)addr)[1];
+    }
+    else if ((addr1 & (uintptr_t)1) == 0) {
+        u.u16[0] = ((uint16 *)addr)[0];
+        u.u16[1] = ((uint16 *)addr)[1];
+        u.u16[2] = ((uint16 *)addr)[2];
+        u.u16[3] = ((uint16 *)addr)[3];
+    }
+    else {
+        int32 t;
+        for (t = 0; t < 8; t++)
+            u.u8[t] = ((uint8 *)addr)[t];
+    }
     return u.val;
 }
 
 static inline float64
-GET_F64_FROM_ADDR(uint32 *addr)
+GET_F64_FROM_ADDR(void *addr)
 {
+    uintptr_t addr1 = (uintptr_t)addr;
     union {
         float64 val;
         uint32 parts[2];
+        uint16 u16[4];
+        uint8 u8[8];
     } u;
-    u.parts[0] = addr[0];
-    u.parts[1] = addr[1];
+    if ((addr1 & (uintptr_t)3) == 0) {
+        u.parts[0] = ((uint32 *)addr)[0];
+        u.parts[1] = ((uint32 *)addr)[1];
+    }
+    else if ((addr1 & (uintptr_t)1) == 0) {
+        u.u16[0] = ((uint16 *)addr)[0];
+        u.u16[1] = ((uint16 *)addr)[1];
+        u.u16[2] = ((uint16 *)addr)[2];
+        u.u16[3] = ((uint16 *)addr)[3];
+    }
+    else {
+        int32 t;
+        for (t = 0; t < 8; t++)
+            u.u8[t] = ((uint8 *)addr)[t];
+    }
     return u.val;
 }
 

@@ -6,6 +6,29 @@
 #
 # 工具链：C:\JL\pi32 (杰理 pi32v2 clang/LTO)
 
+# SKTOOL/MSYS 的 make 按 PATH 找不到 cmd.exe。写绝对路径。
+ifeq ($(OS),Windows_NT)
+SHELL := C:/Windows/System32/cmd.exe
+.SHELLFLAGS := /c
+endif
+
+# 直接敲 make 时默认按 CPU 核数并行。已经带了 -j 则不套这一层。
+ifeq ($(OS),Windows_NT)
+ifeq ($(findstring j,$(MAKEFLAGS))$(findstring jobserver,$(MAKEFLAGS)),)
+ifneq ($(MAKE_RESTART),1)
+MPX_WRAP := 1
+endif
+endif
+endif
+
+ifeq ($(MPX_WRAP),1)
+.PHONY: _parallel_restart
+_parallel_restart:
+	$(MAKE) MAKE_RESTART=1 -j$(if $(NUMBER_OF_PROCESSORS),$(NUMBER_OF_PROCESSORS),6) $(MAKECMDGOALS)
+%:: _parallel_restart
+	@:
+else
+
 # ================ 软关机二分排查 (改后务必 make clean) ================
 #   make MINI_PWR_BISECT=N
 #   0 = 仅 ADKEY + 原厂 soft_poweroff (关 LCD/USB/音频; BT/WiFi 见 app_config)
@@ -98,12 +121,12 @@ AUDIO_LIB := \
 endif
 
 ifeq ($(OS), Windows_NT)
-# 工具链与构建工具路径已写死, 直接 make / make clean 即可(无需手动设置 PATH)
+# 工具链在 C:/JL/pi32; 构建工具相对本 Makefile(从 app/board/wl82 启动)
 # 强制 cmd: 若 PATH 里有 Git Bash, 默认 SHELL=bash 会让 rm/echo 配方行为错乱
-SHELL := cmd.exe
+SHELL := C:/Windows/System32/cmd.exe
 .SHELLFLAGS := /c
 TOOL_DIR  := C:/JL/pi32/bin
-UTILS_DIR := D:/fw-mini-sdk/tools/utils
+UTILS_DIR := ../../../tools/utils
 CC    := clang.exe
 CXX   := clang.exe
 LD    := pi32v2-lto-wrapper.exe
@@ -113,9 +136,10 @@ MKDIR := mkdir_win -p
 SYS_LIB_DIR := C:/JL/pi32/pi32v2-lib/r3
 SYS_INC_DIR := C:/JL/pi32/pi32v2-include
 EXT_CFLAGS  :=
-export PATH := C:/JL/pi32/bin;D:/fw-mini-sdk/tools/utils;$(PATH)
+export PATH := C:/JL/pi32/bin;../../../tools/utils;$(PATH)
 
 FIXBAT          := ..\..\..\tools\utils\fixbat.exe
+FIX_DEP         := powershell -NoProfile -ExecutionPolicy Bypass -File ..\..\..\tools\fix_dep.ps1
 POST_SCRIPT     := ..\..\..\cpu\wl82\tools\download.bat
 RUN_POST_SCRIPT := $(POST_SCRIPT)
 else
@@ -136,6 +160,7 @@ EXT_CFLAGS  := -D__SHELL__
 export PATH:=$(TOOL_DIR):$(PATH)
 
 FIXBAT          := touch
+FIX_DEP         := true
 POST_SCRIPT     := ../../../cpu/wl82/tools/download.sh
 RUN_POST_SCRIPT := bash $(POST_SCRIPT)
 endif
@@ -499,21 +524,27 @@ LVGL_C_SRC += $(call rwildcard, $(LVGL_DIR)/src/, *.c)
 c_SRC_FILES += $(LVGL_C_SRC)
 c_SRC_FILES += ../../../third/lvgl_port/driver/lv_port_disp.c
 c_SRC_FILES += ../../../third/lvgl_port/driver/lv_port_indev.c
+c_SRC_FILES += ../../../app/watch_ui/watch_backlight.c
+c_SRC_FILES += ../../../app/watch_ui/watch_power.c
+ifneq ($(MINI_WASM_SUPPORT),1)
 c_SRC_FILES += ../../../app/watch_ui/watch_ui.c
 c_SRC_FILES += ../../../app/watch_ui/watch_home.c
 c_SRC_FILES += ../../../app/watch_ui/watch_clock.c
 c_SRC_FILES += ../../../app/watch_ui/watch_dropdown.c
-c_SRC_FILES += ../../../app/watch_ui/watch_backlight.c
 c_SRC_FILES += ../../../app/watch_ui/watch_volume.c
-c_SRC_FILES += ../../../app/watch_ui/watch_power.c
 c_SRC_FILES += ../../../app/watch_ui/watch_battery.c
 c_SRC_FILES += ../../../app/watch_ui/watch_apps.c
 c_SRC_FILES += ../../../app/watch_ui/watch_ball.c
 c_SRC_FILES += ../../../app/watch_ui/assets/watch_icons.c
+endif
 INCLUDES    += -I../../../third/lvgl -I$(LVGL_DIR) -I$(LVGL_DIR)/src
 INCLUDES    += -I../../../third/lvgl_port/driver -I../../../driver/lcd/include
 INCLUDES    += -I../../../app/watch_ui -I../../../app/include
 DEFINES     += -DLV_CONF_INCLUDE_SIMPLE
+# 启动图是 360x360 PNG，解码缓冲超过 LVGL 96KB 内存池，改走系统堆。
+ifeq ($(MINI_WASM_SUPPORT),1)
+$(BUILD_DIR)/third/lvgl/lvgl/src/extra/libs/png/lodepng.c.o: DEFINES += -DLODEPNG_NO_COMPILE_ALLOCATORS
+endif
 endif
 
 # WAMR 2.4.3 classic interpreter + MicroPixel 兼容宿主(app/mpx)
@@ -523,6 +554,7 @@ WAMR_DIR := ../../../third/wamr/core
 rwildcard = $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
 MPX_WAMR_SRC += \
     $(WAMR_DIR)/iwasm/interpreter/wasm_interp_classic.c \
+    $(WAMR_DIR)/iwasm/interpreter/wasm_interp_entry.c \
     $(WAMR_DIR)/iwasm/interpreter/wasm_loader.c \
     $(WAMR_DIR)/iwasm/interpreter/wasm_runtime.c \
     $(WAMR_DIR)/iwasm/common/wasm_runtime_common.c \
@@ -544,9 +576,14 @@ MPX_WAMR_SRC += $(WAMR_DIR)/shared/platform/jl82/jl82_thread.c
 c_SRC_FILES += $(MPX_WAMR_SRC)
 c_SRC_FILES += ../../../app/mpx/mpx_host.c
 c_SRC_FILES += ../../../app/mpx/mpx_bundle.c
+c_SRC_FILES += ../../../app/mpx/mpx_store.c
+S_SRC_FILES += ../../../app/mpx/mpx_store_image.S
 c_SRC_FILES += ../../../app/mpx/mpx_services.c
 c_SRC_FILES += ../../../app/mpx/mpx_display.c
 c_SRC_FILES += ../../../app/mpx/mpx_raster.c
+c_SRC_FILES += ../../../app/mpx/mpx_scene.c
+c_SRC_FILES += ../../../app/mpx/mpx_res.c
+c_SRC_FILES += ../../../app/mpx/mpx_hall.c
 c_SRC_FILES += ../../../app/mpx/mpx_libc_shim.c
 INCLUDES    += -I$(WAMR_DIR)/iwasm/include
 INCLUDES    += -I$(WAMR_DIR)/iwasm/interpreter
@@ -568,6 +605,8 @@ DEFINES     += -DBUILD_TARGET_ARC -DBH_PLATFORM_JL82
 # GC 对指针表的裁剪
 WAMR_CFLAGS := $(filter-out -flto -Oz,$(CFLAGS)) -O1 -fno-data-sections -fno-jump-tables
 $(BUILD_DIR)/third/wamr/%.c.o $(BUILD_DIR)/app/mpx/%.c.o : CFLAGS = $(WAMR_CFLAGS)
+# 解释器 -O1，仍关 LTO 和 jump table。整份 .text 由链接脚本放进 ram0。
+$(BUILD_DIR)/third/wamr/core/iwasm/interpreter/wasm_interp_classic.c.o: CFLAGS := $(WAMR_CFLAGS) -fno-function-sections
 DEFINES     += -DWASM_ENABLE_INTERP=1 -DWASM_ENABLE_FAST_INTERP=0 -DWASM_ENABLE_AOT=0
 DEFINES     += -DWASM_ENABLE_JIT=0 -DWASM_ENABLE_LIBC_BUILTIN=1 -DWASM_ENABLE_LIBC_WASI=0
 DEFINES     += -DWASM_ENABLE_MULTI_MODULE=0 -DWASM_ENABLE_BULK_MEMORY=1 -DWASM_ENABLE_BULK_MEMORY_OPT=1
@@ -654,6 +693,7 @@ $(BUILD_DIR)/%.c.o : $(ROOT_PREFIX)/%.c
 	$(info +CC $<)
 	$(QUITE) $(MKDIR) $(@D)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
+	$(QUITE) $(FIX_DEP) $(@:.o=.d)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
 
 # CherryUSB 源文件注入配置头（限定范围, 避免与 SDK 宏冲突）
@@ -679,18 +719,22 @@ $(BUILD_DIR)/%.S.o : $(ROOT_PREFIX)/%.S
 	$(info +AS $<)
 	$(QUITE) $(MKDIR) $(@D)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
+	$(QUITE) $(FIX_DEP) $(@:.o=.d)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR)/%.s.o : $(ROOT_PREFIX)/%.s
 	$(info +AS $<)
 	$(QUITE) $(MKDIR) $(@D)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
+	$(QUITE) $(FIX_DEP) $(@:.o=.d)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR)/%.cpp.o : $(ROOT_PREFIX)/%.cpp
 	$(info +CXX $<)
 	$(QUITE) $(MKDIR) $(@D)
 	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
+	$(QUITE) $(FIX_DEP) $(@:.o=.d)
 	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
 
 -include $(DEP_FILES)
+endif

@@ -16,6 +16,20 @@ struct WASMModuleInstance;
 struct WASMFunctionInstance;
 struct WASMExecEnv;
 
+/* pi32v2 clang 4.0.1 corrupts register arguments on the large interpreter
+ * functions. A tiny TU stores the real pointers here; the large functions
+ * reload them and ignore the incoming registers. */
+typedef struct MpxInterpCallSlot {
+    struct WASMModuleInstance *module_inst;
+    struct WASMExecEnv *exec_env;
+    struct WASMFunctionInstance *function;
+    uint32 argc;
+    uint32 *argv;
+    struct WASMInterpFrame *frame;
+} MpxInterpCallSlot;
+
+extern volatile MpxInterpCallSlot g_mpx_interp_slot;
+
 typedef struct WASMInterpFrame {
     /* The frame of the caller that are calling the current function. */
     struct WASMInterpFrame *prev_frame;
@@ -106,6 +120,12 @@ wasm_interp_call_wasm(struct WASMModuleInstance *module_inst,
                       struct WASMExecEnv *exec_env,
                       struct WASMFunctionInstance *function, uint32 argc,
                       uint32 argv[]);
+
+void
+wasm_interp_call_wasm_impl(struct WASMModuleInstance *module_inst,
+                           struct WASMExecEnv *exec_env,
+                           struct WASMFunctionInstance *function, uint32 argc,
+                           uint32 argv[]);
 
 #if WASM_ENABLE_GC != 0
 bool

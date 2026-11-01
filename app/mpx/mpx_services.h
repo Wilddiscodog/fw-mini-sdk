@@ -47,6 +47,10 @@ int32_t mpx_display_surface_buffer(uint32_t surface_handle, uint32_t buffer_inde
                                    uint32_t *width_out, uint32_t *height_out,
                                    uint32_t *pitch_out, uint8_t **data_out);
 
+/* Scene 通道 'MPGS'(mpx_scene.c)。失败时不改已显示的一帧。 */
+int32_t mpx_scene_submit(const uint8_t *bytes, uint32_t length);
+void mpx_scene_reset(void);
+
 /* Raster 槽位与 'MPRS' 执行(mpx_raster.c) */
 int32_t mpx_raster_texture_upload(uint8_t slot, uint16_t width, uint16_t height,
                                   uint16_t layout, const uint8_t *texels, uint32_t length);

@@ -14,6 +14,7 @@
 #if (defined MINI_WASM_SUPPORT) && MINI_WASM_SUPPORT
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -24,12 +25,29 @@
 #include "mpx_compat.h"
 #include "mpx_bundle.h"
 #include "mpx_services.h"
+#include "mpx_store.h"
 
 #include "hello_wasm.h"
 #include "hello_nocall.h"
-#include "app_wasm_bundle.h"
 
 #define MPX_TAG "[mpx] "
+
+/* 网页 /mpx 可读。printf 若把 CPU1 打挂，状态仍留在这块内存里。 */
+char mpx_status_line[160] = "wasm task not created";
+volatile unsigned mpx_step_count;
+
+void mpx_note(const char *msg)
+{
+    unsigned i = 0;
+    if (msg == NULL) {
+        msg = "";
+    }
+    while (msg[i] != '\0' && i + 1 < sizeof(mpx_status_line)) {
+        mpx_status_line[i] = msg[i];
+        i++;
+    }
+    mpx_status_line[i] = '\0';
+}
 
 /* 跨复位步骤刻痕: UPDATA 保留区(0x1c7fd80..0x1c7fe00), soft reset 不清零 */
 #define MPX_SCRATCH ((volatile unsigned int *)0x1c7fd90)
@@ -84,6 +102,16 @@ static int32_t host_log_write(wasm_exec_env_t exec_env, uint32_t level, const ui
         return MICROPIXEL_STATUS_INVALID_ARGUMENT;
     }
     printf(MPX_TAG "guest[%u]: %.*s\n", (unsigned)level, (int)length, (const char *)bytes);
+    if (bytes != NULL && length > 0) {
+        char tmp[80];
+        uint32_t n = length < sizeof(tmp) - 1 ? length : (uint32_t)sizeof(tmp) - 1;
+        uint32_t i;
+        for (i = 0; i < n; i++) {
+            tmp[i] = (char)bytes[i];
+        }
+        tmp[n] = '\0';
+        mpx_note(tmp);
+    }
     return MICROPIXEL_STATUS_OK;
 }
 
@@ -103,15 +131,40 @@ static uint64_t host_clock_now(wasm_exec_env_t exec_env)
     return mpx_app_time_now();
 }
 
+/* 最近一次 ABI 调用的实参和返回值，/mpx 用来看 guest 卡在哪一步。 */
+volatile unsigned mpx_nat_seq, mpx_nat_cells, mpx_nat_lp0;
+
+static char mpx_abi_op[8] = "none";
+static volatile uint32_t mpx_abi_a, mpx_abi_b, mpx_abi_c;
+static volatile int32_t mpx_abi_st = -1;
+
+static void mpx_abi_rec(const char *op, uint32_t a, uint32_t b, uint32_t c, int32_t st)
+{
+    unsigned i = 0;
+    while (op[i] && i < sizeof(mpx_abi_op) - 1) {
+        mpx_abi_op[i] = op[i];
+        i++;
+    }
+    mpx_abi_op[i] = '\0';
+    mpx_abi_a = a;
+    mpx_abi_b = b;
+    mpx_abi_c = c;
+    mpx_abi_st = st;
+}
+
 static int32_t host_service_open(wasm_exec_env_t exec_env, uint32_t service_id,
                                  uint32_t required_interface_version,
                                  micropixel_service_info_t *info_out, uint32_t info_capacity)
 {
+    int32_t st;
     (void)exec_env;
     if (info_out == NULL || info_capacity < sizeof(*info_out)) {
-        return MICROPIXEL_STATUS_BUFFER_TOO_SMALL;
+        st = MICROPIXEL_STATUS_BUFFER_TOO_SMALL;
+    } else {
+        st = mpx_service_open(service_id, required_interface_version, info_out, info_capacity);
     }
-    return mpx_service_open(service_id, required_interface_version, info_out, info_capacity);
+    mpx_abi_rec("open", service_id, required_interface_version, info_capacity, st);
+    return st;
 }
 
 static int32_t host_service_call(wasm_exec_env_t exec_env, uint32_t service_handle,
@@ -119,23 +172,31 @@ static int32_t host_service_call(wasm_exec_env_t exec_env, uint32_t service_hand
                                  uint8_t *response, uint32_t response_capacity,
                                  uint32_t *response_size_out)
 {
+    int32_t st;
     (void)exec_env;
     if (response_size_out == NULL || (request == NULL && request_size != 0) ||
         (response == NULL && response_capacity != 0)) {
-        return MICROPIXEL_STATUS_INVALID_ARGUMENT;
+        st = MICROPIXEL_STATUS_INVALID_ARGUMENT;
+    } else {
+        st = mpx_service_call(service_handle, method_id, request, request_size, response,
+                              response_capacity, response_size_out);
     }
-    return mpx_service_call(service_handle, method_id, request, request_size, response,
-                            response_capacity, response_size_out);
+    mpx_abi_rec("call", service_handle, method_id, request_size, st);
+    return st;
 }
 
 static int32_t host_service_submit(wasm_exec_env_t exec_env, uint32_t service_handle,
                                    uint32_t channel_id, const uint8_t *bytes, uint32_t length)
 {
+    int32_t st;
     (void)exec_env;
     if (bytes == NULL || length == 0) {
-        return MICROPIXEL_STATUS_INVALID_ARGUMENT;
+        st = MICROPIXEL_STATUS_INVALID_ARGUMENT;
+    } else {
+        st = mpx_service_submit(service_handle, channel_id, bytes, length);
     }
-    return mpx_service_submit(service_handle, channel_id, bytes, length);
+    mpx_abi_rec("sub", service_handle, channel_id, length, st);
+    return st;
 }
 
 static NativeSymbol mpx_symbols[] = {
@@ -233,6 +294,7 @@ static void mpx_smoke_test(void)
     }
 
     printf(MPX_TAG "smoke: calling nocall _start()...\n"); os_time_dly(3); mpx_mark(6);
+    mpx_note("calling wasm");
     if (!wasm_runtime_call_wasm(exec_env, start_func, 0, NULL)) {
         exception = wasm_runtime_get_exception(inst);
         printf(MPX_TAG "smoke: nocall call failed: %s\n", exception ? exception : "?");
@@ -265,10 +327,9 @@ out:
 
 /* ---------------- M2:App Bundle 流程 ---------------- */
 
-static void mpx_app_run(void)
+static void mpx_app_run(uint8_t *wasm_buf, uint32_t wasm_size)
 {
     RuntimeInitArgs init_args;
-    mpx_bundle_t bundle;
     wasm_module_t module = NULL;
     wasm_module_inst_t inst = NULL;
     wasm_exec_env_t exec_env = NULL;
@@ -276,10 +337,14 @@ static void mpx_app_run(void)
     const char *exception = NULL;
     int32_t status;
 
+    mpx_note("app init");
     mpx_services_init();
     status = mpx_display_init();
     if (status != MICROPIXEL_STATUS_OK) {
         printf(MPX_TAG "display init FAILED: %d\n", status);
+        mpx_note("display init failed");
+        free(wasm_buf);
+        mpx_services_deinit();
         return;
     }
 
@@ -288,33 +353,37 @@ static void mpx_app_run(void)
 
     if (!wasm_runtime_full_init(&init_args)) {
         printf(MPX_TAG "app: runtime init FAILED\n");
+        mpx_note("runtime init failed");
+        free(wasm_buf);
+        mpx_services_deinit();
         return;
     }
     if (!wasm_runtime_register_natives("micropixel", mpx_symbols,
                                        sizeof(mpx_symbols) / sizeof(mpx_symbols[0]))) {
         printf(MPX_TAG "app: register ABI natives FAILED\n");
+        mpx_note("register abi failed");
         goto out;
     }
 
-    status = mpx_bundle_open(k_mpx_app_bundle, (uint32_t)MPX_APP_BUNDLE_SIZE, &bundle);
-    if (status != 0) {
-        printf(MPX_TAG "app: bundle open FAILED (%d)\n", status);
+    if (wasm_buf == NULL || wasm_size == 0) {
+        mpx_note("wasm missing");
         goto out;
     }
-    printf(MPX_TAG "app: bundle '%.*s' wasm=%u bytes\n", (int)bundle.app_id_length,
-           bundle.app_id, (unsigned)bundle.wasm_size);
-
-    module = wasm_runtime_load(bundle.wasm, bundle.wasm_size, mpx_error_buf, sizeof(mpx_error_buf));
+    printf(MPX_TAG "app: bundle wasm=%u bytes\n", (unsigned)wasm_size);
+    mpx_note("app load");
+    module = wasm_runtime_load(wasm_buf, wasm_size, mpx_error_buf, sizeof(mpx_error_buf));
     if (!module) {
         printf(MPX_TAG "app: wasm load failed: %s\n", mpx_error_buf);
+        mpx_note("wasm load failed");
         goto out;
     }
 
-    /* 8KiB exec 栈 + 64KiB guest 堆(libc-builtin malloc) */
-    inst = wasm_runtime_instantiate(module, 8 * 1024, 64 * 1024, mpx_error_buf,
+    /* exec 栈给解释器操作数; app 堆给 libc-builtin。线性内存另从系统堆增长。 */
+    inst = wasm_runtime_instantiate(module, 16 * 1024, 256 * 1024, mpx_error_buf,
                                     sizeof(mpx_error_buf));
     if (!inst) {
         printf(MPX_TAG "app: instantiate failed: %s\n", mpx_error_buf);
+        mpx_note("instantiate failed");
         goto out;
     }
 
@@ -323,6 +392,7 @@ static void mpx_app_run(void)
     exec_env = wasm_exec_env_create(inst, 16 * 1024);
     if (!exec_env) {
         printf(MPX_TAG "app: exec env create FAILED\n");
+        mpx_note("exec env failed");
         goto out;
     }
 
@@ -332,19 +402,50 @@ static void mpx_app_run(void)
     }
     if (!entry) {
         printf(MPX_TAG "app: no entry export (__micropixel_start/_start)\n");
+        mpx_note("no entry");
         goto out;
     }
 
-    printf(MPX_TAG "app: starting '%.*s'...\n", (int)bundle.app_id_length, bundle.app_id);
+    /* 先停 LVGL, 留出正在刷的那一帧, 再让 guest 画。 */
+    {
+        extern volatile unsigned char mpx_display_hold;
+        mpx_display_hold = 1;
+        os_time_dly(30);
+    }
+    printf(MPX_TAG "app: starting\n");
+    mpx_nat_seq = 0;
+    mpx_note("app call");
+    mpx_store_set_busy(1);
     if (!wasm_runtime_call_wasm(exec_env, entry, 0, NULL)) {
         exception = wasm_runtime_get_exception(inst);
         printf(MPX_TAG "app: entry failed: %s\n", exception ? exception : "?");
+        mpx_note(exception ? exception : "entry failed");
         goto out;
     }
     exception = wasm_runtime_get_exception(inst);
     printf(MPX_TAG "app: %s\n", exception ? exception : "entry returned cleanly");
+    if (exception) {
+        mpx_note(exception);
+    } else if (strcmp(mpx_status_line, "present") != 0) {
+        char line[96];
+        snprintf(line, sizeof(line), "v2 c=%u lp=%u %s %u st=%d",
+                 mpx_nat_cells, mpx_nat_lp0, mpx_abi_op, (unsigned)mpx_abi_a,
+                 (int)mpx_abi_st);
+        mpx_note(line);
+    }
 
 out:
+    mpx_store_set_busy(0);
+    mpx_display_deinit();
+    {
+        extern volatile unsigned char mpx_display_hold;
+        if (strcmp(mpx_status_line, "present") != 0) {
+            mpx_display_hold = 0;
+        }
+    }
+    if (wasm_buf) {
+        free(wasm_buf);
+    }
     mpx_services_set_guest_inst(NULL);
     if (exec_env)
         wasm_exec_env_destroy(exec_env);
@@ -361,10 +462,12 @@ out:
 void mpx_task(void *p)
 {
     (void)p;
+    mpx_note("task alive, waiting 20s");
     /* 开机 20s 后再跑测试: 1) 给网页 OTA 留升级窗口(崩溃也能重刷);
      * 2) 避开 ~3.1s 处 USB CDC 重建窗口与 printf 的竞争(此前该窗口内
      *    打印触发 CPU1 写总线异常导致崩溃环) */
     os_time_dly(2000);
+    mpx_note("delay done");
     /* 20s 节点若 OTA 升级正在进行: 等它结束再测试, 避免测试代码
      * (CPU1 崩溃→软复位)打断烧写留下半截 bank */
     while (net_update_request()) {
@@ -373,12 +476,30 @@ void mpx_task(void *p)
         os_time_dly(200); /* 2s 后复查 */
     }
     printf(MPX_TAG "task start [nolto-O0-nods-256K], prev step=%u\n", MPX_SCRATCH[0]);
+    mpx_note("smoke enter");
     mpx_mark(1);
     mpx_smoke_test();
-    os_time_dly(100);
-    mpx_app_run();
-    for (;;)
-        os_time_dly(1000);
+    mpx_note("ready");
+    for (;;) {
+        char id[MPX_STORE_ID_MAX + 1];
+        if (mpx_store_take_launch(id, sizeof(id))) {
+            uint8_t *wasm = NULL;
+            uint32_t wasm_size = 0;
+            int st = mpx_store_load_wasm(id, &wasm, &wasm_size);
+            if (st != 0) {
+                char line[48];
+                snprintf(line, sizeof(line), "load %d", st);
+                mpx_note(line);
+            } else {
+                mpx_note(id);
+                mpx_app_run(wasm, wasm_size);
+            }
+        }
+        while (net_update_request()) {
+            os_time_dly(100);
+        }
+        os_time_dly(20);
+    }
 }
 
 #endif /* MINI_WASM_SUPPORT */

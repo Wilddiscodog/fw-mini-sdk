@@ -28,6 +28,10 @@
 #include "../fast-jit/jit_compiler.h"
 #endif
 
+extern void mpx_note(const char *msg);
+extern volatile unsigned mpx_step_count;
+extern volatile unsigned mpx_nat_seq, mpx_nat_cells, mpx_nat_lp0;
+
 typedef int32 CellType_I32;
 typedef int64 CellType_I64;
 typedef float32 CellType_F32;
@@ -1246,6 +1250,11 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
 
     cur_func_index = (uint32)(cur_func - module_inst->e->functions);
     bh_assert(cur_func_index < module_inst->module->import_function_count);
+    mpx_nat_seq++;
+    if (mpx_nat_seq == 2) {
+        mpx_nat_cells = cur_func->param_cell_num;
+        mpx_nat_lp0 = frame->lp[0];
+    }
     if (!func_import->call_conv_wasm_c_api) {
         native_func_pointer = module_inst->import_func_ptrs[cur_func_index];
     }
@@ -1564,6 +1573,13 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                                WASMFunctionInstance *cur_func,
                                WASMInterpFrame *prev_frame)
 {
+    /* Register args into this function are not trustworthy on pi32v2. */
+    module = (WASMModuleInstance *)g_mpx_interp_slot.module_inst;
+    exec_env = (WASMExecEnv *)g_mpx_interp_slot.exec_env;
+    cur_func = (WASMFunctionInstance *)g_mpx_interp_slot.function;
+    prev_frame = (WASMInterpFrame *)g_mpx_interp_slot.frame;
+    mpx_note("bytecode enter");
+
     WASMMemoryInstance *memory = wasm_get_default_memory(module);
 #if !defined(OS_ENABLE_HW_BOUND_CHECK)              \
     || WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS == 0 \
@@ -1583,11 +1599,13 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
     WASMInterpFrame *frame = NULL;
     /* Points to this special opcode so as to jump to the
      * call_method_from_entry.  */
-    register uint8 *frame_ip = &opcode_IMPDEP; /* cache of frame->ip */
-    register uint32 *frame_lp = NULL;          /* cache of frame->lp */
-    register uint32 *frame_sp = NULL;          /* cache of frame->sp */
+    /* pi32v2 在这个大函数里把 register 缓存跨 native 调用写丢，下一次
+     * call 读到的操作数是 0xA5 填充。指针放内存里。 */
+    uint8 *frame_ip = &opcode_IMPDEP; /* cache of frame->ip */
+    uint32 *frame_lp = NULL;          /* cache of frame->lp */
+    uint32 *frame_sp = NULL;          /* cache of frame->sp */
 #if WASM_ENABLE_GC != 0
-    register uint8 *frame_ref = NULL; /* cache of frame->ref */
+    uint8 *frame_ref = NULL; /* cache of frame->ref */
     uint8 *frame_ref_tmp;
 #endif
     WASMBranchBlock *frame_csp = NULL;
@@ -1672,7 +1690,9 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 #endif
 
 #if WASM_ENABLE_LABELS_AS_VALUES == 0
+    mpx_note("before loop");
     while (frame_ip < frame_ip_end) {
+        mpx_step_count++;
         opcode = *frame_ip++;
         switch (opcode) {
 #else
@@ -6529,6 +6549,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
             HANDLE_OP(WASM_OP_IMPDEP)
             {
+                mpx_note("impdep");
                 frame = prev_frame;
                 frame_ip = frame->ip;
                 frame_sp = frame->sp;
@@ -6635,9 +6656,16 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
     {
         /* Only do the copy when it's called from interpreter.  */
         WASMInterpFrame *outs_area = wasm_exec_env_wasm_stack_top(exec_env);
-        if (cur_func->param_cell_num > 0) {
-            POP(cur_func->param_cell_num);
-            word_copy(outs_area->lp, frame_sp, cur_func->param_cell_num);
+        {
+            /* i32 参数 cell 数应等于个数。pi32 上曾出现 cell 数为 0，
+             * 参数留在操作数栈里，native 读到 0xA5 填充。 */
+            unsigned ncells = cur_func->param_cell_num;
+            if (ncells == 0)
+                ncells = cur_func->param_count;
+            if (ncells > 0) {
+                POP(ncells);
+                word_copy(outs_area->lp, frame_sp, ncells);
+            }
         }
         SYNC_ALL_TO_FRAME();
         prev_frame = frame;
@@ -7404,10 +7432,17 @@ fail:
 #endif /* end of WASM_ENABLE_JIT != 0 */
 
 void
-wasm_interp_call_wasm(WASMModuleInstance *module_inst, WASMExecEnv *exec_env,
-                      WASMFunctionInstance *function, uint32 argc,
-                      uint32 argv[])
+wasm_interp_call_wasm_impl(WASMModuleInstance *module_inst, WASMExecEnv *exec_env,
+                           WASMFunctionInstance *function, uint32 argc,
+                           uint32 argv[])
 {
+    module_inst = (WASMModuleInstance *)g_mpx_interp_slot.module_inst;
+    exec_env = (WASMExecEnv *)g_mpx_interp_slot.exec_env;
+    function = (WASMFunctionInstance *)g_mpx_interp_slot.function;
+    argc = g_mpx_interp_slot.argc;
+    argv = (uint32 *)g_mpx_interp_slot.argv;
+    mpx_note("impl entered");
+
     WASMRuntimeFrame *frame = NULL, *prev_frame, *outs_area;
     RunningMode running_mode =
         wasm_runtime_get_running_mode((WASMModuleInstanceCommon *)module_inst);
@@ -7512,6 +7547,7 @@ wasm_interp_call_wasm(WASMModuleInstance *module_inst, WASMExecEnv *exec_env,
     }
     else {
         if (running_mode == Mode_Interp) {
+            g_mpx_interp_slot.frame = frame;
             wasm_interp_call_func_bytecode(module_inst, exec_env, function,
                                            frame);
         }

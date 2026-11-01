@@ -301,7 +301,11 @@ static void hw_timer_task(void *p)
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 #if (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
 #include "lvgl.h"
+#if (defined MINI_WASM_SUPPORT) && MINI_WASM_SUPPORT
+#include "mpx_hall.h"
+#else
 #include "watch_ui.h"
+#endif
 extern void lv_init(void);
 extern void lv_port_disp_init(void);
 extern void lv_port_indev_init(void);
@@ -343,8 +347,22 @@ static void lcd_test_task(void *p)
     sys_timer_add(NULL, lv_tick_10ms_cb, 10);
     lv_port_disp_init();
     lv_port_indev_init();
+#if (defined MINI_WASM_SUPPORT) && MINI_WASM_SUPPORT
+    mpx_hall_start();
+#else
     watch_ui_start();
+#endif
     while (1) {
+#if (defined MINI_WASM_SUPPORT) && MINI_WASM_SUPPORT
+        /* wasm 应用上屏后停掉 LVGL, 否则下一帧会把光栅结果盖掉。 */
+        {
+            extern volatile unsigned char mpx_display_hold;
+            if (mpx_display_hold) {
+                os_time_dly(5);
+                continue;
+            }
+        }
+#endif
         u32 next_ms = lv_task_handler();
         {
             extern u8 watch_power_take_off_request(void);
@@ -452,7 +470,7 @@ void app_main()
 #endif
 #if (defined MINI_WASM_SUPPORT) && MINI_WASM_SUPPORT
     extern void mpx_task(void *p);
-    os_task_create(mpx_task, NULL, 10, 65536, 0, "mpx_task");
+    os_task_create(mpx_task, NULL, 10, 196608, 0, "mpx_task");
 #endif
     os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT && !MINI_BT_SPEAKER_EN

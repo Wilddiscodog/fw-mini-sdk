@@ -46,7 +46,7 @@ SECTIONS
 
         *startup.S.o(.text)
         *(.boot_code)
-        *(.text*)
+        *(EXCLUDE_FILE(*wasm_interp_classic.c.o) .text*)
         *(.LOG_TAG_CONST*)
         *(.rodata*)
         *(.fat_data_code)
@@ -250,6 +250,8 @@ SECTIONS
 
         *(.flushinv_icache)
         *(.volatile_ram_code)
+        /* 解释器热路径约 30KB，留在 Flash 会占满 32KB I-cache 后再从双线 SPI 取指。 */
+        *wasm_interp_classic.c.o(.text .text.*)
 #if !defined CONFIG_VIDEO_ENABLE
         *(.m4a_dec_lib.text)
 #if defined CONFIG_ASR_ALGORITHM

@@ -57,8 +57,8 @@ echo "set UI_RES=" >> ${PROJ_BUILD}
 #if defined CONFIG_VOICE_PROMPT_FILE_SAVE_IN_RESERVED_EXPAND_ZONE || defined CONFIG_VOICE_PROMPT_FILE_SAVE_IN_RESERVED_ZONE
 echo "packres\packres.exe -n tone -o packres/AUPACKRES audlogo" >> ${PROJ_BUILD}
 #else
-/* slim prompts: audlogo_mini (~0.3MB) instead of full audlogo (~1.25MB) */
-echo "set AUDIO_RES=audlogo_mini" >> ${PROJ_BUILD}
+/* Voice prompts are unused. Keep cfg (eq_cfg_hw.bin) on the -res line. */
+echo "set AUDIO_RES=" >> ${PROJ_BUILD}
 #endif
 #endif
 #if CONFIG_DOUBLE_BANK_ENABLE
@@ -163,12 +163,8 @@ set UI_RES=
 packres\packres.exe -n tone -o packres/AUPACKRES audlogo
 set AUDIO_RES=packres/AUPACKRES
 #else
-REM slim prompts; must stay on isd -res line (empty AUDIO_RES -> FLASH ~0x207000, EQ crash)
-set AUDIO_RES=audlogo_mini
-if not exist audlogo_mini (
-echo [ERR] missing tools\audlogo_mini , abort download
-exit /b 1
-)
+REM Voice prompts are not used. cfg/eq_cfg_hw.bin must stay on -res.
+set AUDIO_RES=
 #endif
 #else
 set AUDIO_RES=
@@ -214,8 +210,8 @@ isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wai
 
 #else
 
-REM Keep audlogo_mini literal so fixbat/%var% loss cannot drop voice res
-isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.bin cfg_tool.bin -res audlogo_mini cfg -reboot 500 %KEY_FILE% %UPDATE_FILES% -expend-bin
+REM cfg/eq_cfg_hw.bin is required. Do not pack audlogo or audlogo_mini.
+isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wait 300 -uboot uboot.boot -app app.bin cfg_tool.bin -res cfg -reboot 500 %KEY_FILE% %UPDATE_FILES% -expend-bin
 
 #endif
 

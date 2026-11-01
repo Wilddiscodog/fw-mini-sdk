@@ -64,7 +64,7 @@ body += b"\x03\x40"              #   loop $top
 body += b"\x20\x00"              #     local.get $i
 body += b"\x41\x06"              #     i32.const 6
 body += b"\x4e"                  #     i32.ge_s
-body += b"\x0d\x00"              #     br_if $done
+body += b"\x0d\x01"              #     br_if $done (depth 1: loop is 0)
 body += b"\x20\x01\x20\x00\x6c\x21\x01"  # acc *= i
 body += b"\x20\x00\x41\x01\x6a\x21\x00"  # i += 1
 body += b"\x0c\x00"              #     br $top

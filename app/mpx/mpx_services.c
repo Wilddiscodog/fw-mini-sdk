@@ -1,7 +1,7 @@
 /* app/mpx/mpx_services.c - MicroPixel ABI 服务层实现(见 mpx_services.h)
  *
  * v1 服务集:System / Timer / Storage(RAM KV) / Random / Devices / Graphics /
- * Input;Resource/Audio/Gpio/Haptics/Power/Sensors 按 ABI 语义返回 NOT_FOUND,
+ * Input / Resource(贴图)。Audio/Gpio/Haptics/Power/Sensors 仍返回 NOT_FOUND,
  * guest 侧 SDK 会拿到 UNSUPPORTED/NOT_FOUND 而不破坏加载。
  */
 #include "mpx_services.h"
@@ -12,6 +12,8 @@
 #include "os/os_api.h"
 #include "timer.h"
 #include "wasm_export.h"
+#include "mpx_res.h"
+#include "mpx_store.h"
 
 #include "mpx_display.h"
 
@@ -86,12 +88,15 @@ int32_t mpx_event_post(uint16_t event_id, uint32_t service_id, uint32_t source,
     return MICROPIXEL_STATUS_OK;
 }
 
+static void mpx_timer_flush(void);
+
 int32_t mpx_event_wait(micropixel_event_t *event_out, uint64_t timeout_us)
 {
     if (!mpx_event_sem_created) {
         return MICROPIXEL_STATUS_CLOSED;
     }
     for (;;) {
+        mpx_timer_flush();
         os_mutex_pend(&mpx_event_lock, 0);
         if (mpx_event_count != 0) {
             *event_out = mpx_event_queue[mpx_event_head];
@@ -102,18 +107,28 @@ int32_t mpx_event_wait(micropixel_event_t *event_out, uint64_t timeout_us)
         }
         os_mutex_post(&mpx_event_lock);
 
-        /* 10ms tick 粒度;timeout_us==0 表示无限等 */
-        int ticks;
+        /* 0 是轮询。UINT64_MAX 是一直等，但仍按 1 tick 醒来补发定时器。 */
         if (timeout_us == 0) {
-            ticks = 0; /* JieLi pend: 0 = 无限等待 */
-        } else {
-            ticks = (int)(timeout_us / 10000);
-            if (ticks < 1) {
-                ticks = 1;
-            }
-        }
-        if (os_sem_pend(&mpx_event_sem, ticks) != 0) {
             return MICROPIXEL_STATUS_TIMEOUT;
+        }
+        {
+            int infinite = timeout_us == UINT64_MAX;
+            int ticks = 1;
+            if (!infinite) {
+                uint64_t ticks64 = timeout_us / 10000ull;
+                if (ticks64 < 1) {
+                    ticks64 = 1;
+                }
+                if (ticks64 > 0x7fffffffull) {
+                    ticks64 = 0x7fffffffull;
+                }
+                ticks = (int)ticks64;
+            }
+            if (os_sem_pend(&mpx_event_sem, ticks) != 0 && !infinite) {
+                mpx_timer_flush();
+                return MICROPIXEL_STATUS_TIMEOUT;
+            }
+            mpx_timer_flush();
         }
     }
 }
@@ -166,13 +181,17 @@ static const mpx_service_desc_t mpx_service_table[] = {
     /* Graphics: Direct Surface + Raster 通道(M3 起全量) */
     { MICROPIXEL_SERVICE_GRAPHICS, MICROPIXEL_GRAPHICS_INTERFACE_MAJOR, MICROPIXEL_GRAPHICS_INTERFACE_MINOR,
       MICROPIXEL_SERVICE_FLAG_CALL | MICROPIXEL_SERVICE_FLAG_SUBMIT | MICROPIXEL_SERVICE_FLAG_EVENTS,
-      MICROPIXEL_GRAPHICS_CAP_RASTER,
-      sizeof(micropixel_surface_present_request_t), sizeof(micropixel_graphics_info_t),
-      32 * 1024 },
+      MICROPIXEL_GRAPHICS_CAP_RASTER | MICROPIXEL_GRAPHICS_CAP_RASTER_POLYGON,
+      2048,
+      sizeof(micropixel_graphics_info_t),
+      128 * 1024 },
     /* Input: GET_INFO + 触摸事件 */
     { MICROPIXEL_SERVICE_INPUT, 1, 0,
       MICROPIXEL_SERVICE_FLAG_CALL | MICROPIXEL_SERVICE_FLAG_EVENTS, 0, 0,
       sizeof(micropixel_input_info_t), 0 },
+    { MICROPIXEL_SERVICE_RESOURCE, MICROPIXEL_RESOURCE_INTERFACE_MAJOR,
+      MICROPIXEL_RESOURCE_INTERFACE_MINOR, MICROPIXEL_SERVICE_FLAG_CALL, 0,
+      sizeof(micropixel_texture_load_request_t), sizeof(micropixel_texture_info_t), 0 },
 };
 
 #define MPX_SERVICE_TABLE_COUNT (sizeof(mpx_service_table) / sizeof(mpx_service_table[0]))
@@ -189,32 +208,49 @@ typedef struct mpx_timer {
 } mpx_timer_t;
 
 static mpx_timer_t mpx_timers[MPX_TIMER_COUNT];
-static u16 mpx_timer_sys_timer_id = 0;
+static u16 mpx_timer_usr_id = 0;
+/* 硬件定时器里只加计数。到期事件在 mpx_task 上补发，避免 sys_timer 往无队列任务投递。 */
+static volatile uint32_t mpx_timer_ticks;
+static uint32_t mpx_timer_ticks_seen;
 
 static void mpx_timer_tick_cb(void *priv)
 {
-    uint32_t i;
     (void)priv;
-    for (i = 0; i < MPX_TIMER_COUNT; i++) {
-        mpx_timer_t *t = &mpx_timers[i];
-        if (!t->used || !t->armed) {
-            continue;
+    mpx_timer_ticks++;
+}
+
+static void mpx_timer_flush(void)
+{
+    uint32_t now = mpx_timer_ticks;
+    uint32_t n = now - mpx_timer_ticks_seen;
+    uint32_t step;
+    mpx_timer_ticks_seen = now;
+    if (n > 20) {
+        n = 20;
+    }
+    for (step = 0; step < n; step++) {
+        uint32_t i;
+        for (i = 0; i < MPX_TIMER_COUNT; i++) {
+            mpx_timer_t *t = &mpx_timers[i];
+            micropixel_timer_event_payload_t payload;
+            if (!t->used || !t->armed) {
+                continue;
+            }
+            if (t->delay_left_us > 10000) {
+                t->delay_left_us -= 10000;
+                continue;
+            }
+            memset(&payload, 0, sizeof(payload));
+            payload.elapsed_us = t->period_us;
+            payload.missed_count = 0;
+            if (t->period_us == 0) {
+                t->armed = 0;
+            } else {
+                t->delay_left_us = t->period_us;
+            }
+            mpx_event_post(MICROPIXEL_TIMER_EVENT_EXPIRED, MICROPIXEL_SERVICE_TIMER, i + 1,
+                           &payload, sizeof(payload));
         }
-        if (t->delay_left_us > 10000) {
-            t->delay_left_us -= 10000;
-            continue;
-        }
-        micropixel_timer_event_payload_t payload;
-        memset(&payload, 0, sizeof(payload));
-        payload.elapsed_us = t->period_us;
-        payload.missed_count = 0;
-        if (t->period_us == 0) {
-            t->armed = 0; /* one-shot */
-        } else {
-            t->delay_left_us = t->period_us;
-        }
-        mpx_event_post(MICROPIXEL_TIMER_EVENT_EXPIRED, MICROPIXEL_SERVICE_TIMER, i + 1,
-                       &payload, sizeof(payload));
     }
 }
 
@@ -606,6 +642,9 @@ static int32_t mpx_graphics_call(uint32_t method_id, const uint8_t *request, uin
         mpx_display_surface_destroy(wire.handle);
         return MICROPIXEL_STATUS_OK;
     }
+    if (method_id == MICROPIXEL_GRAPHICS_METHOD_MEASURE_TEXT) {
+        return mpx_measure_text(request, request_size, response, response_capacity, response_size_out);
+    }
     return MICROPIXEL_STATUS_UNSUPPORTED;
 }
 
@@ -613,6 +652,9 @@ static int32_t mpx_graphics_call(uint32_t method_id, const uint8_t *request, uin
 
 static int32_t mpx_graphics_submit(uint32_t channel_id, const uint8_t *bytes, uint32_t length)
 {
+    if (channel_id == MICROPIXEL_GRAPHICS_CHANNEL_SCENE) {
+        return mpx_scene_submit(bytes, length);
+    }
     if (channel_id != MICROPIXEL_GRAPHICS_CHANNEL_RASTER) {
         return MICROPIXEL_STATUS_UNSUPPORTED;
     }
@@ -659,6 +701,7 @@ int32_t mpx_service_call(uint32_t service_handle, uint32_t method_id, const uint
                          uint32_t *response_size_out)
 {
     *response_size_out = 0;
+    mpx_timer_flush();
     if (service_handle == 0 || service_handle > MPX_SERVICE_TABLE_COUNT) {
         return MICROPIXEL_STATUS_INVALID_ARGUMENT;
     }
@@ -692,6 +735,9 @@ int32_t mpx_service_call(uint32_t service_handle, uint32_t method_id, const uint
     case MICROPIXEL_SERVICE_INPUT:
         return mpx_input_call(method_id, request, request_size, response, response_capacity,
                               response_size_out);
+    case MICROPIXEL_SERVICE_RESOURCE:
+        return mpx_resource_call(method_id, request, request_size, response, response_capacity,
+                                 response_size_out);
     default:
         return MICROPIXEL_STATUS_NOT_FOUND;
     }
@@ -700,6 +746,7 @@ int32_t mpx_service_call(uint32_t service_handle, uint32_t method_id, const uint
 int32_t mpx_service_submit(uint32_t service_handle, uint32_t channel_id, const uint8_t *bytes,
                            uint32_t length)
 {
+    mpx_timer_flush();
     if (service_handle == 0 || service_handle > MPX_SERVICE_TABLE_COUNT) {
         return MICROPIXEL_STATUS_INVALID_ARGUMENT;
     }
@@ -733,7 +780,8 @@ void mpx_services_init(void)
     }
     memset(mpx_timers, 0, sizeof(mpx_timers));
     memset(mpx_kv_table, 0, sizeof(mpx_kv_table));
-    mpx_timer_sys_timer_id = sys_timer_add(NULL, mpx_timer_tick_cb, 10);
+    mpx_timer_ticks_seen = mpx_timer_ticks;
+    mpx_timer_usr_id = usr_timer_add(NULL, mpx_timer_tick_cb, 10, 0);
     mpx_raster_init();
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
     cst816_register_event(mpx_touch_cb);
@@ -743,10 +791,13 @@ void mpx_services_init(void)
 void mpx_services_deinit(void)
 {
     mpx_raster_deinit();
+    mpx_scene_reset();
+    mpx_texture_reset();
+    mpx_store_use_bundle(NULL, 0);
     mpx_guest_inst = NULL;
-    if (mpx_timer_sys_timer_id) {
-        sys_timer_del(mpx_timer_sys_timer_id);
-        mpx_timer_sys_timer_id = 0;
+    if (mpx_timer_usr_id) {
+        usr_timer_del(mpx_timer_usr_id);
+        mpx_timer_usr_id = 0;
     }
     mpx_event_sem_created = 0;
     mpx_event_lock_created = 0;

@@ -21,13 +21,13 @@
 
 // *INDENT-OFF*
 
-/*============================ UART0：调试打印口 (PB2, 1M) ============================ */
+/*============================ UART0：调试打印口 (PA3=TX, PA4=RX, 1M) ==============
+ * 固定口 PORTA_3_4。主机侧 COM3 @ 1000000。与 SPI2 C 组复用，spi_task 保持关闭。 */
 UART0_PLATFORM_DATA_BEGIN(uart0_data)
 	.baudrate = 1000000,
-	.port = PORT_REMAP,
-	.output_channel = OUTPUT_CHANNEL0,
-	.tx_pin = IO_PORTB_02,
-	.rx_pin = -1,
+	.port = PORTA_3_4,
+	.tx_pin = IO_PORTA_03,
+	.rx_pin = IO_PORTA_04,
 	.max_continue_recv_cnt = 1024,
 	.idle_sys_clk_cnt = 500000,
 	.clk_src = PLL_48M,
@@ -63,7 +63,7 @@ SW_IIC_PLATFORM_DATA_BEGIN(sw_iic0_data)
 SW_IIC_PLATFORM_DATA_END();
 
 /*============================ PWM1：任意IO映射 (PA5, TIMER2+输出通道2) ==========
- * 呼吸灯/舵机/蜂鸣器等; 占用 output_channel2, 勿与 UART 重映射冲突(uart0/1用ch0/1) */
+ * 呼吸灯/舵机/蜂鸣器等; 占用 output_channel2。uart1 重映射用 channel1, uart0 走固定口 PA3/PA4。 */
 PWM_PLATFORM_DATA_BEGIN(pwm_data1)
 	.port    = IO_PORTA_05,
 	.pwm_ch  = PWM_TIMER2_OPCH2,

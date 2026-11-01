@@ -39,6 +39,9 @@ typedef struct mpx_surface {
 
 static mpx_surface_t mpx_surfaces[MPX_MAX_SURFACES];
 
+/* 1: wasm 应用占着屏幕, lcd_test 不再跑 LVGL, 避免把刚画的帧盖掉。 */
+volatile unsigned char mpx_display_hold;
+
 extern void lcd_lvgl_full(u16 xs, u16 xe, u16 ys, u16 ye, char *img);
 
 uint16_t mpx_display_width(void)
@@ -83,7 +86,7 @@ int32_t mpx_display_get_info(micropixel_graphics_info_t *info)
     info->max_full_frame_fps = 30;
     info->max_surface_buffers = MPX_MAX_BUFFERS_PER_SURFACE;
     info->max_text_bytes = 1024;
-    info->max_scene_bytes = 0;          /* Scene 通道不启用 */
+    info->max_scene_bytes = 128 * 1024; /* guest 上限 kMaxSceneBytes */
     info->max_raster_bytes = 32 * 1024; /* RASTER 通道(M3) */
     return MICROPIXEL_STATUS_OK;
 }
@@ -135,6 +138,7 @@ int32_t mpx_display_surface_present(uint32_t surface_handle, uint32_t buffer_ind
     }
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
     if (s->width == MPX_LCD_W && s->height == MPX_LCD_H) {
+        mpx_display_hold = 1;
         lcd_lvgl_full(0, (u16)(MPX_LCD_W - 1), 0, (u16)(MPX_LCD_H - 1),
                       (char *)s->buffers[buffer_index].data);
     } else {

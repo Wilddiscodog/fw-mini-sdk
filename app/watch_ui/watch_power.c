@@ -4,7 +4,6 @@
 #include "sys_power.h"
 #include "watch_power.h"
 #include "watch_backlight.h"
-#include "watch_ui.h"
 
 static u8 s_on = 1;
 static u8 s_busy;
@@ -24,8 +23,6 @@ void watch_power_off(void)
     }
     s_busy = 1;
     s_on = 0;
-    watch_ui_close_dropdown();
-    watch_ui_close_app();
     watch_backlight_set(0);
     /* 只置位: soft_poweroff 在 lcd_test 离开 lv_task_handler 后执行 */
     s_do_poweroff = 1;

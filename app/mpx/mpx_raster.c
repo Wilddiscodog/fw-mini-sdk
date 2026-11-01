@@ -1,7 +1,7 @@
 /* app/mpx/mpx_raster.c - 见 mpx_raster.h
  *
- * 面板(JD9853)字节序 = 大端,canonical RGB565(小端 u16)写入缓冲前字节
- * 交换;调色板存储即面板序,SPRITE/RECT 落像素时直接按字节写。
+ * 面板(JD9853)高字节在前。缓冲里的 uint16 保持 canonical,
+ * mpx_put 先写高字节,和场景通道一致。
  */
 #include "mpx_raster.h"
 
@@ -13,10 +13,12 @@
 
 #define MPX_TAG "[mpx] "
 
-#define MPX_RT_SLOTS 8
+#define MPX_RT_SLOTS 16
 #define MPX_RP_SLOTS 8
-#define MPX_RP_MAX_LIGHTS 8 /* ABI 上限 32, 本板按 8 档省内存 */
+#define MPX_RP_MAX_LIGHTS 32 /* ABI 上限; Tomb 用 16 档 */
 #define MPX_MAX_TEX_DIM 4096
+
+extern void wdt_clear(void);
 
 typedef struct mpx_rt {
     uint8_t used;
@@ -91,10 +93,9 @@ int32_t mpx_raster_palette_upload(uint8_t slot, uint16_t light_levels,
     if (buffer == NULL) {
         return MICROPIXEL_STATUS_RESOURCE_EXHAUSTED;
     }
-    /* canonical(LE u16) -> 面板字节序(BE) */
+    /* guest 按小端字节给出 canonical RGB565,数值保持不交换。 */
     for (uint32_t i = 0; i < length / 2; i++) {
-        uint16_t canonical = (uint16_t)(entries[i * 2] | (entries[i * 2 + 1] << 8));
-        buffer[i] = (uint16_t)((canonical << 8) | (canonical >> 8));
+        buffer[i] = (uint16_t)(entries[i * 2] | (entries[i * 2 + 1] << 8));
     }
     free(p->entries);
     p->entries = buffer;
@@ -112,14 +113,15 @@ typedef struct mpx_target {
     uint32_t pitch; /* 字节 */
 } mpx_target_t;
 
+/* 字节序只在 mpx_put / mpx_get。混合和调色板都用 canonical 数值。 */
 static inline uint16_t mpx_canon_to_panel(uint16_t canonical)
 {
-    return (uint16_t)((canonical << 8) | (canonical >> 8));
+    return canonical;
 }
 
 static inline uint16_t mpx_panel_to_canon(uint16_t panel)
 {
-    return (uint16_t)((panel << 8) | (panel >> 8));
+    return panel;
 }
 
 static inline void mpx_put(uint8_t *row, uint32_t x, uint16_t panel_value)
@@ -242,6 +244,337 @@ static int32_t mpx_exec_sprite(const uint8_t *rec, const mpx_target_t *target)
     return MICROPIXEL_STATUS_OK;
 }
 
+/* 沿边扫描。顶点 x/y 是 12.4,走边时换成 16.16;u/v 从 8.8 升到 16.16。
+ * 每条边、每一行用一次浮点倒数求步长,像素循环只做整数加法。 */
+typedef struct mpx_edge {
+    int32_t x;
+    int32_t u;
+    int32_t v;
+    int32_t light;
+    int32_t dx;
+    int32_t du;
+    int32_t dv;
+    int32_t dlight;
+    int32_t end_row;
+} mpx_edge_t;
+
+typedef struct mpx_chain {
+    const micropixel_raster_vertex_t *vertices;
+    int count;
+    int index;
+    int remaining;
+    int forward;
+    mpx_edge_t edge;
+} mpx_chain_t;
+
+static int mpx_is_pow2(uint16_t v)
+{
+    return v != 0 && (v & (uint16_t)(v - 1)) == 0;
+}
+
+static int mpx_row_ceil(int32_t y)
+{
+    return (y + 7) >> 4;
+}
+
+static int mpx_col_ceil(int32_t x)
+{
+    return (x + 0x7fff) >> 16;
+}
+
+static int32_t mpx_walk_at(int32_t start, int32_t step, int64_t num, int shift)
+{
+    return start + (int32_t)(((int64_t)step * num) >> shift);
+}
+
+static int mpx_setup_edge(const micropixel_raster_vertex_t *a, const micropixel_raster_vertex_t *b,
+                          int32_t start_row, mpx_edge_t *edge)
+{
+    int32_t dy = (int32_t)b->y - (int32_t)a->y;
+    int32_t first;
+    float per_row;
+    int32_t u0, v0, l0;
+    int64_t rows16;
+    if (dy <= 0) {
+        return 0;
+    }
+    first = mpx_row_ceil(a->y);
+    if (first < start_row) {
+        first = start_row;
+    }
+    edge->end_row = mpx_row_ceil(b->y);
+    if (edge->end_row <= first) {
+        return 0;
+    }
+    per_row = 16.0f / (float)dy;
+    edge->dx = (int32_t)((float)((int32_t)b->x - (int32_t)a->x) * per_row * 4096.0f);
+    u0 = (int32_t)a->u << 8;
+    v0 = (int32_t)a->v << 8;
+    l0 = (int32_t)a->light << 16;
+    edge->du = (int32_t)((float)(((int32_t)b->u << 8) - u0) * per_row);
+    edge->dv = (int32_t)((float)(((int32_t)b->v << 8) - v0) * per_row);
+    edge->dlight = (int32_t)((float)(((int32_t)b->light << 16) - l0) * per_row);
+    rows16 = ((int64_t)first << 4) + 8 - a->y;
+    edge->x = mpx_walk_at((int32_t)a->x << 12, edge->dx, rows16, 4);
+    edge->u = mpx_walk_at(u0, edge->du, rows16, 4);
+    edge->v = mpx_walk_at(v0, edge->dv, rows16, 4);
+    edge->light = mpx_walk_at(l0, edge->dlight, rows16, 4);
+    return 1;
+}
+
+static int mpx_chain_advance(mpx_chain_t *chain, int32_t row)
+{
+    while (chain->remaining > 0) {
+        int next;
+        chain->remaining--;
+        if (chain->forward) {
+            next = chain->index + 1;
+            if (next == chain->count) {
+                next = 0;
+            }
+        } else {
+            next = chain->index == 0 ? chain->count - 1 : chain->index - 1;
+        }
+        {
+            int covers = mpx_setup_edge(&chain->vertices[chain->index], &chain->vertices[next],
+                                        row, &chain->edge);
+            chain->index = next;
+            if (covers) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static int64_t mpx_area2(const micropixel_raster_vertex_t *verts, int count)
+{
+    int64_t area = 0;
+    int i;
+    for (i = 0; i < count; i++) {
+        const micropixel_raster_vertex_t *a = &verts[i];
+        const micropixel_raster_vertex_t *b = &verts[(i + 1) % count];
+        area += (int64_t)a->x * b->y - (int64_t)b->x * a->y;
+    }
+    return area;
+}
+
+static int32_t mpx_check_polygon(uint8_t flags, uint8_t texture_slot, uint8_t palette_slot,
+                                 const micropixel_raster_vertex_t *verts, int count)
+{
+    uint8_t known = (uint8_t)(MICROPIXEL_RASTER_POLYGON_TRANSPARENT_INDEX0 |
+                              MICROPIXEL_RASTER_POLYGON_FLAT_COLOR);
+    if ((flags & (uint8_t)~known) != 0 || count < 3) {
+        return MICROPIXEL_STATUS_INVALID_ARGUMENT;
+    }
+    if (palette_slot >= MPX_RP_SLOTS || !mpx_rp[palette_slot].used) {
+        return MICROPIXEL_STATUS_INVALID_ARGUMENT;
+    }
+    int flat = (flags & MICROPIXEL_RASTER_POLYGON_FLAT_COLOR) != 0;
+    if (!flat) {
+        if (texture_slot >= MPX_RT_SLOTS || !mpx_rt[texture_slot].used) {
+            return MICROPIXEL_STATUS_INVALID_ARGUMENT;
+        }
+        const mpx_rt_t *tex = &mpx_rt[texture_slot];
+        if (tex->layout != MICROPIXEL_RASTER_LAYOUT_ROW_MAJOR ||
+            !mpx_is_pow2(tex->width) || !mpx_is_pow2(tex->height)) {
+            return MICROPIXEL_STATUS_INVALID_ARGUMENT;
+        }
+    }
+    for (int i = 0; i < count; i++) {
+        if (verts[i].light >= mpx_rp[palette_slot].light_levels) {
+            return MICROPIXEL_STATUS_INVALID_ARGUMENT;
+        }
+    }
+    return MICROPIXEL_STATUS_OK;
+}
+
+static void mpx_exec_polygon(const micropixel_raster_vertex_t *verts, int count, uint8_t flags,
+                             uint8_t texture_slot, uint8_t palette_slot, const mpx_target_t *target)
+{
+    int64_t area;
+    int top;
+    int32_t min_y, max_y;
+    uint32_t min_light, max_light;
+    int row, row_end;
+    mpx_chain_t left, right;
+    int flat, transparent;
+    uint32_t flat_index;
+    int32_t light_low, light_high;
+    const mpx_rt_t *tex;
+    const uint16_t *pal;
+    int tw, th;
+    int i;
+
+    if (count < 3 || count > 4) {
+        return;
+    }
+    area = mpx_area2(verts, count);
+    if (area == 0) {
+        return;
+    }
+    flat = (flags & MICROPIXEL_RASTER_POLYGON_FLAT_COLOR) != 0;
+    transparent = (flags & MICROPIXEL_RASTER_POLYGON_TRANSPARENT_INDEX0) != 0;
+    top = 0;
+    min_y = max_y = verts[0].y;
+    min_light = max_light = verts[0].light;
+    for (i = 1; i < count; i++) {
+        if (verts[i].y < min_y) {
+            min_y = verts[i].y;
+            top = i;
+        }
+        if (verts[i].y > max_y) {
+            max_y = verts[i].y;
+        }
+        if (verts[i].light < min_light) {
+            min_light = verts[i].light;
+        }
+        if (verts[i].light > max_light) {
+            max_light = verts[i].light;
+        }
+    }
+    if (max_light >= mpx_rp[palette_slot].light_levels) {
+        return;
+    }
+    row = mpx_row_ceil(min_y);
+    if (row < 0) {
+        row = 0;
+    }
+    row_end = mpx_row_ceil(max_y);
+    if (row_end > (int)target->height) {
+        row_end = (int)target->height;
+    }
+    if (row >= row_end) {
+        return;
+    }
+    left.vertices = verts;
+    left.count = count;
+    left.index = top;
+    left.remaining = count - 1;
+    left.forward = area < 0;
+    right = left;
+    right.forward = area > 0;
+    if (!mpx_chain_advance(&left, row) || !mpx_chain_advance(&right, row)) {
+        return;
+    }
+    light_low = (int32_t)(min_light << 16);
+    light_high = (int32_t)((max_light << 16) | 0xffffu);
+    flat_index = flat ? ((uint32_t)verts[0].u >> 8) : 0;
+    tex = flat ? NULL : &mpx_rt[texture_slot];
+    pal = mpx_rp[palette_slot].entries;
+    tw = tex ? (int)tex->width : 0;
+    th = tex ? (int)tex->height : 0;
+
+    for (;;) {
+        mpx_edge_t *l = &left.edge;
+        mpx_edge_t *r = &right.edge;
+        int32_t span, x0, x1;
+        if (l->x > r->x) {
+            mpx_edge_t *swap = l;
+            l = r;
+            r = swap;
+        }
+        span = r->x - l->x;
+        x0 = mpx_col_ceil(l->x);
+        x1 = mpx_col_ceil(r->x);
+        if (x0 < 0) {
+            x0 = 0;
+        }
+        if (x1 > (int)target->width) {
+            x1 = (int)target->width;
+        }
+        if (span > 0 && x1 > x0) {
+            float per_pixel = 65536.0f / (float)span;
+            int32_t du = (int32_t)((float)(r->u - l->u) * per_pixel);
+            int32_t dv = (int32_t)((float)(r->v - l->v) * per_pixel);
+            int32_t dlight = (int32_t)((float)(r->light - l->light) * per_pixel);
+            int64_t prestep = ((int64_t)x0 << 16) + 0x8000 - l->x;
+            int32_t u = mpx_walk_at(l->u, du, prestep, 16);
+            int32_t v = mpx_walk_at(l->v, dv, prestep, 16);
+            int32_t light = mpx_walk_at(l->light, dlight, prestep, 16);
+            int last = (x1 - x0) - 1;
+            int32_t light_end;
+            uint8_t *rowptr = target->data + (uint32_t)row * target->pitch;
+            int px;
+            if (light < light_low) {
+                light = light_low;
+            }
+            if (light > light_high) {
+                light = light_high;
+            }
+            light_end = light + (int32_t)((int64_t)dlight * last);
+            if (light_end < light_low || light_end > light_high) {
+                if (light_end < light_low) {
+                    light_end = light_low;
+                }
+                if (light_end > light_high) {
+                    light_end = light_high;
+                }
+                dlight = last > 0 ? (light_end - light) / last : 0;
+            }
+            for (px = x0; px < x1; px++) {
+                uint32_t lit = (uint32_t)light >> 16;
+                uint32_t index;
+                if (flat) {
+                    index = flat_index;
+                } else {
+                    uint32_t ui = ((uint32_t)u >> 16) & (uint32_t)(tw - 1);
+                    uint32_t vi = ((uint32_t)v >> 16) & (uint32_t)(th - 1);
+                    index = tex->texels[vi * (uint32_t)tw + ui];
+                }
+                if (!(transparent && index == 0)) {
+                    mpx_put(rowptr, (uint32_t)px, pal[(lit << 8) | index]);
+                }
+                u += du;
+                v += dv;
+                light += dlight;
+            }
+        }
+        if (++row >= row_end) {
+            break;
+        }
+        if ((row & 7) == 0) {
+            wdt_clear();
+        }
+        if (row == left.edge.end_row) {
+            if (!mpx_chain_advance(&left, row)) {
+                break;
+            }
+        } else {
+            left.edge.x += left.edge.dx;
+            left.edge.u += left.edge.du;
+            left.edge.v += left.edge.dv;
+            left.edge.light += left.edge.dlight;
+        }
+        if (row == right.edge.end_row) {
+            if (!mpx_chain_advance(&right, row)) {
+                break;
+            }
+        } else {
+            right.edge.x += right.edge.dx;
+            right.edge.u += right.edge.du;
+            right.edge.v += right.edge.dv;
+            right.edge.light += right.edge.dlight;
+        }
+    }
+}
+
+static uint32_t mpx_record_size(uint8_t type)
+{
+    switch (type) {
+    case MICROPIXEL_RASTER_RECORD_RECT:
+        return sizeof(micropixel_raster_rect_t);
+    case MICROPIXEL_RASTER_RECORD_SPRITE:
+        return sizeof(micropixel_raster_sprite_t);
+    case MICROPIXEL_RASTER_RECORD_TRIANGLE:
+        return sizeof(micropixel_raster_triangle_t);
+    case MICROPIXEL_RASTER_RECORD_QUAD:
+        return sizeof(micropixel_raster_quad_t);
+    default:
+        return 0;
+    }
+}
+
 /* 第一遍:仅校验,不写像素 */
 static int32_t mpx_validate_record(const uint8_t *rec, uint32_t rec_size)
 {
@@ -276,6 +609,22 @@ static int32_t mpx_validate_record(const uint8_t *rec, uint32_t rec_size)
         }
         return MICROPIXEL_STATUS_OK;
     }
+    case MICROPIXEL_RASTER_RECORD_TRIANGLE: {
+        if (rec_size != sizeof(micropixel_raster_triangle_t)) {
+            return MICROPIXEL_STATUS_INVALID_ARGUMENT;
+        }
+        micropixel_raster_triangle_t tri;
+        memcpy(&tri, rec, sizeof(tri));
+        return mpx_check_polygon(tri.flags, tri.texture_slot, tri.palette_slot, tri.vertices, 3);
+    }
+    case MICROPIXEL_RASTER_RECORD_QUAD: {
+        if (rec_size != sizeof(micropixel_raster_quad_t)) {
+            return MICROPIXEL_STATUS_INVALID_ARGUMENT;
+        }
+        micropixel_raster_quad_t quad;
+        memcpy(&quad, rec, sizeof(quad));
+        return mpx_check_polygon(quad.flags, quad.texture_slot, quad.palette_slot, quad.vertices, 4);
+    }
     default:
         return MICROPIXEL_STATUS_UNSUPPORTED;
     }
@@ -307,24 +656,17 @@ int32_t mpx_raster_submit(const uint8_t *bytes, uint32_t length)
         if (rec + 4 > end) {
             return MICROPIXEL_STATUS_INVALID_ARGUMENT;
         }
-        uint32_t rec_size;
-        int32_t status2 = mpx_validate_record(rec, (uint32_t)(end - rec));
-        if (status2 != MICROPIXEL_STATUS_OK) {
-            return status2;
-        }
-        /* 每型尺寸为定长,按 type 前进 */
-        switch (rec[0]) {
-        case MICROPIXEL_RASTER_RECORD_RECT:
-            rec_size = sizeof(micropixel_raster_rect_t);
-            break;
-        case MICROPIXEL_RASTER_RECORD_SPRITE:
-            rec_size = sizeof(micropixel_raster_sprite_t);
-            break;
-        default:
-            return MICROPIXEL_STATUS_INVALID_ARGUMENT; /* validate 已拒,防御 */
+        /* 每型尺寸为定长。必须按本条长度校验,不能拿剩余字节去比。 */
+        uint32_t rec_size = mpx_record_size(rec[0]);
+        if (rec_size == 0) {
+            return MICROPIXEL_STATUS_UNSUPPORTED;
         }
         if (rec + rec_size > end) {
             return MICROPIXEL_STATUS_INVALID_ARGUMENT;
+        }
+        int32_t status2 = mpx_validate_record(rec, rec_size);
+        if (status2 != MICROPIXEL_STATUS_OK) {
+            return status2;
         }
         rec += rec_size;
     }
@@ -337,11 +679,18 @@ int32_t mpx_raster_submit(const uint8_t *bytes, uint32_t length)
     for (uint16_t i = 0; i < header.record_count; i++) {
         if (rec[0] == MICROPIXEL_RASTER_RECORD_RECT) {
             mpx_exec_rect(rec, &target);
-            rec += sizeof(micropixel_raster_rect_t);
-        } else {
+        } else if (rec[0] == MICROPIXEL_RASTER_RECORD_SPRITE) {
             mpx_exec_sprite(rec, &target);
-            rec += sizeof(micropixel_raster_sprite_t);
+        } else if (rec[0] == MICROPIXEL_RASTER_RECORD_TRIANGLE) {
+            micropixel_raster_triangle_t tri;
+            memcpy(&tri, rec, sizeof(tri));
+            mpx_exec_polygon(tri.vertices, 3, tri.flags, tri.texture_slot, tri.palette_slot, &target);
+        } else {
+            micropixel_raster_quad_t quad;
+            memcpy(&quad, rec, sizeof(quad));
+            mpx_exec_polygon(quad.vertices, 4, quad.flags, quad.texture_slot, quad.palette_slot, &target);
         }
+        rec += mpx_record_size(rec[0]);
     }
     return MICROPIXEL_STATUS_OK;
 }

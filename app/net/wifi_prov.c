@@ -37,7 +37,7 @@
  * 4MB→5MB —— 文件已超 4MiB, 整包进缓存可完全避开 spill 模式的 CRC 风险;
  * 实测双 CDC 删 3MB RAM 盘后 SDRAM 堆空闲 ~7.8MB, 5MB 放得下)。失败对半降级。
  * 中途刷 flash 若不抽 TCP, 对端窗口堵死 → recv stall → net_update err。 */
-#define OTA_CACHE_TARGET   (5u * 1024u * 1024u)
+#define OTA_CACHE_TARGET   (6u * 1024u * 1024u)
 #define OTA_CACHE_MIN      (64u * 1024u)
 #define OTA_BURN_CHUNK     (4u * 1024u)
 #define OTA_SPILL_SIZE     (256u * 1024u)
@@ -71,6 +71,9 @@ extern int init_net_device_mac_addr(char *macaddr, char ap_mode);
 extern void wifi_set_lan_setting_info(void);                 /* bt_wifi_app.c(AP IP/DHCP池) */
 /* 升级诊断: 用官方 BootInfo 布局, 避免栈上自拟结构与库写宽不一致 */
 #include "dual_bank_updata_api.h"
+#if (defined MINI_WASM_SUPPORT) && MINI_WASM_SUPPORT
+#include "mpx_store.h"
+#endif
 extern u32 get_target_udate_addr(void);
 extern u32 dual_bank_update_read_data(u32 offset, u8 *read_buf, u32 read_len);
 
@@ -1297,6 +1300,11 @@ hdr_done:
             continue;
         }
 
+#if (defined MINI_WASM_SUPPORT) && MINI_WASM_SUPPORT
+        if (!strncmp(req, "GET /mpx", 8) || !strncmp(req, "POST /mpx", 9)) {
+            mpx_http_handle(conn, req, hdr_end, got);
+        } else
+#endif
         if (!strncmp(req, "GET /api/scan", 13)) {
             http_render_scan_json(conn);
         } else if (!strncmp(req, "GET /scan", 9)) {
