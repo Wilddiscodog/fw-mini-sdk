@@ -37,7 +37,7 @@
 #define MINI_USB_STACK_CHERRYUSB    0
 #endif
 #ifndef MINI_USB_ENABLE
-#define MINI_USB_ENABLE             1
+#define MINI_USB_ENABLE             0   /* 0=关 USB, SYS 可跑 320M; 1=HS USB 并锁 SYS=240M */
 #endif
 
 #if MINI_USB_ENABLE
@@ -90,13 +90,14 @@
 #endif
 
 #define VDC14_VOL_SEL_LEVEL                     VDC14_VOL_SEL_140V
-#define SYSVDD_VOL_SEL_LEVEL                    SYSVDD_VOL_SEL_126V
+/* 320M 主频需略抬核压(对齐 isd_config_loader); USB@240M 也可用 */
+#define SYSVDD_VOL_SEL_LEVEL                    SYSVDD_VOL_SEL_132V
 
 /* ADKEY(PB01) 与开关机键复用: 长按进 P33 软关机, 再按唤醒冷启动 */
 #define CONFIG_PRESS_LONG_KEY_POWERON
 
 #define CONFIG_DEBUG_ENABLE
-/* 系统日志只走 UART0(PA3=TX, PA4=RX); WiFi 库日志由 wifi_log_mute.c 静音。
+/* 系统日志只走 UART0(PB2=TX, PB3=RX, 1M); WiFi 库日志由 wifi_log_mute.c 静音。
  * 原厂双 CDC: user_cdc_* → CDC2(EP2); CherryUSB: 同为 CDC2 日志口。 */
 
 
@@ -230,24 +231,30 @@
 #define TCFG_ADKEY_IR_IO_REUSE      0
 #define TCFG_ADKEY_LED_SPI_IO_REUSE 0
 
-/* ================ 蓝牙/WiFi (受 MINI_PWR_BISECT 约束) ================ */
-#if MINI_PWR_BISECT >= 4
-#define MINI_BT_SUPPORT             1
-#else
+/* ================ 蓝牙/WiFi ================
+ * 对齐原厂 demo_wifi: 默认只开 WiFi(CONFIG_WIFI_ENABLE), 不链 btctrler/btstack。
+ * 要蓝牙: make MINI_BT_SUPPORT=1。WiFi 仍跟 MINI_PWR_BISECT>=5。 */
+#ifndef MINI_BT_SUPPORT
 #define MINI_BT_SUPPORT             0
 #endif
 #if MINI_PWR_BISECT >= 5
 #define MINI_WIFI_SUPPORT           1
+#ifndef CONFIG_WIFI_ENABLE
+#define CONFIG_WIFI_ENABLE          1   /* 原厂 WiFi-only 必备; MAC 走 assign 风格 init_net_device_mac_addr */
+#endif
 #else
 #define MINI_WIFI_SUPPORT           0
 #endif
 #if MINI_BT_SUPPORT
 #define MINI_BT_SPEAKER_EN          1
 #define MINI_BT_BLE_TRANS_EN        1
+#ifndef CONFIG_BT_ENABLE
 #define CONFIG_BT_ENABLE            1
+#endif
 #else
 #define MINI_BT_SPEAKER_EN          0
 #define MINI_BT_BLE_TRANS_EN        0
+#undef CONFIG_BT_ENABLE
 #endif
 
 #if MINI_BT_SUPPORT

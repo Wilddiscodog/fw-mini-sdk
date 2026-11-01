@@ -21,20 +21,24 @@
 
 // *INDENT-OFF*
 
-/*============================ UART0：调试打印口 (PA3=TX, PA4=RX, 1M) ==============
- * 固定口 PORTA_3_4。主机侧 COM3 @ 1000000。与 SPI2 C 组复用，spi_task 保持关闭。 */
+/*============================ UART0：调试打印口 (PB2=TX, PB3=RX, 1M) ==============
+ * PORT_REMAP + channel1; 主机侧 CH340 @ 1000000。与板级实测一致。 */
 UART0_PLATFORM_DATA_BEGIN(uart0_data)
 	.baudrate = 1000000,
-	.port = PORTA_3_4,
-	.tx_pin = IO_PORTA_03,
-	.rx_pin = IO_PORTA_04,
+	.port = PORT_REMAP,
+	.output_channel = OUTPUT_CHANNEL1,
+	.input_channel  = INPUT_CHANNEL1,
+	.tx_pin = IO_PORTB_02,
+	.rx_pin = IO_PORTB_03,
 	.max_continue_recv_cnt = 1024,
 	.idle_sys_clk_cnt = 500000,
 	.clk_src = PLL_48M,
 	.flags = UART_DEBUG,
 UART0_PLATFORM_DATA_END();
 
-/*============================ UART1：通用收发口 (PB3=TX, PB4=RX, 115200) ============ */
+/*============================ UART1：已让位给调试口(PB2/PB3 被 UART0 占用) ======
+ * 设备表中的注册已注销; 需要时换到固定口 PORTH_6_7/PORTC_3_4 再启用。 */
+#if 0
 UART1_PLATFORM_DATA_BEGIN(uart1_data)
 	.baudrate = 115200,
 	.port = PORT_REMAP,
@@ -46,6 +50,7 @@ UART1_PLATFORM_DATA_BEGIN(uart1_data)
 	.idle_sys_clk_cnt = 500000,
 	.clk_src = PLL_48M,
 UART1_PLATFORM_DATA_END();
+#endif /* UART1 让位调试口 */
 
 /*============================ SPI2：主机口 (C组: PA1=CS PA2=DO PA3=CLK PA4=DI) ======
  * W25Qxx 等标准 SPI Flash 接法；CS 由软件控制（见 app_main.c 的 spi 任务） */
@@ -96,14 +101,13 @@ PWM_PLATFORM_DATA_END();
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 static const struct emi_platform_data emi_data = {
 	.bits_mode      = EMI_8BITS_MODE,       /* 8 位 8080 并口 */
-	/* HSB≈120M: DIV4 → ~30MHz 写时钟(DIV5≈24M 上一档; 早年 DIV4 花屏
-	 * 是初始化序列错误所致, 与速度无关——2026-10-31 用户确认提速) */
-	.baudrate       = EMI_BAUD_DIV4,
+	/* HSB≈160M@320M SYS: DIV3 → ~53MHz 写时钟(原 DIV4≈40M)。花屏再退回 DIV4 */
+	.baudrate       = EMI_BAUD_DIV3,
 	.colection      = EMI_FALLING_COLT,     /* 下降沿采样 */
 	.time_out       = 1 * 1000,             /* 写超时 ms */
 	.th             = EMI_TWIDTH_NO_HALF,
 	.ts             = 0,
-	.tw             = EMI_BAUD_DIV4,   /* WR 脉宽与 baud 同档 */
+	.tw             = EMI_BAUD_DIV3,   /* WR 脉宽与 baud 同档 */
 	.data_bit_en    = 0,
 };
 
@@ -400,7 +404,8 @@ static const struct audio_platform_data audio_data = {
 
 REGISTER_DEVICES(device_table) = {
 	{"uart0", &uart_dev_ops, (void *)&uart0_data },
-	{"uart1", &uart_dev_ops, (void *)&uart1_data },
+	/* uart1 已注销: PB2/PB3 让位给调试口(UART0 重映射), 需要时改固定口再启用 */
+	/* {"uart1", &uart_dev_ops, (void *)&uart1_data }, */
 	{"spi2",  &spi_dev_ops,  (void *)&spi2_data },
 	{"iic0",  &iic_dev_ops,  (void *)&sw_iic0_data },
 #if (defined MINI_PWM_SUPPORT) && MINI_PWM_SUPPORT

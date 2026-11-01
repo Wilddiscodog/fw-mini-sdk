@@ -6,5 +6,7 @@
 
 uint16_t mpx_display_width(void);
 uint16_t mpx_display_height(void);
+/* 上屏前把 CPU 写过的帧缓冲刷出 D-cache */
+void mpx_display_flush_fb(void *pixels, uint32_t nbytes);
 
 #endif /* _MPX_DISPLAY_H_ */

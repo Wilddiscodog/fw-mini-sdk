@@ -26,6 +26,9 @@ void setup_arch()
 
     system_reset_reason_get();
 
+    /* 勿在此 system_sdram_clock_set: usr_systimer 已占用会失败并触发
+     * "can't change system clock"，随后易 WDT。320M 只能靠 isd/uboot 起。 */
+
     puts("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
     printf("\n   WL82(AC791N) CHIP_ID: 0x%x  setup_arch %s %s", JL_INTEST->CHIP_ID, __DATE__, __TIME__);
     extern u32 SDRAM_SIZE, RAM0_SIZE, CACHE_RAM_SIZE, text_size, data_size, bss_size, ram0_bss_size, ram0_data_size, cache_ram_bss_size, cache_ram_data_size, HEAP_END, HEAP_BEGIN;
@@ -47,4 +50,3 @@ void setup_arch()
 
     p33_io_latch_init();
 }
-

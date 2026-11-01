@@ -28,8 +28,10 @@
 #include "../fast-jit/jit_compiler.h"
 #endif
 
+#if defined(MPX_INTERP_DEBUG) && MPX_INTERP_DEBUG
 extern void mpx_note(const char *msg);
 extern volatile unsigned mpx_step_count;
+#endif
 extern volatile unsigned mpx_nat_seq, mpx_nat_cells, mpx_nat_lp0;
 
 typedef int32 CellType_I32;
@@ -1250,11 +1252,13 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
 
     cur_func_index = (uint32)(cur_func - module_inst->e->functions);
     bh_assert(cur_func_index < module_inst->module->import_function_count);
+#if defined(MPX_INTERP_DEBUG) && MPX_INTERP_DEBUG
     mpx_nat_seq++;
     if (mpx_nat_seq == 2) {
         mpx_nat_cells = cur_func->param_cell_num;
         mpx_nat_lp0 = frame->lp[0];
     }
+#endif
     if (!func_import->call_conv_wasm_c_api) {
         native_func_pointer = module_inst->import_func_ptrs[cur_func_index];
     }
@@ -1578,7 +1582,9 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
     exec_env = (WASMExecEnv *)g_mpx_interp_slot.exec_env;
     cur_func = (WASMFunctionInstance *)g_mpx_interp_slot.function;
     prev_frame = (WASMInterpFrame *)g_mpx_interp_slot.frame;
+#if defined(MPX_INTERP_DEBUG) && MPX_INTERP_DEBUG
     mpx_note("bytecode enter");
+#endif
 
     WASMMemoryInstance *memory = wasm_get_default_memory(module);
 #if !defined(OS_ENABLE_HW_BOUND_CHECK)              \
@@ -1690,9 +1696,13 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 #endif
 
 #if WASM_ENABLE_LABELS_AS_VALUES == 0
+#if defined(MPX_INTERP_DEBUG) && MPX_INTERP_DEBUG
     mpx_note("before loop");
+#endif
     while (frame_ip < frame_ip_end) {
+#if defined(MPX_INTERP_DEBUG) && MPX_INTERP_DEBUG
         mpx_step_count++;
+#endif
         opcode = *frame_ip++;
         switch (opcode) {
 #else
@@ -6549,7 +6559,9 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
             HANDLE_OP(WASM_OP_IMPDEP)
             {
+#if defined(MPX_INTERP_DEBUG) && MPX_INTERP_DEBUG
                 mpx_note("impdep");
+#endif
                 frame = prev_frame;
                 frame_ip = frame->ip;
                 frame_sp = frame->sp;
@@ -7441,7 +7453,9 @@ wasm_interp_call_wasm_impl(WASMModuleInstance *module_inst, WASMExecEnv *exec_en
     function = (WASMFunctionInstance *)g_mpx_interp_slot.function;
     argc = g_mpx_interp_slot.argc;
     argv = (uint32 *)g_mpx_interp_slot.argv;
+#if defined(MPX_INTERP_DEBUG) && MPX_INTERP_DEBUG
     mpx_note("impl entered");
+#endif
 
     WASMRuntimeFrame *frame = NULL, *prev_frame, *outs_area;
     RunningMode running_mode =

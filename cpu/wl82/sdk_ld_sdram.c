@@ -46,7 +46,8 @@ SECTIONS
 
         *startup.S.o(.text)
         *(.boot_code)
-        *(EXCLUDE_FILE(*wasm_interp_classic.c.o) .text*)
+        /* WAMR classic + 上屏/光栅/场景/natives 热路径进 ram0 */
+        *(EXCLUDE_FILE(*wasm_interp_classic.c.o *wasm_interp_entry.c.o *mpx_display.c.o *mpx_raster.c.o *mpx_scene.c.o *mpx_services.c.o) .text*)
         *(.LOG_TAG_CONST*)
         *(.rodata*)
         *(.fat_data_code)
@@ -252,6 +253,11 @@ SECTIONS
         *(.volatile_ram_code)
         /* 解释器热路径约 30KB，留在 Flash 会占满 32KB I-cache 后再从双线 SPI 取指。 */
         *wasm_interp_classic.c.o(.text .text.*)
+        *wasm_interp_entry.c.o(.text .text.*)
+        *mpx_display.c.o(.text .text.*)
+        *mpx_raster.c.o(.text .text.*)
+        *mpx_scene.c.o(.text .text.*)
+        *mpx_services.c.o(.text .text.*)
 #if !defined CONFIG_VIDEO_ENABLE
         *(.m4a_dec_lib.text)
 #if defined CONFIG_ASR_ALGORITHM

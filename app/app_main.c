@@ -445,7 +445,8 @@ void app_main()
 
     // os_task_create(led_task,         NULL, 10, 512,  0, "led_task");
     // os_task_create(clock_task,       NULL,  9, 512,  0, "clock_task");
-    os_task_create(uart1_echo_task,  NULL,  8, 1024, 0, "uart1_echo");
+    // uart1 已注销(PB2/PB3 让位调试口), 回显任务一并停用
+    // os_task_create(uart1_echo_task,  NULL,  8, 1024, 0, "uart1_echo");
     /* WiFi/蓝牙外设(原厂栈移植): 蓝牙开机自启, 与 USB 角色无关。
      * 放在任务创建末尾: 即使 BT 启动路径挂死也不影响前面任务。 */
     // os_task_create(spi_task,         NULL,  8, 1024, 0, "spi_test");
@@ -466,7 +467,7 @@ void app_main()
     bt_wifi_start_deferred();
 #endif
 #if (defined MINI_USB_ENABLE) && MINI_USB_ENABLE
-    os_task_create(usb_mode_task, NULL, 8, 2048, 0, "usb_mode");
+    // os_task_create(usb_mode_task, NULL, 8, 2048, 0, "usb_mode");
 #endif
 #if (defined MINI_WASM_SUPPORT) && MINI_WASM_SUPPORT
     extern void mpx_task(void *p);

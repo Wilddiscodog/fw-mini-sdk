@@ -145,6 +145,9 @@ int lcd_read_data(u8 *buf, u32 len);
 void init_TE(void (*cb)(u8 *buf, u32 buf_size));
 void lcd_te_gpio_init(void);   /* TE 脚输入(PC0) */
 void lcd_wait_te(void);        /* 等 TE 上升沿(超时放弃) */
+void lcd_mpx_full(u16 xs, u16 xe, u16 ys, u16 ye, char *img); /* MPX 异步上屏 */
+void lcd_mpx_flush_idle(void); /* 等 MPX DMA 结束并拉高 CS */
+void lcd_emi_wait_idle(void);
 void user_lcd_init(void); //只初始化屏
 void user_ui_lcd_init(void); //调用该函数完成ui和LCD初始化
 void ui_show_frame(u8 *buf, u32 len);//该接口主要用于显示UI数据  RGB数据接口

@@ -242,40 +242,37 @@ static void mpx_smoke_test(void)
         printf(MPX_TAG "smoke: runtime init FAILED\n");
         return;
     }
-    printf(MPX_TAG "smoke: runtime init ok (WAMR interpreter)\n"); os_time_dly(3); mpx_mark(2);
+    printf(MPX_TAG "smoke: runtime init ok (WAMR interpreter)\n");
+    mpx_mark(2);
 
     if (!wasm_runtime_register_natives("env", mpx_env_symbols,
                                        sizeof(mpx_env_symbols) / sizeof(mpx_env_symbols[0]))) {
-    printf(MPX_TAG "S: registered natives\n"); os_time_dly(3);
-        printf(MPX_TAG "smoke: register natives FAILED\n"); os_time_dly(3);
+        printf(MPX_TAG "smoke: register natives FAILED\n");
         goto out;
     }
 
-    mpx_mark(3); /* register_natives survived */
-    printf(MPX_TAG "S: loading module\n"); os_time_dly(3);
+    mpx_mark(3);
+    printf(MPX_TAG "S: loading module\n");
     {
-        /* 拷到对齐堆缓冲再加载: 消除 rodata 内非对齐偏移的一切隐患 */
         static uint8_t *s_wasm_copy;
         if (s_wasm_copy == NULL) {
             s_wasm_copy = (uint8_t *)malloc(HELLO_WASM_SIZE + 16);
         }
         memcpy(s_wasm_copy, k_hello_nocall, HELLO_NOCALL_SIZE);
         printf(MPX_TAG "S: wasm copy @%p\n", (void *)s_wasm_copy);
-        os_time_dly(3);
         module = wasm_runtime_load(s_wasm_copy, (uint32_t)HELLO_NOCALL_SIZE, mpx_error_buf,
                                    sizeof(mpx_error_buf));
     }
     if (!module) {
-        printf(MPX_TAG "smoke: load failed: %s\n", mpx_error_buf); os_time_dly(3);
-    os_time_dly(1);
+        printf(MPX_TAG "smoke: load failed: %s\n", mpx_error_buf);
         goto out;
     }
 
-    mpx_mark(4); /* load survived */
-    printf(MPX_TAG "S: module loaded\n"); os_time_dly(3);
+    mpx_mark(4);
+    printf(MPX_TAG "S: module loaded\n");
     inst = wasm_runtime_instantiate(module, 8 * 1024, 0, mpx_error_buf, sizeof(mpx_error_buf));
     if (!inst) {
-        printf(MPX_TAG "smoke: instantiate failed: %s\n", mpx_error_buf); os_time_dly(3);
+        printf(MPX_TAG "smoke: instantiate failed: %s\n", mpx_error_buf);
         goto out;
     }
 
@@ -285,34 +282,33 @@ static void mpx_smoke_test(void)
         goto out;
     }
 
-    mpx_mark(5); /* instantiate survived */
-    printf(MPX_TAG "S: instantiated\n"); os_time_dly(3);
+    mpx_mark(5);
+    printf(MPX_TAG "S: instantiated\n");
     start_func = wasm_runtime_lookup_function(inst, "_start");
     if (!start_func) {
         printf(MPX_TAG "smoke: lookup _start FAILED\n");
         goto out;
     }
 
-    printf(MPX_TAG "smoke: calling nocall _start()...\n"); os_time_dly(3); mpx_mark(6);
-    mpx_note("calling wasm");
+    printf(MPX_TAG "smoke: calling nocall _start()...\n");
+    mpx_mark(6);
     if (!wasm_runtime_call_wasm(exec_env, start_func, 0, NULL)) {
         exception = wasm_runtime_get_exception(inst);
         printf(MPX_TAG "smoke: nocall call failed: %s\n", exception ? exception : "?");
-        os_time_dly(3);
         goto out;
     }
-    printf(MPX_TAG "smoke: NOCALL PASS\n"); os_time_dly(3);
-    printf(MPX_TAG "smoke: calling _start() (expect guest log: 120)...\n"); mpx_mark(6);
+    printf(MPX_TAG "smoke: NOCALL PASS\n");
+    printf(MPX_TAG "smoke: calling _start() (expect guest log: 120)...\n");
     if (!wasm_runtime_call_wasm(exec_env, start_func, 0, NULL)) {
         exception = wasm_runtime_get_exception(inst);
-        printf(MPX_TAG "smoke: call failed: %s\n", exception ? exception : "?"); os_time_dly(3);
+        printf(MPX_TAG "smoke: call failed: %s\n", exception ? exception : "?");
         goto out;
     }
     exception = wasm_runtime_get_exception(inst);
     if (exception) {
         printf(MPX_TAG "smoke: exception: %s\n", exception);
     } else {
-        printf(MPX_TAG "smoke SMOKE PASS\n"); os_time_dly(3);
+        printf(MPX_TAG "smoke SMOKE PASS\n");
     }
 
 out:
@@ -475,7 +471,7 @@ void mpx_task(void *p)
         printf(MPX_TAG "OTA in progress, test deferred (%u)\n", ++wait_rounds);
         os_time_dly(200); /* 2s 后复查 */
     }
-    printf(MPX_TAG "task start [nolto-O0-nods-256K], prev step=%u\n", MPX_SCRATCH[0]);
+    printf(MPX_TAG "task start [classic-O1-ram0], prev step=%u\n", MPX_SCRATCH[0]);
     mpx_note("smoke enter");
     mpx_mark(1);
     mpx_smoke_test();

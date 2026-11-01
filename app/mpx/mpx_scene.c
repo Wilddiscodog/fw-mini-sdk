@@ -18,7 +18,9 @@ extern volatile unsigned char mpx_display_hold;
 #endif
 
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
-extern void lcd_lvgl_full(u16 xs, u16 xe, u16 ys, u16 ye, char *img);
+#include "lcd_drive.h"
+#include "asm/cpu.h"
+#include "asm/cache.h"
 #endif
 
 #define MPX_TAG "[mpx] "
@@ -71,7 +73,8 @@ static uint16_t mpx_text_used;
 static uint32_t mpx_bg = 0x101418;
 static uint32_t mpx_revision;
 static int mpx_scene_valid;
-static uint8_t *mpx_fb;
+static uint8_t *mpx_fb[2];
+static uint8_t mpx_fb_draw; /* 下一帧写入的缓冲下标 */
 static uint16_t mpx_fb_w;
 static uint16_t mpx_fb_h;
 static int mpx_clip_x0, mpx_clip_y0, mpx_clip_x1, mpx_clip_y1;
@@ -93,10 +96,15 @@ void mpx_scene_reset(void)
     mpx_revision = 0;
     mpx_bg = 0x101418;
     mpx_scene_logged = 0;
-    if (mpx_fb) {
-        free(mpx_fb);
-        mpx_fb = NULL;
+    if (mpx_fb[0]) {
+        free(mpx_fb[0]);
+        mpx_fb[0] = NULL;
     }
+    if (mpx_fb[1]) {
+        free(mpx_fb[1]);
+        mpx_fb[1] = NULL;
+    }
+    mpx_fb_draw = 0;
 }
 
 static int mpx_read(const uint8_t *p, const uint8_t *end, void *dst, uint32_t n)
@@ -119,11 +127,12 @@ static void mpx_put(int x, int y, uint32_t rgb, uint8_t opacity)
     uint16_t old;
     uint8_t *p;
     int or, og, ob, nr, ng, nb;
-    if (mpx_fb == NULL || x < mpx_clip_x0 || y < mpx_clip_y0 || x >= mpx_clip_x1 || y >= mpx_clip_y1) {
+    if (mpx_fb[mpx_fb_draw] == NULL || x < mpx_clip_x0 || y < mpx_clip_y0 || x >= mpx_clip_x1 ||
+        y >= mpx_clip_y1) {
         return;
     }
     c = mpx_rgb565(rgb);
-    p = mpx_fb + ((y * mpx_fb_w + x) << 1);
+    p = mpx_fb[mpx_fb_draw] + ((y * mpx_fb_w + x) << 1);
     if (opacity < 250) {
         old = (uint16_t)((p[0] << 8) | p[1]);
         or = (old >> 11) & 31;
@@ -144,7 +153,8 @@ static void mpx_put(int x, int y, uint32_t rgb, uint8_t opacity)
 static void mpx_fill(int x, int y, int w, int h, uint32_t rgb, uint8_t opacity)
 {
     int x1, y1, ix, iy;
-    if (w <= 0 || h <= 0 || opacity == 0) {
+    uint8_t *fb = mpx_fb[mpx_fb_draw];
+    if (w <= 0 || h <= 0 || opacity == 0 || fb == NULL) {
         return;
     }
     x1 = x + w;
@@ -160,6 +170,43 @@ static void mpx_fill(int x, int y, int w, int h, uint32_t rgb, uint8_t opacity)
     }
     if (y1 > mpx_clip_y1) {
         y1 = mpx_clip_y1;
+    }
+    if (x >= x1 || y >= y1) {
+        return;
+    }
+    if (opacity >= 250) {
+        /* 不透明: 对齐后 u32 双像素写 */
+        uint16_t c = mpx_rgb565(rgb);
+        uint8_t hi = (uint8_t)(c >> 8), lo = (uint8_t)c;
+        uint32_t pair = ((uint32_t)hi << 24) | ((uint32_t)lo << 16) | ((uint32_t)hi << 8) | lo;
+        for (iy = y; iy < y1; iy++) {
+            uint8_t *p = fb + ((iy * mpx_fb_w + x) << 1);
+            int n = x1 - x;
+            if (n && ((uintptr_t)p & 3u)) {
+                p[0] = hi;
+                p[1] = lo;
+                p += 2;
+                n--;
+            }
+            while (n >= 8) {
+                ((uint32_t *)p)[0] = pair;
+                ((uint32_t *)p)[1] = pair;
+                ((uint32_t *)p)[2] = pair;
+                ((uint32_t *)p)[3] = pair;
+                p += 16;
+                n -= 8;
+            }
+            while (n >= 2) {
+                *(uint32_t *)p = pair;
+                p += 4;
+                n -= 2;
+            }
+            if (n) {
+                p[0] = hi;
+                p[1] = lo;
+            }
+        }
+        return;
     }
     for (iy = y; iy < y1; iy++) {
         for (ix = x; ix < x1; ix++) {
@@ -341,6 +388,7 @@ static void mpx_blit_tex(int dx, int dy, int dw, int dh, uint32_t handle, int sx
 {
     int yy;
     int xx;
+    uint32_t du, dv, v_acc;
 
     if (dw <= 0 || dh <= 0) {
         return;
@@ -349,10 +397,14 @@ static void mpx_blit_tex(int dx, int dy, int dw, int dh, uint32_t handle, int sx
         mpx_fill(dx, dy, dw, dh, fallback, opacity);
         return;
     }
-    for (yy = 0; yy < dh; yy++) {
-        int syy = sy + (int)(((int64_t)yy * sh) / dh);
-        for (xx = 0; xx < dw; xx++) {
-            int sxx = sx + (int)(((int64_t)xx * sw) / dw);
+    du = ((uint32_t)sw << 16) / (uint32_t)dw;
+    dv = ((uint32_t)sh << 16) / (uint32_t)dh;
+    v_acc = 0;
+    for (yy = 0; yy < dh; yy++, v_acc += dv) {
+        int syy = sy + (int)(v_acc >> 16);
+        uint32_t u_acc = 0;
+        for (xx = 0; xx < dw; xx++, u_acc += du) {
+            int sxx = sx + (int)(u_acc >> 16);
             uint32_t rgb;
             uint8_t alpha;
             uint32_t opa;
@@ -430,14 +482,24 @@ static void mpx_draw_node(const mpx_node_t *node)
 static void mpx_present(void)
 {
     uint32_t i;
-    if (mpx_fb == NULL) {
+    uint8_t *draw;
+    size_t nbytes;
+    if (mpx_fb[0] == NULL) {
         mpx_fb_w = mpx_display_width();
         mpx_fb_h = mpx_display_height();
-        mpx_fb = (uint8_t *)malloc((size_t)mpx_fb_w * mpx_fb_h * 2);
-        if (mpx_fb == NULL) {
+        nbytes = (size_t)mpx_fb_w * mpx_fb_h * 2;
+        mpx_fb[0] = (uint8_t *)malloc(nbytes);
+        mpx_fb[1] = (uint8_t *)malloc(nbytes);
+        if (mpx_fb[0] == NULL) {
             return;
         }
+        /* 第二块失败则退回单缓冲(仍能画, 但无法与 EMI 重叠) */
+        if (mpx_fb[1] == NULL) {
+            printf(MPX_TAG "scene: single FB (no ping-pong)\n");
+        }
+        mpx_fb_draw = 0;
     }
+    draw = mpx_fb[mpx_fb_draw];
     mpx_set_clip_screen();
     mpx_fill(0, 0, mpx_fb_w, mpx_fb_h, mpx_bg, 255);
     for (i = 0; i < MPX_NODES; i++) {
@@ -445,10 +507,20 @@ static void mpx_present(void)
     }
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
     mpx_display_hold = 1;
-    lcd_lvgl_full(0, (u16)(mpx_fb_w - 1), 0, (u16)(mpx_fb_h - 1), (char *)mpx_fb);
+    nbytes = (size_t)mpx_fb_w * mpx_fb_h * 2;
+    mpx_display_flush_fb(draw, (uint32_t)nbytes);
+    /* 踢非阻塞 DMA 后立刻切到另一缓冲画下一帧, 与 EMI 重叠 */
+    lcd_mpx_full(0, (u16)(mpx_fb_w - 1), 0, (u16)(mpx_fb_h - 1),
+                 (char *)NO_CACHE_ADDR(draw));
+    if (mpx_fb[1] != NULL) {
+        mpx_fb_draw ^= 1;
+    } else {
+        lcd_mpx_flush_idle(); /* 单缓冲: 必须等 DMA 完再改同一块 */
+    }
 #endif
     if (!mpx_scene_logged) {
-        printf(MPX_TAG "scene present %ux%u\n", (unsigned)mpx_fb_w, (unsigned)mpx_fb_h);
+        printf(MPX_TAG "scene present %ux%u pingpong=%u\n", (unsigned)mpx_fb_w,
+               (unsigned)mpx_fb_h, (unsigned)(mpx_fb[1] != NULL));
         mpx_scene_logged = 1;
     }
 }

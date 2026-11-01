@@ -22,6 +22,7 @@
 #include "system/includes.h"
 #include "syscfg/syscfg_id.h"            /* NETWORK_SSID_INFO_CNT / CFG_BT_MAC_ADDR */
 #include "asm/sfc_norflash_api.h"        /* get_norflash_uuid */
+#include "asm/crc16.h"                   /* CRC16/CRC32: 对齐原厂 assign_macaddr */
 
 extern const u8 *bt_get_mac_addr(void);
 static char save_ssid_flag, request_connect_flag;
@@ -249,54 +250,82 @@ void bt_module_init(void *p)
 /* WiFi 最小闭环: 上电 → 事件回调注册 → wifi_on → 扫描 → 打印 AP 列表
  * (回调必须先于 wifi_on 注册: 库经 RPC 线程投递首事件, 空回调 = 跳 0 崩溃) */
 
-/* WiFi/BT MAC: SYSCFG(CFG_BT_MAC_ADDR) 损坏时库会每次随机 → AP 名 WL82-xxxxxx 乱跳。
- * 上电先确保有一份可持久化的地址(Flash UUID 派生), 再交给协议栈。 */
-static void mini_ensure_stable_mac(void)
+/* 对齐原厂 apps/common/net/assign_macaddr.c(demo_wifi 只开 WiFi):
+ * syscfg 持久化 + wifi_set_mac + set_wireless_netif_macaddr。
+ * 缺 wifi_set_mac 时栈会落到随机组播 MAC(日志 81:xx) → AP Reason=4 踢线。 */
+extern int bytecmp(unsigned char *p, unsigned char ch, unsigned int num);
+extern void set_wireless_netif_macaddr(const char *mac_addr);
+
+static char s_wifi_mac[6];
+static u8 s_wifi_mac_ok;
+
+static int mini_mac_valid(const char *mac)
 {
-    u8 mac[6];
-    int n = syscfg_read(CFG_BT_MAC_ADDR, mac, 6);
-    if (n == 6) {
-        u8 z = 1, f = 1;
-        for (int i = 0; i < 6; i++) {
-            if (mac[i]) {
-                z = 0;
-            }
-            if (mac[i] != 0xff) {
-                f = 0;
-            }
-        }
-        if (!z && !f) {
-            return;                  /* 已有合法 MAC */
-        }
+    if (!mac) {
+        return 0;
     }
-    u8 *uid = get_norflash_uuid();
-    if (uid) {
-        mac[0] = 0x6c;
-        mac[1] = 0xcc;
-        mac[2] = 0xf0;
-        mac[3] = uid[0] ^ uid[5];
-        mac[4] = uid[1] ^ uid[4];
-        mac[5] = uid[2] ^ uid[3];
-    } else {
-        u32 t = (u32)jiffies;
-        mac[0] = 0x6c;
-        mac[1] = 0xcc;
-        mac[2] = 0xf0;
-        mac[3] = (u8)(t >> 16);
-        mac[4] = (u8)(t >> 8);
-        mac[5] = (u8)t;
+    if ((mac[0] & 0x03) || !bytecmp((u8 *)mac, 0, 6) || !bytecmp((u8 *)mac, 0xff, 6)) {
+        return 0;
     }
-    mac[0] &= 0xfe;                  /* 单播 */
-    syscfg_write(CFG_BT_MAC_ADDR, mac, 6);
+    return 1;
 }
 
-/* WiFi MAC 来源: 强定义覆盖库 weak 默认。先 ensure 再读。 */
+static int set_flash_wifi_mac(char *mac)
+{
+    int ret = syscfg_write(CFG_BT_MAC_ADDR, mac, 6);
+    wifi_set_mac(mac);
+    set_wireless_netif_macaddr(mac);
+    memcpy(s_wifi_mac, mac, 6);
+    s_wifi_mac_ok = 1;
+    printf("[wifi] set mac %02x:%02x:%02x:%02x:%02x:%02x (syscfg=%d)\n",
+           (u8)mac[0], (u8)mac[1], (u8)mac[2], (u8)mac[3], (u8)mac[4], (u8)mac[5], ret);
+    return ret;
+}
+
+static int get_flash_mac_addr(char mac[6])
+{
+    if (s_wifi_mac_ok) {
+        memcpy(mac, s_wifi_mac, 6);
+        return 0;
+    }
+    if (syscfg_read(CFG_BT_MAC_ADDR, mac, 6) <= 0) {
+        return -1;
+    }
+    if (!mini_mac_valid(mac)) {
+        return -1;
+    }
+    memcpy(s_wifi_mac, mac, 6);
+    s_wifi_mac_ok = 1;
+    return 0;
+}
+
+/* 原厂 assign_macaddr.c 非 CONFIG_ASSIGN_MACADDR_ENABLE 分支 */
 int init_net_device_mac_addr(char *macaddr, char ap_mode)
 {
     (void)ap_mode;
-    mini_ensure_stable_mac();
-    memcpy(macaddr, bt_get_mac_addr(), 6);
+    if (get_flash_mac_addr(macaddr) == -1) {
+        u8 flash_uid[16];
+        memcpy(flash_uid, get_norflash_uuid(), 16);
+        do {
+            u32 crc32 = rand32() ^ CRC32(flash_uid, sizeof(flash_uid));
+            u16 crc16 = rand32() ^ CRC16(flash_uid, sizeof(flash_uid));
+            memcpy(macaddr, &crc32, sizeof(crc32));
+            memcpy(&macaddr[4], &crc16, sizeof(crc16));
+        } while (!bytecmp((u8 *)macaddr, 0, 6));
+        macaddr[0] &= ~((1 << 0) | (1 << 1));
+        set_flash_wifi_mac(macaddr);
+    } else {
+        /* 已有合法 MAC: 仍要推进 WiFi/netif, 否则仅 syscfg 有值栈仍用随机地址 */
+        wifi_set_mac(macaddr);
+        set_wireless_netif_macaddr(macaddr);
+    }
     return 0;
+}
+
+static void mini_ensure_stable_mac(void)
+{
+    char mac[6];
+    init_net_device_mac_addr(mac, 0);
 }
 
 static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
@@ -309,6 +338,10 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     switch (event) {
 
     case WIFI_EVENT_MODULE_INIT:
+    {
+        /* 原厂 demo_wifi: MODULE_INIT 里先 init_net_device_mac_addr 再设默认模式 */
+        char mac_addr[6];
+        init_net_device_mac_addr(mac_addr, 0);
 
 #if defined(STA_MODE_TEST)
         wifi_set_sta_connect_timeout(30);   //配置STA模式连接超时后事件回调通知时间
@@ -319,6 +352,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
          * (原 AP_MODE_TEST/STA_MODE_TEST 硬编码模式由其取代) */
         wifi_prov_default_mode_setup();
         break;
+    }
 
     case WIFI_EVENT_MODULE_START:
         wifi_vputs("|network_user_callback->WIFI_EVENT_MODULE_START\n");

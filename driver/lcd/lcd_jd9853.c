@@ -63,9 +63,12 @@ static void WriteDAT_8(u8 dat)
 
 static void WriteDAT_DMA(u8 *dat, u32 len)
 {
+    extern void lcd_emi_wait_idle(void);
     lcd_cs_pinstate(0);
     lcd_rs_pinstate(1);
     lcd_send_map(dat, len);
+    /* EMI 已开 NON_BLOCK: 必须等本包 DMA 完再拉高软件 CS, 否则花屏 */
+    lcd_emi_wait_idle();
     lcd_cs_pinstate(1);
 }
 

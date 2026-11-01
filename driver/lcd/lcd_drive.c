@@ -127,7 +127,9 @@ static int lcd_interface_init(void)
     } else if (lcd_pdata->lcd_if == LCD_EMI) {
         lcd_hdl = dev_open("emi", NULL);
         if (lcd_hdl) {
-            dev_ioctl(lcd_hdl, EMI_USE_SEND_SEM, 0);
+            /* 对齐原厂: 非阻塞 DMA + 完成信号量, 便于 MPX 双缓冲与传输重叠 */
+            dev_ioctl(lcd_hdl, EMI_USE_SEND_SEM, 1);
+            dev_ioctl(lcd_hdl, IOCTL_EMI_WRITE_NON_BLOCK, 1);
         }
     }
 
@@ -410,6 +412,54 @@ void lcd_lvgl_full(u16 xs, u16 xe, u16 ys, u16 ye, char *img)
         lcd_wait_te();
     }
     lcd_dev->LCD_Lvgl_Full(xs, xe, ys, ye, img);
+}
+
+/* MPX 异步上屏状态: CS 为软件脚, DMA 未完不能拉高。 */
+static u8 s_mpx_emi_pending;
+
+void lcd_emi_wait_idle(void)
+{
+    if (lcd_hdl && lcd_pdata && lcd_pdata->lcd_if == LCD_EMI) {
+        dev_ioctl(lcd_hdl, IOCTL_EMI_WRITE_NON_BLOCK_FLUSH, 0);
+    }
+}
+
+/* MPX/游戏全帧: 不等 TE; 踢出非阻塞 DMA 后立即返回, 与 guest 画下一帧重叠。
+ * 软件 CS 必须在下次 present/结束时等 DMA 完再拉高。 */
+void lcd_mpx_full(u16 xs, u16 xe, u16 ys, u16 ye, char *img)
+{
+    u32 len;
+    if (!lcd_dev || !lcd_dev->SetDrawArea || !img) {
+        return;
+    }
+    if (s_mpx_emi_pending) {
+        lcd_emi_wait_idle();
+        lcd_cs_pinstate(1);
+        s_mpx_emi_pending = 0;
+    }
+    len = (u32)(xe + 1 - xs) * (u32)(ye + 1 - ys) * 2u;
+    lcd_dev->SetDrawArea(xs, xe, ys, ye);
+    /* 0x2C = memory write; 与 JD9853_lvgl_Fill 一致 */
+    {
+        extern int lcd_send_byte(u8 data);
+        lcd_cs_pinstate(0);
+        lcd_rs_pinstate(0);
+        lcd_send_byte(0x2C);
+        lcd_cs_pinstate(1);
+    }
+    lcd_cs_pinstate(0);
+    lcd_rs_pinstate(1);
+    lcd_send_map((u8 *)img, len);
+    s_mpx_emi_pending = 1; /* CS 保持低, 等下次 wait */
+}
+
+void lcd_mpx_flush_idle(void)
+{
+    if (s_mpx_emi_pending) {
+        lcd_emi_wait_idle();
+        lcd_cs_pinstate(1);
+        s_mpx_emi_pending = 0;
+    }
 }
 
 REGISTER_LCD_INTERFACE(lcd) = {

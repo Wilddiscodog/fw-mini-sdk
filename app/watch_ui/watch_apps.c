@@ -266,10 +266,14 @@ lv_obj_t *app_bt_music_create(lv_obj_t *parent)
     lv_obj_set_width(lab, LCD_W - 40);
 
     char buf[160];
+#if (defined MINI_BT_SPEAKER_EN) && MINI_BT_SPEAKER_EN
     const char *name = bt_get_local_name();
     u8 n = get_total_connect_dev();
     snprintf(buf, sizeof(buf), "本机:%s\n连接数:%d\nA2DP蓝牙音箱",
              name ? name : "-", n);
+#else
+    snprintf(buf, sizeof(buf), "蓝牙未启用\n(MINI_BT_SUPPORT=0)");
+#endif
     lv_label_set_text(lab, buf);
     lv_obj_align(lab, LV_ALIGN_TOP_LEFT, 0, 0);
 
@@ -381,8 +385,13 @@ static void settings_refresh(lv_timer_t *t)
     }
 #endif
 
+#if (defined MINI_BT_SUPPORT) && MINI_BT_SUPPORT
     const char *btname = bt_get_local_name();
     u8 bt_n = get_total_connect_dev();
+#else
+    const char *btname = "关";
+    u8 bt_n = 0;
+#endif
     snprintf(buf, sizeof(buf),
              "WiFi: %s\nSSID: %s\nIP: %s\n\n蓝牙: %s\n连接: %d\n\n版本: %s",
              wifi_st, ssid, ip,

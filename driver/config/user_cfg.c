@@ -44,6 +44,7 @@ const char norflash_write_cpu_unhold = 1;//在跑SDRAM的情况下 写flash 不�
 
 const struct btif_item btif_table[] = {
 //   item_id                len      //
+    /* 对齐原厂 user_cfg: MAC 进 BTIF; rewrite_en 放开以便 crc 损坏后可重写 */
     {CFG_BT_MAC_ADDR,           6 },
     {CFG_BLE_MAC_ADDR,          6 },
     {CFG_BT_FRE_OFFSET,         6 },   //测试盒矫正频偏值
@@ -64,9 +65,11 @@ int btif_item_rewrite_en(u16 id, u16 len)
 {
     int ret;
     switch (id) {
-#ifdef PRODUCT_TEST_ENABLE
-    case CFG_BT_MAC_ADDR:
+    case CFG_BT_MAC_ADDR:   /* WiFi-only 也要能重写损坏项, 否则一直 crc_err→随机 MAC */
     case CFG_BLE_MAC_ADDR:
+        ret = 1;
+        break;
+#ifdef PRODUCT_TEST_ENABLE
     case CFG_PRODUCT_UUID_INDEX:
     case CFG_PRODUCT_SN_INDEX:
     case CFG_PRODUCT_LICENSE_INDEX:
@@ -91,30 +94,37 @@ const int VM_DEFRAG_SIZE = 60; //VM 碎片整理。百分比
 
 extern int bytecmp(unsigned char *p, unsigned char ch, unsigned int num);
 
-#ifdef CONFIG_BT_ENABLE
+#if defined(CONFIG_BT_ENABLE) || defined(CONFIG_WIFI_ENABLE)
 
 #define LOCAL_NAME_LEN	32	/*BD_NAME_LEN_MAX*/
 
+#ifdef CONFIG_BT_ENABLE
 static char edr_name[LOCAL_NAME_LEN];
 static char ble_name[LOCAL_NAME_LEN];
 static char pincode[5] = "0000";
+#endif
 
+/* 原厂: 仅 CONFIG_BT_ENABLE 编此符号。本工程关 BT 仍可能被 WiFi/日志路径引用,
+ * 故 CONFIG_WIFI_ENABLE 也编; 查找顺序对齐原厂(syscfg → wifi_get_mac → 派生)。 */
 const u8 *bt_get_mac_addr(void)
 {
     static u8 mac_addr[6];
     const u8 bc_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
+    if (syscfg_read(CFG_BT_MAC_ADDR, mac_addr, 6) == 6 &&
+        memcmp(mac_addr, bc_mac, 6) &&
+        (mac_addr[0] & 0x03) == 0) {
+        return mac_addr;
+    }
+
 #if defined CONFIG_WIFI_ENABLE && !defined CONFIG_RF_TEST_ENABLE
     wifi_get_mac(mac_addr);
-    if (bytecmp(mac_addr, 0, 6)) {
+    if (bytecmp(mac_addr, 0, 6) && (mac_addr[0] & 0x03) == 0) {
         return mac_addr;
-    } else
+    }
 #endif
-    {
-        if (syscfg_read(CFG_BT_MAC_ADDR, mac_addr, 6) == 6 && memcmp(mac_addr, bc_mac, 6)) {
-            return mac_addr;
-        }
 
+    {
         u8 flash_uid[16];
         memcpy(flash_uid, get_norflash_uuid(), 16);
         do {
@@ -123,15 +133,13 @@ const u8 *bt_get_mac_addr(void)
             memcpy(mac_addr, &crc32, sizeof(crc32));
             memcpy(&mac_addr[4], &crc16, sizeof(crc16));
         } while (!bytecmp(mac_addr, 0, 6));
-        //此处用户可自行修改为本地生成mac地址的算法
         mac_addr[0] &= ~((1 << 0) | (1 << 1));
-        /* 写回 VM: 未写入时库内 get_bt_mac_addr 每次读 CFG_BT_MAC_ADDR 都报
-         * [SYSCFG]key_mac crc_err(WiFi 起 AP/切模式会反复触发)。VM 已验证可写。 */
         syscfg_write(CFG_BT_MAC_ADDR, mac_addr, 6);
         return mac_addr;
     }
 }
 
+#ifdef CONFIG_BT_ENABLE
 const char *bt_get_local_name(void)
 {
 #ifndef CONFIG_RF_TEST_ENABLE
@@ -173,8 +181,9 @@ static struct lp_ws_t default_lp_winsize = {
     .osc_change_mode = 2,
 };
 #endif
+#endif /* CONFIG_BT_ENABLE */
 
-#endif
+#endif /* CONFIG_BT_ENABLE || CONFIG_WIFI_ENABLE */
 
 #ifdef CONFIG_AEC_ENC_ENABLE
 typedef struct __AEC_CONFIG {

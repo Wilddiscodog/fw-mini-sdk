@@ -2,7 +2,6 @@
 
 
 
-
 EXTERN(
 _start
 
@@ -141,7 +140,8 @@ SECTIONS
 
         *startup.S.o(.text)
         *(.boot_code)
-        *(EXCLUDE_FILE(*wasm_interp_classic.c.o) .text*)
+
+        *(EXCLUDE_FILE(*wasm_interp_classic.c.o *wasm_interp_entry.c.o *mpx_display.c.o *mpx_raster.c.o *mpx_scene.c.o *mpx_services.c.o) .text*)
         *(.LOG_TAG_CONST*)
         *(.rodata*)
         *(.fat_data_code)
@@ -209,44 +209,6 @@ SECTIONS
         *(.ape_dec_const)
         *(.ape_dec_sparse_code)
         *(.ape_dec_sparse_const)
-
-
-
-        . = ALIGN(4);
-        *(.sbc_eng_code)
-
-        . = ALIGN(4);
-        *(.h4_const)
-
-        . = ALIGN(4);
-        crypto_begin = .;
-        *(.crypto_ecdh_code)
-        *(.crypto_ecdh_const)
-
-        *(.crypto_bigint_code)
-        *(.crypto_bigint_const)
-
-        *(.crypto_code)
-        *(.crypto_const)
-
-        *(.ECDH_sample_code)
-        *(.ECDH_sample_const)
-
-        *(.uECC_code)
-        *(.uECC_const)
-
-        *(.hmac_code)
-        *(.hmac_const)
-
-        *(.hash_sample_code)
-        *(.hash_sample_const)
-
-        *(.aes_cmac_sample_code)
-        *(.aes_cmac_sample_const)
-        crypto_end = .;
-        crypto_size = . - crypto_begin;
-
-
         . = ALIGN(4);
         *(.update_const)
         *(.update_code)
@@ -882,6 +844,11 @@ SECTIONS
         *(.volatile_ram_code)
 
         *wasm_interp_classic.c.o(.text .text.*)
+        *wasm_interp_entry.c.o(.text .text.*)
+        *mpx_display.c.o(.text .text.*)
+        *mpx_raster.c.o(.text .text.*)
+        *mpx_scene.c.o(.text .text.*)
+        *mpx_services.c.o(.text .text.*)
 
         *(.m4a_dec_lib.text)
 
@@ -983,18 +950,18 @@ SECTIONS
         acl_tx_pool = .;
         *(.bredr_tx_bulk)
 
-        acl_tx_pool_end = acl_tx_pool + (12 * 1024);
 
 
+        acl_tx_pool_end = acl_tx_pool;
 
         . = acl_tx_pool_end;
 
         acl_rx_pool = .;
         *(.bredr_rx_bulk)
 
-        acl_rx_pool_end = acl_rx_pool + (17 * 1024 + 400);
 
 
+        acl_rx_pool_end = acl_rx_pool;
 
         . = acl_rx_pool_end;
 

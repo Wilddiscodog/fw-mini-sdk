@@ -4,6 +4,6 @@
 .global mpx_store_image_end
 .align 4
 mpx_store_image:
-.incbin "H:/jl/fw-mini-sdk/app/mpx/mpx_store_image.bin"
+.incbin "../../../app/mpx/mpx_store_image.bin"
 .align 4
 mpx_store_image_end:

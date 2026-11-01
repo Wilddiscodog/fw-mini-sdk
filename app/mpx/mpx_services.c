@@ -113,22 +113,42 @@ int32_t mpx_event_wait(micropixel_event_t *event_out, uint64_t timeout_us)
         }
         {
             int infinite = timeout_us == UINT64_MAX;
-            int ticks = 1;
-            if (!infinite) {
-                uint64_t ticks64 = timeout_us / 10000ull;
-                if (ticks64 < 1) {
-                    ticks64 = 1;
-                }
-                if (ticks64 > 0x7fffffffull) {
-                    ticks64 = 0x7fffffffull;
-                }
-                ticks = (int)ticks64;
-            }
-            if (os_sem_pend(&mpx_event_sem, ticks) != 0 && !infinite) {
+            /* OS tick≈10ms: 短超时忙等到 ms 时钟, 避免帧同步被抬到 10/20ms */
+            if (!infinite && timeout_us < 10000ull) {
+                uint64_t deadline = mpx_app_time_now() + timeout_us;
                 mpx_timer_flush();
+                while (mpx_app_time_now() < deadline) {
+                    os_mutex_pend(&mpx_event_lock, 0);
+                    if (mpx_event_count != 0) {
+                        *event_out = mpx_event_queue[mpx_event_head];
+                        mpx_event_head = (mpx_event_head + 1) % MPX_EVENT_QUEUE_DEPTH;
+                        mpx_event_count--;
+                        os_mutex_post(&mpx_event_lock);
+                        return MICROPIXEL_STATUS_OK;
+                    }
+                    os_mutex_post(&mpx_event_lock);
+                    mpx_timer_flush();
+                }
                 return MICROPIXEL_STATUS_TIMEOUT;
             }
-            mpx_timer_flush();
+            {
+                int ticks = 1;
+                if (!infinite) {
+                    uint64_t ticks64 = (timeout_us + 9999ull) / 10000ull;
+                    if (ticks64 < 1) {
+                        ticks64 = 1;
+                    }
+                    if (ticks64 > 0x7fffffffull) {
+                        ticks64 = 0x7fffffffull;
+                    }
+                    ticks = (int)ticks64;
+                }
+                if (os_sem_pend(&mpx_event_sem, ticks) != 0 && !infinite) {
+                    mpx_timer_flush();
+                    return MICROPIXEL_STATUS_TIMEOUT;
+                }
+                mpx_timer_flush();
+            }
         }
     }
 }
@@ -137,8 +157,8 @@ int32_t mpx_event_wait(micropixel_event_t *event_out, uint64_t timeout_us)
 
 uint64_t mpx_app_time_now(void)
 {
-    /* 10ms tick;M4 换硬件 µs 定时器(动画需要更高精度) */
-    return (uint64_t)os_time_get() * 10000;
+    /* 1ms 分辨率(原先 os_time_get*10ms 会让动画按 10ms 台阶抖) */
+    return (uint64_t)sys_timer_get_ms() * 1000ull;
 }
 
 /* ---------------- 服务注册表 ---------------- */

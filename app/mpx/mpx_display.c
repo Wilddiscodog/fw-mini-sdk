@@ -3,6 +3,9 @@
  * 缓冲保存在 SDRAM 堆,字节序即面板序(JD9853 高字节在前),present 时
  * 走 lcd_lvgl_full(内含 TE 同步与 EMI DMA),整帧一次性写出。
  * 与 watch_ui 的 LVGL 任务并存期间会互相覆盖屏幕,属预期(bring-up 阶段)。
+ *
+ * 上屏前 flush D-cache: CPU 写走 cache, EMI DMA 读 SDRAM, 否则可能花屏/旧帧。
+ * 双缓冲时尽量让 guest 算下一帧与当前 EMI 传输重叠(见 present 注释)。
  */
 #include "mpx_display.h"
 
@@ -12,6 +15,9 @@
 #include "app_config.h"
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 #include "lcd_config.h"
+#include "lcd_drive.h"
+#include "asm/cache.h"
+#include "asm/cpu.h"
 #define MPX_LCD_W LCD_W
 #define MPX_LCD_H LCD_H
 #else
@@ -42,7 +48,18 @@ static mpx_surface_t mpx_surfaces[MPX_MAX_SURFACES];
 /* 1: wasm 应用占着屏幕, lcd_test 不再跑 LVGL, 避免把刚画的帧盖掉。 */
 volatile unsigned char mpx_display_hold;
 
-extern void lcd_lvgl_full(u16 xs, u16 xe, u16 ys, u16 ye, char *img);
+
+void mpx_display_flush_fb(void *pixels, uint32_t nbytes)
+{
+#if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
+    if (pixels != NULL && nbytes != 0) {
+        flush_dcache(pixels, (int)nbytes);
+    }
+#else
+    (void)pixels;
+    (void)nbytes;
+#endif
+}
 
 uint16_t mpx_display_width(void)
 {
@@ -138,9 +155,18 @@ int32_t mpx_display_surface_present(uint32_t surface_handle, uint32_t buffer_ind
     }
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
     if (s->width == MPX_LCD_W && s->height == MPX_LCD_H) {
+        uint8_t *px = s->buffers[buffer_index].data;
+        uint32_t nbytes = s->width * s->height * 2;
         mpx_display_hold = 1;
-        lcd_lvgl_full(0, (u16)(MPX_LCD_W - 1), 0, (u16)(MPX_LCD_H - 1),
-                      (char *)s->buffers[buffer_index].data);
+        mpx_display_flush_fb(px, nbytes);
+        /* 非阻塞 EMI: 踢 DMA 后返回, guest 可立刻画另一 buffer。
+         * DMA 读 uncached 别名, 与刚 flush 的 cache 视图一致。 */
+        lcd_mpx_full(0, (u16)(MPX_LCD_W - 1), 0, (u16)(MPX_LCD_H - 1),
+                     (char *)NO_CACHE_ADDR(px));
+        /* 单缓冲无法重叠: 等 DMA 完再返回, 避免 guest 改正在传的帧 */
+        if (s->buffer_count < 2) {
+            lcd_mpx_flush_idle();
+        }
     } else {
         /* 非 1:1 尺寸: v1 简化为拒绝,SDK 侧通常按 panel 尺寸建 surface */
         return MICROPIXEL_STATUS_INVALID_ARGUMENT;

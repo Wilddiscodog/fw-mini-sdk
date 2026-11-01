@@ -7891,10 +7891,17 @@ wasm_interp_traverse_gc_rootset(WASMExecEnv *exec_env, void *heap)
 #endif
 
 void
-wasm_interp_call_wasm(WASMModuleInstance *module_inst, WASMExecEnv *exec_env,
-                      WASMFunctionInstance *function, uint32 argc,
-                      uint32 argv[])
+wasm_interp_call_wasm_impl(WASMModuleInstance *module_inst, WASMExecEnv *exec_env,
+                           WASMFunctionInstance *function, uint32 argc,
+                           uint32 argv[])
 {
+    /* pi32v2: 大函数入口参数寄存器不可靠, 从 entry gate 槽重载(对齐 classic) */
+    module_inst = (WASMModuleInstance *)g_mpx_interp_slot.module_inst;
+    exec_env = (WASMExecEnv *)g_mpx_interp_slot.exec_env;
+    function = (WASMFunctionInstance *)g_mpx_interp_slot.function;
+    argc = g_mpx_interp_slot.argc;
+    argv = (uint32 *)g_mpx_interp_slot.argv;
+
     WASMRuntimeFrame *prev_frame = wasm_exec_env_get_cur_frame(exec_env);
     WASMInterpFrame *frame, *outs_area;
 

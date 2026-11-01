@@ -33,10 +33,10 @@ else
 #   make MINI_PWR_BISECT=N
 #   0 = 仅 ADKEY + 原厂 soft_poweroff (关 LCD/USB/音频; BT/WiFi 见 app_config)
 #   1 = +LCD+LVGL
-#   2 = +USB CDC
-#   3 = +音频
-#   4 = +蓝牙 (app_config 同步)
-#   5 = +WiFi  (=接近全功能)
+#   2 = +USB CDC (HS USB → SYS 锁 240M)
+#   3 = +音频+USB
+#   4 = +蓝牙 (默认无 USB, SYS=320M)
+#   5 = +WiFi  (=接近全功能, 默认无 USB, SYS=320M)
 #   99= 手动: 下面各 MINI_* ?= 自行指定, 不覆盖
 MINI_PWR_BISECT ?= 5
 
@@ -66,11 +66,11 @@ MINI_LVGL_SUPPORT := 1
 MINI_AUDIO_SUPPORT := 1
 MINI_USB_ENABLE := 1
 else
-# 4/5/...
+# 4/5/... : 默认关 USB, 以便 SYS_CLK=320M 生效; 要 HS USB 用 MINI_USB_ENABLE=1(会锁 240M)
 MINI_LCD_SUPPORT := 1
 MINI_LVGL_SUPPORT := 1
 MINI_AUDIO_SUPPORT := 1
-MINI_USB_ENABLE := 1
+MINI_USB_ENABLE := 0
 endif
 
 # ================= C++ 支持开关 =================
@@ -86,9 +86,11 @@ MINI_KEY_EXTRA_SUPPORT ?= 0
 # USB 协议栈: 0=原厂 driver/usb; 1=CherryUSB (改后 make clean)
 MINI_USB_STACK_CHERRYUSB ?= 0
 # WAMR 解释器 + MicroPixel 兼容宿主 (app/mpx, 改后 make clean)
-MINI_WASM_SUPPORT ?= 0
+MINI_WASM_SUPPORT ?= 1
+# 解释器热路径调试(每 opcode 计数 / gate printf)。默认关, 开了会明显掉帧。
+MPX_INTERP_DEBUG ?= 0
 ifndef MINI_USB_ENABLE
-MINI_USB_ENABLE ?= 1
+MINI_USB_ENABLE ?= 0
 endif
 # 音频库注入 LFLAGS 用(LFLAGS 是 := 立即展开, 此变量必须先于其定义)
 # audio_server.a: 音频服务+audio_dev_ops; libaec/libdns/libjlsp: AEC 回采算法库
@@ -252,16 +254,16 @@ DEFINES += -DMINI_WASM_SUPPORT=$(strip $(MINI_WASM_SUPPORT))
 ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
 DEFINES += -DCONFIG_AUDIO_ENABLE
 endif
-# BT/WiFi 与 app_config MINI_PWR_BISECT 档位一致 (4=+BT, 5=+WiFi)
-ifeq ($(strip $(MINI_PWR_BISECT)),99)
-DEFINES += -DCONFIG_BT_ENABLE=1 -DCONFIG_NET_ENABLE=1
-else
-ifneq ($(filter $(strip $(MINI_PWR_BISECT)),4 5),)
+# BT 默认关; WiFi 仍随档位 5/99。要蓝牙: make MINI_BT_SUPPORT=1
+MINI_BT_SUPPORT ?= 0
+DEFINES += -DMINI_BT_SUPPORT=$(strip $(MINI_BT_SUPPORT))
+ifeq ($(strip $(MINI_BT_SUPPORT)),1)
 DEFINES += -DCONFIG_BT_ENABLE=1
 endif
-ifeq ($(strip $(MINI_PWR_BISECT)),5)
-DEFINES += -DCONFIG_NET_ENABLE=1
-endif
+ifeq ($(strip $(MINI_PWR_BISECT)),99)
+DEFINES += -DCONFIG_NET_ENABLE=1 -DCONFIG_WIFI_ENABLE=1
+else ifeq ($(strip $(MINI_PWR_BISECT)),5)
+DEFINES += -DCONFIG_NET_ENABLE=1 -DCONFIG_WIFI_ENABLE=1
 endif
 
 # 头文件搜索路径
@@ -312,26 +314,36 @@ INCLUDES := \
 
 # 需要编译的 .c 文件（按目录分组，增删源码只改这里）
 # USB 源码见下方 MINI_USB_STACK_CHERRYUSB 条件块
-c_SRC_FILES := \
-	../../../app/app_main.c \
-	../../../app/bt_wifi_app.c \
+# 对齐原厂 demo_wifi: 关 BT 时不编 BT 配置/栈源码、不链 btctrler/btstack
+BT_APP_SRCS :=
+BT_CFG_SRCS :=
+ifeq ($(strip $(MINI_BT_SUPPORT)),1)
+BT_APP_SRCS := \
 	../../../app/bt_profile_config.c \
 	../../../app/bt_music.c \
 	../../../app/bt_decode.c \
+	../../../app/common_ble/le_hogp.c \
+	../../../app/common_ble/le_trans_data.c
+BT_CFG_SRCS := \
+	../../../driver/config/log_config/lib_btctrler_config.c \
+	../../../driver/config/log_config/lib_btstack_config.c
+endif
+
+c_SRC_FILES := \
+	../../../app/app_main.c \
+	../../../app/bt_wifi_app.c \
+	$(BT_APP_SRCS) \
 	../../../app/net_music.c \
 	../../../app/audio_config.c \
 	../../../app/audio_demo.c \
 	../../../app/periph_demo.c \
-	../../../app/common_ble/le_hogp.c \
-	../../../app/common_ble/le_trans_data.c \
 	../../../app/key/key_driver.c \
 	../../../app/key/adkey.c \
 	../../../driver/lcd/touch_cst816.c \
 	../../../app/net/wifi_conf.c \
 	../../../app/net/wifi_prov.c \
 	../../../app/net/wifi_log_mute.c \
-	../../../driver/config/log_config/lib_btctrler_config.c \
-	../../../driver/config/log_config/lib_btstack_config.c \
+	$(BT_CFG_SRCS) \
 	../../../app/board/wl82/board.c \
 	../../../driver/config/log_config/lib_driver_config.c \
 	../../../driver/config/log_config/lib_system_config.c \
@@ -409,11 +421,11 @@ LFLAGS := \
 	../../../cpu/wl82/liba/update.a \
 	$(AUDIO_LIB) \
 	../../../cpu/wl82/liba/wl_rf_common.a \
-	../../../cpu/wl82/liba/btctrler.a \
-	../../../cpu/wl82/liba/btstack.a \
+	$(if $(filter 1,$(strip $(MINI_BT_SUPPORT))),../../../cpu/wl82/liba/btctrler.a) \
+	$(if $(filter 1,$(strip $(MINI_BT_SUPPORT))),../../../cpu/wl82/liba/btstack.a) \
 	../../../cpu/wl82/liba/crypto_toolbox_Osize.a \
 	../../../cpu/wl82/liba/lib_ccm_aes.a \
-	../../../cpu/wl82/liba/lib_sig_mesh.a \
+	$(if $(filter 1,$(strip $(MINI_BT_SUPPORT))),../../../cpu/wl82/liba/lib_sig_mesh.a) \
 	../../../cpu/wl82/liba/hsm.a \
 	../../../cpu/wl82/liba/wpasupplicant.a \
 	../../../cpu/wl82/liba/libmbedtls_2_2_1.a \
@@ -600,12 +612,13 @@ INCLUDES    += -I../../../third/micropixel-abi
 INCLUDES    += -I../../../include_lib/system/os
 # pi32v2 无 invokeNative 汇编: 用通用 C 版(BUILD_TARGET_ARC = 扁平软浮点打包约定)
 DEFINES     += -DBUILD_TARGET_ARC -DBH_PLATFORM_JL82
-# WAMR 代码绕开 LTO(-O1 替代 -Oz): 杰理 clang 4.0.1 的 LTO 后端对这套新代码会
-# 误编译(register_natives 内部野跳到未映射地址);独立 ELF 目标也避开 used-symbol
-# GC 对指针表的裁剪
+# WAMR/MPX 绕开 LTO。fast interp 在 pi32v2 上会卡死 nocall _start(2026-11-01),
+# 退回 classic -O1(此前可进 APP); 光栅整数化/不等 TE 仍保留。
 WAMR_CFLAGS := $(filter-out -flto -Oz,$(CFLAGS)) -O1 -fno-data-sections -fno-jump-tables
+# 光栅/场景/上屏热路径用 -O2; 解释器保持 -O1(fast/更高优化曾卡 nocall)
+MPX_HOT_CFLAGS := $(filter-out -flto -Oz,$(CFLAGS)) -O2 -fno-data-sections -fno-jump-tables
 $(BUILD_DIR)/third/wamr/%.c.o $(BUILD_DIR)/app/mpx/%.c.o : CFLAGS = $(WAMR_CFLAGS)
-# 解释器 -O1，仍关 LTO 和 jump table。整份 .text 由链接脚本放进 ram0。
+$(BUILD_DIR)/app/mpx/mpx_raster.c.o $(BUILD_DIR)/app/mpx/mpx_scene.c.o $(BUILD_DIR)/app/mpx/mpx_display.c.o : CFLAGS = $(MPX_HOT_CFLAGS)
 $(BUILD_DIR)/third/wamr/core/iwasm/interpreter/wasm_interp_classic.c.o: CFLAGS := $(WAMR_CFLAGS) -fno-function-sections
 DEFINES     += -DWASM_ENABLE_INTERP=1 -DWASM_ENABLE_FAST_INTERP=0 -DWASM_ENABLE_AOT=0
 DEFINES     += -DWASM_ENABLE_JIT=0 -DWASM_ENABLE_LIBC_BUILTIN=1 -DWASM_ENABLE_LIBC_WASI=0
@@ -617,6 +630,7 @@ DEFINES     += -DWASM_ENABLE_MEMORY_PROFILING=0 -DWASM_ENABLE_PERF_PROFILING=0
 DEFINES     += -DWASM_ENABLE_DUMP_CALL_STACK=0 -DWASM_ENABLE_MINI_LOADER=0
 DEFINES     += -DWASM_DISABLE_HW_BOUND_CHECK=1 -DWASM_DISABLE_STACK_HW_BOUND_CHECK=1
 DEFINES     += -DBH_MALLOC=wasm_runtime_malloc -DBH_FREE=wasm_runtime_free
+DEFINES     += -DMPX_INTERP_DEBUG=$(strip $(MPX_INTERP_DEBUG))
 endif
 
 # CoreMark: 源码仍在 third/coremark, 暂不编入(按键跑分已关)
@@ -645,13 +659,28 @@ endif
 
 LINK_AT ?= 1
 
-.PHONY: all clean pre_build
+# 把 CFLAGS/DEFINES/INCLUDES 记到 objs/build_flags.txt。内容变了才更新时间戳，
+# 从而重编已有 .o。否则只改 MINI_WASM_SUPPORT 这类开关时，增量链接会留下旧目标
+# (例如不再链 watch_ui.o，但 app_main.o 仍引用 watch_ui_start)。
+# 具体规则放在 all 之后，避免盖掉默认目标。
+BUILD_FLAGS_FILE := $(BUILD_DIR)/build_flags.txt
+.PHONY: all clean pre_build force_build_flags
 
 .SUFFIXES:
 
 all: pre_build $(OUT_ELF)
 	$(info +POST-BUILD)
 	$(QUITE) $(RUN_POST_SCRIPT) sdk
+
+force_build_flags:
+	@:
+
+$(BUILD_FLAGS_FILE): force_build_flags
+	$(shell $(MKDIR) $(BUILD_DIR))
+	$(file >$(BUILD_FLAGS_FILE).new,$(CFLAGS) $(DEFINES) $(INCLUDES))
+	$(QUITE) fc /b $(subst /,\,$(BUILD_FLAGS_FILE).new) $(subst /,\,$(BUILD_FLAGS_FILE)) >nul 2>&1 && del /q /f $(subst /,\,$(BUILD_FLAGS_FILE).new) || move /y $(subst /,\,$(BUILD_FLAGS_FILE).new) $(subst /,\,$(BUILD_FLAGS_FILE)) >nul
+
+$(OBJS): $(BUILD_FLAGS_FILE)
 
 # fixbat may drop new KEY lines + accumulate multi-CR; force -key 0x7DF1.key + normalize CRLF
 pre_build:

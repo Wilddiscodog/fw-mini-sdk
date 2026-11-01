@@ -169,20 +169,33 @@ static int32_t mpx_exec_rect(const uint8_t *rec, const mpx_target_t *target)
         return MICROPIXEL_STATUS_OK; /* 完全在外: 合法空操作 */
     }
     uint16_t panel = mpx_canon_to_panel(r.color);
+    uint8_t hi = (uint8_t)(panel >> 8), lo = (uint8_t)(panel & 0xff);
     for (int32_t y = y0; y <= y1; y++) {
         uint8_t *row = target->data + (uint32_t)y * target->pitch;
         if (r.opacity == 255) {
-            for (int32_t x = x0; x <= x1; x++) {
-                mpx_put(row, (uint32_t)x, panel);
+            /* 不透明矩形: 成对写字节, 避开每像素函数调用 */
+            uint8_t *p = row + (uint32_t)x0 * 2;
+            int32_t n = x1 - x0 + 1;
+            while (n >= 4) {
+                p[0] = hi; p[1] = lo; p[2] = hi; p[3] = lo;
+                p[4] = hi; p[5] = lo; p[6] = hi; p[7] = lo;
+                p += 8;
+                n -= 4;
+            }
+            while (n--) {
+                p[0] = hi;
+                p[1] = lo;
+                p += 2;
             }
         } else {
+            uint8_t inv = (uint8_t)(255 - r.opacity);
+            uint32_t sr = r.color >> 11, sg = (r.color >> 5) & 0x3f, sb = r.color & 0x1f;
             for (int32_t x = x0; x <= x1; x++) {
                 uint16_t dst = mpx_panel_to_canon(mpx_get(row, (uint32_t)x));
                 uint32_t dr = dst >> 11, dg = (dst >> 5) & 0x3f, db = dst & 0x1f;
-                uint32_t sr = r.color >> 11, sg = (r.color >> 5) & 0x3f, sb = r.color & 0x1f;
-                dr = (dr * r.opacity + sr * (255 - r.opacity)) / 255;
-                dg = (dg * r.opacity + sg * (255 - r.opacity)) / 255;
-                db = (db * r.opacity + sb * (255 - r.opacity)) / 255;
+                dr = (dr * r.opacity + sr * inv) / 255;
+                dg = (dg * r.opacity + sg * inv) / 255;
+                db = (db * r.opacity + sb * inv) / 255;
                 mpx_put(row, (uint32_t)x,
                         mpx_canon_to_panel((uint16_t)((dr << 11) | (dg << 5) | db)));
             }
@@ -204,30 +217,38 @@ static int32_t mpx_exec_sprite(const uint8_t *rec, const mpx_target_t *target)
         }
     }
     uint16_t panel_color = mpx_canon_to_panel(s.color);
-    for (uint32_t dy = 0; dy < s.height; dy++) {
+    /* 定点数步进替代每像素除法 (dx*sw/w) */
+    uint32_t du = s.width ? ((uint32_t)s.source_width << 16) / s.width : 0;
+    uint32_t dv = s.height ? ((uint32_t)s.source_height << 16) / s.height : 0;
+    uint32_t v_acc = 0;
+    int transp0 = (s.flags & MICROPIXEL_RASTER_SPRITE_TRANSPARENT_INDEX0) != 0;
+    int solid = (s.flags & MICROPIXEL_RASTER_SPRITE_SOLID_COLOR) != 0;
+    int additive = (s.flags & MICROPIXEL_RASTER_SPRITE_ADDITIVE) != 0;
+    for (uint32_t dy = 0; dy < s.height; dy++, v_acc += dv) {
         int32_t ty = (int32_t)s.y + (int32_t)dy;
         if (ty < 0 || ty >= (int32_t)target->height) {
             continue;
         }
-        uint32_t sy = s.source_y + (uint16_t)((dy * s.source_height) / s.height);
+        uint32_t sy = s.source_y + (v_acc >> 16);
         uint8_t *row = target->data + (uint32_t)ty * target->pitch;
-        for (uint32_t dx = 0; dx < s.width; dx++) {
-            int32_t tx = (int32_t)s.x + (int32_t)dx;
-            if (tx < 0 || tx >= (int32_t)target->width) {
-                continue;
-            }
-            uint32_t sx = s.source_x + (uint16_t)((dx * s.source_width) / s.width);
+        uint32_t u_acc = 0;
+        int32_t x0 = (int32_t)s.x;
+        int32_t x1 = x0 + (int32_t)s.width;
+        if (x0 < 0) {
+            u_acc = (uint32_t)(-x0) * du;
+            x0 = 0;
+        }
+        if (x1 > (int32_t)target->width) {
+            x1 = (int32_t)target->width;
+        }
+        for (int32_t tx = x0; tx < x1; tx++, u_acc += du) {
+            uint32_t sx = s.source_x + (u_acc >> 16);
             uint8_t texel = mpx_texel(t, (uint16_t)sx, (uint16_t)sy);
-            if ((s.flags & MICROPIXEL_RASTER_SPRITE_TRANSPARENT_INDEX0) && texel == 0) {
+            if (transp0 && texel == 0) {
                 continue;
             }
-            uint16_t panel;
-            if (s.flags & MICROPIXEL_RASTER_SPRITE_SOLID_COLOR) {
-                panel = panel_color;
-            } else {
-                panel = pal[texel];
-            }
-            if (s.flags & MICROPIXEL_RASTER_SPRITE_ADDITIVE) {
+            uint16_t panel = solid ? panel_color : pal[texel];
+            if (additive) {
                 uint16_t dst = mpx_panel_to_canon(mpx_get(row, (uint32_t)tx));
                 uint16_t src = mpx_panel_to_canon(panel);
                 uint32_t r = (dst >> 11) + (src >> 11);
@@ -292,7 +313,6 @@ static int mpx_setup_edge(const micropixel_raster_vertex_t *a, const micropixel_
 {
     int32_t dy = (int32_t)b->y - (int32_t)a->y;
     int32_t first;
-    float per_row;
     int32_t u0, v0, l0;
     int64_t rows16;
     if (dy <= 0) {
@@ -306,14 +326,14 @@ static int mpx_setup_edge(const micropixel_raster_vertex_t *a, const micropixel_
     if (edge->end_row <= first) {
         return 0;
     }
-    per_row = 16.0f / (float)dy;
-    edge->dx = (int32_t)((float)((int32_t)b->x - (int32_t)a->x) * per_row * 4096.0f);
+    /* 整数代替软浮点: per_row=16/dy → 各增量 *16/dy (pi32v2 无 FPU) */
+    edge->dx = (int32_t)(((int64_t)((int32_t)b->x - (int32_t)a->x) << 16) / dy);
     u0 = (int32_t)a->u << 8;
     v0 = (int32_t)a->v << 8;
     l0 = (int32_t)a->light << 16;
-    edge->du = (int32_t)((float)(((int32_t)b->u << 8) - u0) * per_row);
-    edge->dv = (int32_t)((float)(((int32_t)b->v << 8) - v0) * per_row);
-    edge->dlight = (int32_t)((float)(((int32_t)b->light << 16) - l0) * per_row);
+    edge->du = (int32_t)(((int64_t)(((int32_t)b->u << 8) - u0) << 4) / dy);
+    edge->dv = (int32_t)(((int64_t)(((int32_t)b->v << 8) - v0) << 4) / dy);
+    edge->dlight = (int32_t)(((int64_t)(((int32_t)b->light << 16) - l0) << 4) / dy);
     rows16 = ((int64_t)first << 4) + 8 - a->y;
     edge->x = mpx_walk_at((int32_t)a->x << 12, edge->dx, rows16, 4);
     edge->u = mpx_walk_at(u0, edge->du, rows16, 4);
@@ -484,10 +504,10 @@ static void mpx_exec_polygon(const micropixel_raster_vertex_t *verts, int count,
             x1 = (int)target->width;
         }
         if (span > 0 && x1 > x0) {
-            float per_pixel = 65536.0f / (float)span;
-            int32_t du = (int32_t)((float)(r->u - l->u) * per_pixel);
-            int32_t dv = (int32_t)((float)(r->v - l->v) * per_pixel);
-            int32_t dlight = (int32_t)((float)(r->light - l->light) * per_pixel);
+            /* 每行一次 64 位除法, 像素循环纯整数 (原 float 软浮点极慢) */
+            int32_t du = (int32_t)(((int64_t)(r->u - l->u) << 16) / span);
+            int32_t dv = (int32_t)(((int64_t)(r->v - l->v) << 16) / span);
+            int32_t dlight = (int32_t)(((int64_t)(r->light - l->light) << 16) / span);
             int64_t prestep = ((int64_t)x0 << 16) + 0x8000 - l->x;
             int32_t u = mpx_walk_at(l->u, du, prestep, 16);
             int32_t v = mpx_walk_at(l->v, dv, prestep, 16);
