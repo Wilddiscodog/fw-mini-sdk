@@ -150,7 +150,7 @@ SECTIONS
 	PROVIDE(ctors_count = _ctors_end - _ctors_begin);
 #endif
 
-    .data ALIGN(32):
+    .data ALIGN(32) : SUBALIGN(4)
     {
 #if defined CONFIG_ASR_ALGORITHM && defined CONFIG_VIDEO_ENABLE
         *(.libaisp.text)
@@ -197,16 +197,19 @@ SECTIONS
 
         . = ALIGN(4);
         *(.data)
+        /* -fdata-sections 把初始化静态放进 .data.*, 不收会成为孤儿段
+         * (落进堆区且 boot 不拷贝初值), 与 CONFIG_CXX_SUPPORT 无关 */
+        *(.data.*)
 
         . = ALIGN(4);
     } > sdram
 
-    .bss ALIGN(32) (NOLOAD):
+    .bss ALIGN(32) (NOLOAD) : SUBALIGN(4)
     {
         *(.bss)
-#if defined CONFIG_CXX_SUPPORT
-		*(.bss.*)
-#endif
+        /* -fdata-sections 的未初始化静态在 .bss.*, 必须无条件收进 bss
+         * (boot 清零范围 = 本段; 落堆区会被 malloc 踩) */
+        *(.bss.*)
         *(COMMON)
         *(.mem_heap)
         *(.memp_memory_x)

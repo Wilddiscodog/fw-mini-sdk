@@ -450,6 +450,10 @@ void app_main()
 #if (defined MINI_USB_ENABLE) && MINI_USB_ENABLE
     os_task_create(usb_mode_task, NULL, 8, 2048, 0, "usb_mode");
 #endif
+#if (defined MINI_WASM_SUPPORT) && MINI_WASM_SUPPORT
+    extern void mpx_task(void *p);
+    os_task_create(mpx_task, NULL, 10, 65536, 0, "mpx_task");
+#endif
     os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT && !MINI_BT_SPEAKER_EN
     extern void audio_demo_start(void);

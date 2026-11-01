@@ -62,6 +62,8 @@ MINI_HW_CRYPTO_SUPPORT ?= 0
 MINI_KEY_EXTRA_SUPPORT ?= 0
 # USB 协议栈: 0=原厂 driver/usb; 1=CherryUSB (改后 make clean)
 MINI_USB_STACK_CHERRYUSB ?= 0
+# WAMR 解释器 + MicroPixel 兼容宿主 (app/mpx, 改后 make clean)
+MINI_WASM_SUPPORT ?= 0
 ifndef MINI_USB_ENABLE
 MINI_USB_ENABLE ?= 1
 endif
@@ -221,6 +223,7 @@ DEFINES += -DMINI_HW_CRYPTO_SUPPORT=$(MINI_HW_CRYPTO_SUPPORT)
 DEFINES += -DMINI_KEY_EXTRA_SUPPORT=$(MINI_KEY_EXTRA_SUPPORT)
 DEFINES += -DMINI_AUDIO_SUPPORT=$(strip $(MINI_AUDIO_SUPPORT))
 DEFINES += -DMINI_USB_STACK_CHERRYUSB=$(strip $(MINI_USB_STACK_CHERRYUSB))
+DEFINES += -DMINI_WASM_SUPPORT=$(strip $(MINI_WASM_SUPPORT))
 ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
 DEFINES += -DCONFIG_AUDIO_ENABLE
 endif
@@ -513,6 +516,70 @@ INCLUDES    += -I../../../app/watch_ui -I../../../app/include
 DEFINES     += -DLV_CONF_INCLUDE_SIMPLE
 endif
 
+# WAMR 2.4.3 classic interpreter + MicroPixel 兼容宿主(app/mpx)
+# 源码拷自 micropixel 仓库 pinned fork, 平台层在 core/shared/platform/jl82/
+ifeq ($(MINI_WASM_SUPPORT),1)
+WAMR_DIR := ../../../third/wamr/core
+rwildcard = $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
+MPX_WAMR_SRC += \
+    $(WAMR_DIR)/iwasm/interpreter/wasm_interp_classic.c \
+    $(WAMR_DIR)/iwasm/interpreter/wasm_loader.c \
+    $(WAMR_DIR)/iwasm/interpreter/wasm_runtime.c \
+    $(WAMR_DIR)/iwasm/common/wasm_runtime_common.c \
+    $(WAMR_DIR)/iwasm/common/wasm_exec_env.c \
+    $(WAMR_DIR)/iwasm/common/wasm_native.c \
+    $(WAMR_DIR)/iwasm/common/wasm_memory.c \
+    $(WAMR_DIR)/iwasm/common/wasm_loader_common.c \
+    $(WAMR_DIR)/iwasm/common/wasm_blocking_op.c \
+    $(WAMR_DIR)/iwasm/common/wasm_shared_memory.c \
+    $(WAMR_DIR)/iwasm/common/wasm_c_api.c \
+    $(WAMR_DIR)/iwasm/common/arch/invokeNative_general.c
+MPX_WAMR_SRC += $(call rwildcard, $(WAMR_DIR)/iwasm/libraries/libc-builtin/, *.c)
+MPX_WAMR_SRC += $(wildcard $(WAMR_DIR)/shared/utils/*.c)
+MPX_WAMR_SRC += $(call rwildcard, $(WAMR_DIR)/shared/mem-alloc/ems/, *.c)
+MPX_WAMR_SRC += $(call rwildcard, $(WAMR_DIR)/shared/mem-alloc/tlsf/, *.c)
+MPX_WAMR_SRC += $(WAMR_DIR)/shared/mem-alloc/mem_alloc.c
+MPX_WAMR_SRC += $(WAMR_DIR)/shared/platform/jl82/jl82_platform.c
+MPX_WAMR_SRC += $(WAMR_DIR)/shared/platform/jl82/jl82_thread.c
+c_SRC_FILES += $(MPX_WAMR_SRC)
+c_SRC_FILES += ../../../app/mpx/mpx_host.c
+c_SRC_FILES += ../../../app/mpx/mpx_bundle.c
+c_SRC_FILES += ../../../app/mpx/mpx_services.c
+c_SRC_FILES += ../../../app/mpx/mpx_display.c
+c_SRC_FILES += ../../../app/mpx/mpx_raster.c
+c_SRC_FILES += ../../../app/mpx/mpx_libc_shim.c
+INCLUDES    += -I$(WAMR_DIR)/iwasm/include
+INCLUDES    += -I$(WAMR_DIR)/iwasm/interpreter
+INCLUDES    += -I$(WAMR_DIR)/iwasm/common
+INCLUDES    += -I$(WAMR_DIR)/iwasm/libraries/libc-builtin
+INCLUDES    += -I$(WAMR_DIR)/shared/utils
+INCLUDES    += -I$(WAMR_DIR)/shared/mem-alloc
+# 顺序敏感: jl82 平台目录须在 platform/include 之前, platform_internal.h 才能命中
+INCLUDES    += -I$(WAMR_DIR)/shared/platform/jl82
+INCLUDES    += -I$(WAMR_DIR)/shared/platform/include
+INCLUDES    += -I$(WAMR_DIR)
+INCLUDES    += -I../../../app/mpx
+INCLUDES    += -I../../../third/micropixel-abi
+INCLUDES    += -I../../../include_lib/system/os
+# pi32v2 无 invokeNative 汇编: 用通用 C 版(BUILD_TARGET_ARC = 扁平软浮点打包约定)
+DEFINES     += -DBUILD_TARGET_ARC -DBH_PLATFORM_JL82
+# WAMR 代码绕开 LTO(-O1 替代 -Oz): 杰理 clang 4.0.1 的 LTO 后端对这套新代码会
+# 误编译(register_natives 内部野跳到未映射地址);独立 ELF 目标也避开 used-symbol
+# GC 对指针表的裁剪
+WAMR_CFLAGS := $(filter-out -flto -Oz,$(CFLAGS)) -O1 -fno-data-sections -fno-jump-tables
+$(BUILD_DIR)/third/wamr/%.c.o $(BUILD_DIR)/app/mpx/%.c.o : CFLAGS = $(WAMR_CFLAGS)
+DEFINES     += -DWASM_ENABLE_INTERP=1 -DWASM_ENABLE_FAST_INTERP=0 -DWASM_ENABLE_AOT=0
+DEFINES     += -DWASM_ENABLE_JIT=0 -DWASM_ENABLE_LIBC_BUILTIN=1 -DWASM_ENABLE_LIBC_WASI=0
+DEFINES     += -DWASM_ENABLE_MULTI_MODULE=0 -DWASM_ENABLE_BULK_MEMORY=1 -DWASM_ENABLE_BULK_MEMORY_OPT=1
+DEFINES     += -DWASM_ENABLE_SHARED_MEMORY=0 -DWASM_ENABLE_THREAD_MGR=0 -DWASM_ENABLE_LIB_PTHREAD=0
+DEFINES     += -DWASM_ENABLE_GC=0 -DWASM_ENABLE_REF_TYPES=0 -DWASM_ENABLE_SIMD=0
+DEFINES     += -DWASM_ENABLE_LABELS_AS_VALUES=0
+DEFINES     += -DWASM_ENABLE_MEMORY_PROFILING=0 -DWASM_ENABLE_PERF_PROFILING=0
+DEFINES     += -DWASM_ENABLE_DUMP_CALL_STACK=0 -DWASM_ENABLE_MINI_LOADER=0
+DEFINES     += -DWASM_DISABLE_HW_BOUND_CHECK=1 -DWASM_DISABLE_STACK_HW_BOUND_CHECK=1
+DEFINES     += -DBH_MALLOC=wasm_runtime_malloc -DBH_FREE=wasm_runtime_free
+endif
+
 # CoreMark: 源码仍在 third/coremark, 暂不编入(按键跑分已关)
 # MINI_COREMARK_SUPPORT ?= 0
 
@@ -570,13 +637,13 @@ endif
 
 
 ifeq ($(LINK_AT), 1)
-$(OUT_ELF): $(OBJS)
+$(OUT_ELF): $(OBJS) ../../../cpu/wl82/sdk.ld
 	$(info +LINK $@)
 	$(shell $(MKDIR) $(@D))
 	$(file >$(OBJ_FILE), $(OBJS))
 	$(QUITE) $(LD) -o $(OUT_ELF) @$(OBJ_FILE) $(LFLAGS) $(LIBPATHS) $(LIBS)
 else
-$(OUT_ELF): $(OBJS)
+$(OUT_ELF): $(OBJS) ../../../cpu/wl82/sdk.ld
 	$(info +LINK $@)
 	$(shell $(MKDIR) $(@D))
 	$(QUITE) $(LD) -o $(OUT_ELF) $(OBJS) $(LFLAGS) $(LIBPATHS) $(LIBS)
