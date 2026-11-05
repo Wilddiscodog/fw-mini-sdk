@@ -15,9 +15,10 @@
 #include "watch_style.h"
 #include "watch_ui.h"
 #include "watch_power.h"
-#include "sc7u22.h"
+#include "watch_game_bgm.h"
+#include "imu.h"
 
-#if (defined TCFG_SC7U22_ENABLE) && TCFG_SC7U22_ENABLE
+#if (defined TCFG_IMU_ENABLE) && TCFG_IMU_ENABLE
 
 #define BALL_MS          33      /* 物理步进/重绘周期 */
 #define BALL_COUNTDOWN_S 60      /* 单局时长 */
@@ -430,7 +431,7 @@ static void ball_step(void)
     float dx, dy, dist, minv;
     u8 i;
 
-    if (sc7u22_read_si(&si) == 0) {
+    if (imu_read_si(&si) == 0) {
         if (!G.zeroed) {
             G.zero_ax = si.ax;
             G.zero_ay = si.ay;
@@ -694,6 +695,7 @@ static void box_click_cb(lv_event_t *e)
     }
     ball_reset(G.canvas);
     G.playing = 1;
+    watch_game_bgm_start(WATCH_BGM_ACTIVE);
     watch_ui_toast("开始! 倾斜设备移动小球");
 }
 
@@ -785,12 +787,13 @@ lv_obj_t *app_ball_create(lv_obj_t *parent)
         G.trail_y[i] = 0;
     }
 
-    if (sc7u22_init()) {
+    if (imu_init()) {
         watch_ui_toast("陀螺仪未就绪, 无法控制小球");
     }
 
     ball_reset(G.canvas);
     G.playing = 1;
+    watch_game_bgm_start(WATCH_BGM_ACTIVE);
     G.tick = lv_timer_create(ball_tick, BALL_MS, NULL);
     lv_obj_add_event_cb(root, ball_del_cb, LV_EVENT_DELETE, NULL);
     lv_obj_invalidate(root);
@@ -804,6 +807,7 @@ void app_ball_exit(void)
 
 static void app_ball_cleanup(void)
 {
+    watch_game_bgm_stop();
     if (G.tick) {
         lv_timer_del(G.tick);
         G.tick = NULL;
@@ -831,7 +835,7 @@ static void ball_del_cb(lv_event_t *e)
     app_ball_cleanup();
 }
 
-#else   /* !TCFG_SC7U22_ENABLE */
+#else   /* !TCFG_IMU_ENABLE */
 
 lv_obj_t *app_ball_create(lv_obj_t *parent)
 {

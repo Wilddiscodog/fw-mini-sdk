@@ -439,6 +439,8 @@ endif
 
 # SC7U22 六轴 (PH0/PH1 iic0, 与触摸共总线)
 c_SRC_FILES += ../../../driver/imu/sc7u22.c
+c_SRC_FILES += ../../../driver/imu/icm42607.c
+c_SRC_FILES += ../../../driver/imu/imu.c
 INCLUDES    += -I../../../driver/imu/include
 
 # ---------------- USB: CherryUSB 或原厂从机栈 (MINI_USB_ENABLE) ----------------
@@ -509,10 +511,17 @@ c_SRC_FILES += ../../../app/watch_ui/watch_power.c
 c_SRC_FILES += ../../../app/watch_ui/watch_battery.c
 c_SRC_FILES += ../../../app/watch_ui/watch_apps.c
 c_SRC_FILES += ../../../app/watch_ui/watch_ball.c
-c_SRC_FILES += ../../../app/watch_ui/watch_ski.c
+c_SRC_FILES += ../../../app/watch_ui/watch_tetris.c
+c_SRC_FILES += ../../../app/watch_ui/watch_maze.c
+c_SRC_FILES += ../../../app/watch_ui/watch_match3.c
+c_SRC_FILES += ../../../app/watch_ui/watch_sokoban.c
+c_SRC_FILES += ../../../app/watch_ui/watch_2048.c
+c_SRC_FILES += ../../../app/watch_ui/watch_pong.c
+c_SRC_FILES += ../../../app/watch_ui/watch_game_bgm.c
 c_SRC_FILES += ../../../app/watch_ui/assets/watch_icons.c
-c_SRC_FILES += ../../../app/watch_ui/assets/watch_icon_ski.c
-c_SRC_FILES += ../../../app/watch_ui/assets/ski_sprites.c
+c_SRC_FILES += ../../../app/watch_ui/assets/watch_icon_tetris.c
+c_SRC_FILES += ../../../app/watch_ui/assets/watch_icon_maze.c
+c_SRC_FILES += ../../../app/watch_ui/assets/watch_icon_match3.c
 c_SRC_FILES += ../../../app/watch_ui/assets/lv_font_watch_16_cn.c
 c_SRC_FILES += ../../../app/walkie/walkie_svc.c
 c_SRC_FILES += ../../../app/walkie/walkie_net.c

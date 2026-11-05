@@ -10,10 +10,12 @@
 #include "watch_style.h"
 #include "watch_backlight.h"
 #include "watch_volume.h"
+#include "watch_game_bgm.h"
 #include "watch_power.h"
 #include "watch_battery.h"
 #include "assets/watch_icons.h"
 #include "walkie.h"
+#include "imu.h"
 #if LV_USE_PNG
 #include "extra/libs/png/lv_png.h"
 #endif
@@ -37,7 +39,12 @@ static const struct watch_app_desc s_apps[WATCH_APP_COUNT] = {
 #endif
     { "蓝牙",   "B", &watch_icon_bt,       0x2979FF, app_bt_music_create },
     { "平衡球", "P", &watch_icon_ball,     0xFFD600, app_ball_create },
-    { "滑雪大冒险", "K", &watch_icon_ski,  0x4FC3F7, app_ski_create },
+    { "俄罗斯方块", "T", &watch_icon_tetris, 0xFF8FAB, app_tetris_create },
+    { "倾斜迷宫", "M", &watch_icon_maze,   0x5B8DEF, app_maze_create },
+    { "消消乐", "C", &watch_icon_match3,   0xFF8FAB, app_match3_create },
+    { "推箱子", "S", NULL,                 0xFFB74D, app_sokoban_create },
+    { "2048",   "2", NULL,                 0xEDC22E, app_2048_create },
+    { "Pong",   "P", NULL,                 0x212121, app_pong_create },
     { "设置",   "S", &watch_icon_settings, 0x00E676, app_settings_create },
 };
 
@@ -296,7 +303,12 @@ void watch_ui_start(void)
 #endif
     watch_backlight_init();
     watch_volume_init();
+    watch_game_bgm_vol_init();
     walkie_autoplay_init();
+#if (defined TCFG_IMU_ENABLE) && TCFG_IMU_ENABLE
+    /* 开机探测 SC7U22 / ICM-42607-C 并加载对应驱动 */
+    imu_init();
+#endif
     apply_theme();
 
     s_home = watch_home_create(lv_scr_act());

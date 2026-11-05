@@ -7,6 +7,7 @@
 #include "watch_ui.h"
 #include "watch_style.h"
 #include "watch_volume.h"
+#include "watch_game_bgm.h"
 #include "watch_backlight.h"
 
 #if (defined MINI_WIFI_SUPPORT) && MINI_WIFI_SUPPORT
@@ -22,7 +23,7 @@ extern int get_app_music_volume(void);
 #endif
 
 #include "bt_music.h"
-#include "sc7u22.h"
+#include "imu.h"
 #include "walkie.h"
 
 static lv_obj_t *make_app_root(lv_obj_t *parent, const char *title)
@@ -57,7 +58,7 @@ static void stub_btn_cb(lv_event_t *e)
     watch_ui_toast("功能开发中");
 }
 
-/* -------- 陀螺仪 SC7U22 -------- */
+/* -------- 陀螺仪 (SC7U22 / ICM-42607-C 自动探测) -------- */
 static lv_obj_t *s_gyro_lab;
 static lv_timer_t *s_gyro_tm;
 
@@ -90,11 +91,11 @@ static void gyro_refresh(lv_timer_t *t)
     if (!s_gyro_lab) {
         return;
     }
-    if (!sc7u22_ready()) {
-        lv_label_set_text(s_gyro_lab, "SC7U22 未就绪\n检查 PH0/PH1 总线");
+    if (!imu_ready()) {
+        lv_label_set_text(s_gyro_lab, "IMU 未就绪\n检查 PH0/PH1 总线");
         return;
     }
-    if (sc7u22_read_si(&s)) {
+    if (imu_read_si(&s)) {
         lv_label_set_text(s_gyro_lab, "读数失败");
         return;
     }
@@ -107,13 +108,15 @@ static void gyro_refresh(lv_timer_t *t)
     snprint_q(tc, sizeof(tc), q_round(s.temp_c, 10), 10);
 
     snprintf(buf, sizeof(buf),
+             "%s\n"
              "ID:0x%02X\n"
              "Acc g:\n"
              " X:%s Y:%s Z:%s\n"
              "Gyro dps:\n"
              " X:%s Y:%s Z:%s\n"
              "T:%sC",
-             sc7u22_whoami(),
+             imu_chip_name(),
+             imu_whoami(),
              ax, ay, az, gx, gy, gz, tc);
     lv_label_set_text(s_gyro_lab, buf);
 }
@@ -134,7 +137,7 @@ lv_obj_t *app_gyro_create(lv_obj_t *parent)
     lv_obj_t *body = make_body(root);
     lv_obj_add_event_cb(root, gyro_del, LV_EVENT_DELETE, NULL);
 
-    if (sc7u22_init()) {
+    if (imu_init()) {
         watch_ui_toast("陀螺仪初始化失败");
     }
 
@@ -1123,6 +1126,7 @@ static lv_obj_t *s_set_lab;
 static lv_obj_t *s_set_sw;
 static lv_obj_t *s_set_bl_lab;
 static lv_obj_t *s_set_vol_lab;
+static lv_obj_t *s_set_bgm_lab;
 static lv_timer_t *s_set_tm;
 static lv_timer_t *s_set_persist_tm;
 static u8 s_set_dirty;
@@ -1134,6 +1138,7 @@ static void settings_persist_flush(void)
     }
     watch_volume_persist();
     watch_backlight_persist();
+    watch_game_bgm_vol_persist();
     s_set_dirty = 0;
 }
 
@@ -1235,6 +1240,23 @@ static void settings_vol_cb(lv_event_t *e)
     settings_schedule_persist();
 }
 
+static void settings_bgm_cb(lv_event_t *e)
+{
+    int v = (int)lv_slider_get_value(lv_event_get_target(e));
+    char buf[32];
+
+    watch_game_bgm_vol_set((u8)v);
+    if (s_set_bgm_lab) {
+        if (v <= 0) {
+            lv_label_set_text(s_set_bgm_lab, "游戏音乐 关");
+        } else {
+            snprintf(buf, sizeof(buf), "游戏音乐 %d", v);
+            lv_label_set_text(s_set_bgm_lab, buf);
+        }
+    }
+    settings_schedule_persist();
+}
+
 static void settings_del(lv_event_t *e)
 {
     (void)e;
@@ -1251,6 +1273,7 @@ static void settings_del(lv_event_t *e)
     s_set_sw = NULL;
     s_set_bl_lab = NULL;
     s_set_vol_lab = NULL;
+    s_set_bgm_lab = NULL;
 }
 
 lv_obj_t *app_settings_create(lv_obj_t *parent)
@@ -1308,6 +1331,32 @@ lv_obj_t *app_settings_create(lv_obj_t *parent)
     lv_obj_set_ext_click_area(sl, 10);
     lv_obj_align(sl, LV_ALIGN_TOP_MID, 0, y);
     lv_obj_add_event_cb(sl, settings_vol_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    y += 28;
+
+    /* 游戏背景音乐 */
+    s_set_bgm_lab = lv_label_create(body);
+    lv_obj_set_style_text_font(s_set_bgm_lab, &lv_font_watch_16_cn, 0);
+    lv_obj_set_style_text_color(s_set_bgm_lab, lv_color_hex(WATCH_COL_TEXT), 0);
+    if (watch_game_bgm_vol_get() == 0) {
+        lv_label_set_text(s_set_bgm_lab, "游戏音乐 关");
+    } else {
+        snprintf(buf, sizeof(buf), "游戏音乐 %d", watch_game_bgm_vol_get());
+        lv_label_set_text(s_set_bgm_lab, buf);
+    }
+    lv_obj_align(s_set_bgm_lab, LV_ALIGN_TOP_LEFT, 0, y);
+    y += 22;
+
+    sl = lv_slider_create(body);
+    lv_obj_set_width(sl, LCD_W - 48);
+    lv_obj_set_height(sl, 16);
+    lv_slider_set_range(sl, WATCH_BGM_VOL_MIN, WATCH_BGM_VOL_MAX);
+    lv_slider_set_value(sl, watch_game_bgm_vol_get(), LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(sl, lv_color_hex(WATCH_COL_CARD_HL), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(sl, lv_color_hex(0xA66CFF), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(sl, lv_color_hex(WATCH_COL_ACCENT), LV_PART_KNOB);
+    lv_obj_set_ext_click_area(sl, 10);
+    lv_obj_align(sl, LV_ALIGN_TOP_MID, 0, y);
+    lv_obj_add_event_cb(sl, settings_bgm_cb, LV_EVENT_VALUE_CHANGED, NULL);
     y += 28;
 
     /* 对讲自动播放 */

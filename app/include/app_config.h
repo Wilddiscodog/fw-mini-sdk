@@ -211,13 +211,17 @@
 #define TCFG_TOUCH_CST816_ENABLE    0
 #endif
 
-/* SC7U22 六轴: 与 CST816 同挂 PH0/PH1(iic0); 二分档<1 时关 */
+/* 六轴 IMU(SC7U22 / ICM-42607-C): 与 CST816 同挂 PH0/PH1(iic0);
+ * 开机 imu_init() 探测 WHO_AM_I 后加载对应驱动; 二分档<1 时关 */
 #ifndef TCFG_SC7U22_ENABLE
 #if MINI_PWR_BISECT >= 1
 #define TCFG_SC7U22_ENABLE          1
 #else
 #define TCFG_SC7U22_ENABLE          0
 #endif
+#endif
+#ifndef TCFG_IMU_ENABLE
+#define TCFG_IMU_ENABLE             TCFG_SC7U22_ENABLE
 #endif
 
 

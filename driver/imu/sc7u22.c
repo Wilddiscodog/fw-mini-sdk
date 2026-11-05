@@ -145,6 +145,8 @@ int sc7u22_init(void)
     sc_read_regs(REG_DATA_STAT, &stat, 1);
     (void)stat;
     s_ready = 1;
+    printf("[imu] SC7U22 ready addr=0x%02X who=0x%02X\r\n",
+           (u8)(s_addr_w >> 1), s_whoami);
     return 0;
 }
 

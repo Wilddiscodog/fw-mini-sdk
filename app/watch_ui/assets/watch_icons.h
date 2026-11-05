@@ -10,6 +10,8 @@ LV_IMG_DECLARE(watch_icon_walkie);
 LV_IMG_DECLARE(watch_icon_rec);
 LV_IMG_DECLARE(watch_icon_settings);
 LV_IMG_DECLARE(watch_icon_ball);
-LV_IMG_DECLARE(watch_icon_ski);
+LV_IMG_DECLARE(watch_icon_tetris);
+LV_IMG_DECLARE(watch_icon_maze);
+LV_IMG_DECLARE(watch_icon_match3);
 
 #endif
