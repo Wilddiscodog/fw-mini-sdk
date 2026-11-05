@@ -29,11 +29,15 @@ void watch_volume_set(u8 vol)
         vol = WATCH_VOL_MAX;
     }
     s_vol = vol;
-    syscfg_write(CFG_MUSIC_VOL, &s_vol, sizeof(s_vol));
 #ifdef CONFIG_NET_MUSIC_MODE_ENABLE
     {
         extern int watch_net_music_set_volume(int vol);
         watch_net_music_set_volume(vol);
     }
 #endif
+}
+
+void watch_volume_persist(void)
+{
+    syscfg_write(CFG_MUSIC_VOL, &s_vol, sizeof(s_vol));
 }

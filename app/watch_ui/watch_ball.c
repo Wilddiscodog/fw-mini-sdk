@@ -23,16 +23,24 @@
 #define BALL_COUNTDOWN_S 60      /* 单局时长 */
 #define BALL_COMBO_MS    5000    /* 连击窗口 */
 
-#define GW LCD_W
-#define GH LCD_H
+#define BALL_TOP_H       36      /* 顶栏高度, canvas 在其下 */
+#define GW               LCD_W
+#define GH               (LCD_H - BALL_TOP_H)
 
-/* ---- 物理参数(按难度缩放) ----
- * 首轮试玩反馈"球特别慢"(2026-10-31): 加速 900→2600, 上限 130→320,
- * 摩擦 0.985→0.992(更滑)。仍慢/太灵敏再微调 BALL_ACC 与 MAX_V */
-#define BALL_R0          10      /* 球半径 Lv1 */
-#define BALL_ACC         2600    /* dps → px/s^2 系数 */
-#define BALL_MAX_V0      320     /* Lv1 最大速度 px/s */
-#define BALL_FRICTION0   0.992f  /* Lv1 每拍速度保留系数 */
+/* 玩法区配色 */
+#define BALL_COL_BG      0x0B1220
+#define BALL_COL_GRID    0x152033
+#define BALL_COL_BAR     0x121A2A
+#define BALL_COL_SCORE   0xFFCC66
+#define BALL_COL_TIME    0xE8F1FF
+#define BALL_COL_LV      0x5CDB95
+
+/* ---- 物理参数 ----
+ * 加速度计相对零点; 加大阻尼避免过飘 */
+#define BALL_R0          10
+#define BALL_ACC         1100.0f /* g → px/s^2 */
+#define BALL_MAX_V0      200     /* Lv1 最大速度 px/s */
+#define BALL_FRICTION0   0.968f  /* 每拍速度保留, 越小越「粘」 */
 
 /* ---- 物体 ---- */
 enum fruit_kind {
@@ -86,7 +94,7 @@ static struct {
     float vx, vy;
     u8 ball_r;
 
-    float zero_gx, zero_gy;      /* 进入 app 时的姿态零点 */
+    float zero_ax, zero_ay;      /* 进入 app 时的加速度零点 */
     u8 zeroed;
 
     struct fruit fr;             /* 场上活动目标(单目标制) */
@@ -197,6 +205,7 @@ static lv_color_t col_hex(u32 v)
 static void app_ball_cleanup(void);
 static void box_click_cb(lv_event_t *e);
 static void ball_del_cb(lv_event_t *e);
+static void ball_back_cb(lv_event_t *e);
 
 /* 水果/炸弹: 圆 + 简笔画特征(梗/条纹/引线) */
 static void draw_fruit(lv_color_t *fb, const struct fruit *f)
@@ -239,10 +248,10 @@ static void render(void)
     lv_color_t *fb = G.buf;
     u8 i;
 
-    /* 背景深色 + 网格淡纹 */
-    draw_rect(fb, 0, 0, GW, GH, col_hex(0x101018));
+    /* 玩法区背景 */
+    draw_rect(fb, 0, 0, GW, GH, col_hex(BALL_COL_BG));
     for (s16 y = 0; y < GH; y += 24) {
-        draw_rect(fb, 0, y, GW, 1, col_hex(0x1A1A26));
+        draw_rect(fb, 0, y, GW, 1, col_hex(BALL_COL_GRID));
     }
 
     /* 障碍柱 */
@@ -321,7 +330,7 @@ static void fruit_spawn(void)
     }
     for (tries = 0; tries < 32; tries++) {
         s16 x = (s16)(G.fr.r + 8 + rand() % (GW - 2 * (G.fr.r + 8)));
-        s16 y = (s16)(G.fr.r + 40 + rand() % (GH - 2 * (G.fr.r + 8) - 32));
+        s16 y = (s16)(G.fr.r + 8 + rand() % (GH - 2 * (G.fr.r + 8) - 8));
         if (far_enough(x, y, G.fr.r)) {
             G.fr.x = x;
             G.fr.y = y;
@@ -417,20 +426,19 @@ static void ball_step(void)
     struct sc7u22_si si;
     float ax, ay;
     float maxv = BALL_MAX_V0 + (G.lv - 1) * 30.0f;
-    float fric = BALL_FRICTION0 - (G.lv - 1) * 0.012f;
+    float fric = BALL_FRICTION0 - (G.lv - 1) * 0.003f;
     float dx, dy, dist, minv;
     u8 i;
 
     if (sc7u22_read_si(&si) == 0) {
         if (!G.zeroed) {
-            G.zero_gx = si.gx;
-            G.zero_gy = si.gy;
+            G.zero_ax = si.ax;
+            G.zero_ay = si.ay;
             G.zeroed = 1;
         }
-        /* EMA 平滑 → 加速度
-         * 轴映射(2026-10-31 现场校准): x←gx 取负(左右反, 实测), y←gy 直连 */
-        ax = -(si.gx - G.zero_gx) * BALL_ACC / 1000.0f;
-        ay = (si.gy - G.zero_gy) * BALL_ACC / 1000.0f;
+        /* 轴对调后左右仍反, 再取反 X; 上下已正确保持 */
+        ax = -(si.ay - G.zero_ay) * BALL_ACC;
+        ay = -(si.ax - G.zero_ax) * BALL_ACC;
         G.vx = G.vx * fric + ax * BALL_MS / 1000.0f;
         G.vy = G.vy * fric + ay * BALL_MS / 1000.0f;
         if (G.vx > maxv) {
@@ -458,8 +466,9 @@ static void ball_step(void)
         G.bx = GW - 1 - G.ball_r;
         G.vx = -G.vx * 0.7f;
     }
-    if (G.by < G.ball_r + 30) {
-        G.by = G.ball_r + 30;
+    /* 玩法 canvas 已在顶栏下方, 不再预留 +30 空气墙 */
+    if (G.by < G.ball_r) {
+        G.by = G.ball_r;
         G.vy = -G.vy * 0.7f;
     }
     if (G.by > GH - 1 - G.ball_r) {
@@ -563,68 +572,78 @@ static void ball_tick(lv_timer_t *t)
     }
 }
 
-/* 结算页: 本局得分 + TOP5(VM) */
+/* 结算页: 纵向 flex, 避免固定 Y 叠字 */
 static void show_result(void)
 {
     lv_color_t *fb = G.buf;
     struct ball_rank rk;
     u8 rank;
     u8 i;
+    lv_obj_t *box;
+    lv_obj_t *tt;
+    lv_obj_t *lb;
+    lv_obj_t *row;
+    lv_obj_t *hint;
 
-    draw_rect(fb, 0, 0, GW, GH, col_hex(0x101018));
-    draw_rect(fb, 20, 30, GW - 40, GH - 60, col_hex(0x1E1E2E));
+    draw_rect(fb, 0, 0, GW, GH, col_hex(BALL_COL_BG));
     lv_obj_invalidate(G.canvas);
 
-    lv_obj_t *box = lv_obj_create(G.root);
-    lv_obj_set_size(box, GW - 60, GH - 70);
-    lv_obj_align(box, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_color(box, lv_color_hex(0x1E1E2E), 0);
-    lv_obj_set_style_border_color(box, lv_color_hex(WATCH_COL_ACCENT), 0);
-    lv_obj_set_style_border_width(box, 1, 0);
-    lv_obj_set_style_radius(box, 10, 0);
-    lv_obj_set_style_pad_all(box, 8, 0);
-    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t *tt = lv_label_create(box);
-    lv_obj_set_style_text_font(tt, &lv_font_simsun_16_cjk, 0);
-    lv_obj_set_style_text_color(tt, lv_color_hex(0xFFD54F), 0);
-    lv_label_set_text_fmt(tt, "本局: %d 分  (LV%d)", G.score, G.lv);
-    lv_obj_align(tt, LV_ALIGN_TOP_MID, 0, 2);
-
-    rank = ball_rank_push(G.score, BALL_COUNTDOWN_S - G.remain_s);
-    if (rank == 1) {
-        lv_obj_t *nr = lv_label_create(box);
-        lv_obj_set_style_text_font(nr, &lv_font_simsun_16_cjk, 0);
-        lv_obj_set_style_text_color(nr, lv_color_hex(0xFF1744), 0);
-        lv_label_set_text(nr, "新纪录!");
-        lv_obj_align_to(nr, tt, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
+    /* 顶栏状态文字暂隐, 避免与结算分数重叠 */
+    if (G.s_lbl_score) {
+        lv_obj_add_flag(G.s_lbl_score, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (G.s_lbl_time) {
+        lv_obj_add_flag(G.s_lbl_time, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (G.s_lbl_lv) {
+        lv_obj_add_flag(G.s_lbl_lv, LV_OBJ_FLAG_HIDDEN);
     }
 
-    lv_obj_t *lb = lv_label_create(box);
-    lv_obj_set_style_text_font(lb, &lv_font_simsun_16_cjk, 0);
-    lv_obj_set_style_text_color(lb, lv_color_hex(WATCH_COL_TEXT), 0);
-    lv_label_set_text(lb, "排行榜 TOP5");
-    lv_obj_align(lb, LV_ALIGN_TOP_MID, 0, 26);
+    box = lv_obj_create(G.root);
+    lv_obj_set_size(box, GW - 24, GH - 16);
+    lv_obj_align(box, LV_ALIGN_BOTTOM_MID, 0, -6);
+    lv_obj_set_style_bg_color(box, lv_color_hex(BALL_COL_BAR), 0);
+    lv_obj_set_style_border_color(box, lv_color_hex(0x2A3A55), 0);
+    lv_obj_set_style_border_width(box, 2, 0);
+    lv_obj_set_style_radius(box, 12, 0);
+    lv_obj_set_style_pad_all(box, 8, 0);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(box, 4, 0);
+
+    rank = ball_rank_push(G.score, BALL_COUNTDOWN_S - G.remain_s);
+
+    tt = lv_label_create(box);
+    lv_obj_set_style_text_font(tt, &lv_font_watch_16_cn, 0);
+    lv_obj_set_style_text_color(tt, lv_color_hex(BALL_COL_SCORE), 0);
+    if (rank == 1) {
+        lv_label_set_text_fmt(tt, "本局 %d 分  新纪录", G.score);
+    } else {
+        lv_label_set_text_fmt(tt, "本局 %d 分", G.score);
+    }
+
+    lb = lv_label_create(box);
+    lv_obj_set_style_text_font(lb, &lv_font_watch_16_cn, 0);
+    lv_obj_set_style_text_color(lb, lv_color_hex(BALL_COL_TIME), 0);
+    lv_label_set_text(lb, "TOP3");
 
     if (ball_rank_load(&rk) == 0) {
-        lv_obj_t *rows[5];
-        for (i = 0; i < 5; i++) {
-            rows[i] = lv_label_create(box);
-            lv_obj_set_style_text_font(rows[i], &lv_font_simsun_16_cjk, 0);
-            lv_obj_set_style_text_color(rows[i],
-                                        lv_color_hex(WATCH_COL_TEXT_DIM), 0);
-            lv_label_set_text_fmt(rows[i], "%d. %d 分", i + 1, rk.score[i]);
-            lv_obj_align(rows[i], LV_ALIGN_TOP_LEFT, 14, 48 + i * 18);
+        for (i = 0; i < 3; i++) {
+            row = lv_label_create(box);
+            lv_obj_set_style_text_font(row, &lv_font_watch_16_cn, 0);
+            lv_obj_set_style_text_color(row, lv_color_hex(0x9BB0C9), 0);
+            lv_label_set_text_fmt(row, "%d.  %d", i + 1, rk.score[i]);
         }
     }
 
-    lv_obj_t *hint = lv_label_create(box);
-    lv_obj_set_style_text_font(hint, &lv_font_simsun_16_cjk, 0);
-    lv_obj_set_style_text_color(hint, lv_color_hex(WATCH_COL_ACCENT2), 0);
-    lv_label_set_text(hint, "点按任意处再来一局");
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -2);
+    hint = lv_label_create(box);
+    lv_obj_set_style_text_font(hint, &lv_font_watch_16_cn, 0);
+    lv_obj_set_style_text_color(hint, lv_color_hex(BALL_COL_LV), 0);
+    lv_label_set_text(hint, "点按再来一局");
+    lv_obj_set_style_pad_top(hint, 6, 0);
 
-    /* 点按重开 */
     lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(box, box_click_cb, LV_EVENT_CLICKED, NULL);
 }
@@ -664,52 +683,89 @@ static void box_click_cb(lv_event_t *e)
         return;
     }
     lv_obj_del(box);
+    if (G.s_lbl_score) {
+        lv_obj_clear_flag(G.s_lbl_score, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (G.s_lbl_time) {
+        lv_obj_clear_flag(G.s_lbl_time, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (G.s_lbl_lv) {
+        lv_obj_clear_flag(G.s_lbl_lv, LV_OBJ_FLAG_HIDDEN);
+    }
     ball_reset(G.canvas);
     G.playing = 1;
     watch_ui_toast("开始! 倾斜设备移动小球");
 }
 
+
 /* ============================ 入口 ============================ */
 lv_obj_t *app_ball_create(lv_obj_t *parent)
 {
     lv_obj_t *root;
-    lv_obj_t *chrome;
+    lv_obj_t *bar;
+    lv_obj_t *back;
+    lv_obj_t *bl;
     u8 i;
 
     memset(&G, 0, sizeof(G));
 
-    /* app 根(与 watch_apps.c make_app_root 同款) */
+    /* 全屏深色根: 避免顶栏空隙透出主页浅色脏区 */
     root = lv_obj_create(parent);
     lv_obj_set_size(root, LCD_W, LCD_H);
-    lv_obj_set_style_bg_color(root, lv_color_hex(WATCH_COL_BG), 0);
+    lv_obj_set_style_bg_color(root, lv_color_hex(BALL_COL_BG), 0);
+    lv_obj_set_style_bg_opa(root, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(root, 0, 0);
     lv_obj_set_style_pad_all(root, 0, 0);
     lv_obj_set_style_radius(root, 0, 0);
     lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE);
-
+    lv_obj_add_flag(root, LV_OBJ_FLAG_GESTURE_BUBBLE);
     G.root = root;
-    chrome = watch_ui_create_app_chrome(root, "平衡球");
 
-    /* 状态行: 分数 | 倒计时 | 难度 */
-    G.s_lbl_score = lv_label_create(chrome);
+    /* 顶栏: 通栏深色, 仅 返回 | 分数 | 时间 | LV, 无标题避免重叠 */
+    bar = lv_obj_create(root);
+    lv_obj_set_size(bar, LCD_W, BALL_TOP_H);
+    lv_obj_align(bar, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_set_style_bg_color(bar, lv_color_hex(BALL_COL_BAR), 0);
+    lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_side(bar, LV_BORDER_SIDE_BOTTOM, 0);
+    lv_obj_set_style_border_color(bar, lv_color_hex(0x243148), 0);
+    lv_obj_set_style_border_width(bar, 1, 0);
+    lv_obj_set_style_radius(bar, 0, 0);
+    lv_obj_set_style_pad_hor(bar, 6, 0);
+    lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+
+    back = lv_btn_create(bar);
+    lv_obj_set_size(back, 52, 26);
+    lv_obj_align(back, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_bg_color(back, lv_color_hex(0x1C2A40), 0);
+    lv_obj_set_style_radius(back, 8, 0);
+    lv_obj_set_style_shadow_width(back, 0, 0);
+    lv_obj_add_event_cb(back, ball_back_cb, LV_EVENT_CLICKED, NULL);
+    bl = lv_label_create(back);
+    lv_obj_set_style_text_font(bl, &lv_font_watch_16_cn, 0);
+    lv_obj_set_style_text_color(bl, lv_color_hex(0x8EB6FF), 0);
+    lv_label_set_text(bl, "返回");
+    lv_obj_center(bl);
+
+    G.s_lbl_score = lv_label_create(bar);
     lv_obj_set_style_text_font(G.s_lbl_score, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(G.s_lbl_score, lv_color_hex(0xFFD54F), 0);
+    lv_obj_set_style_text_color(G.s_lbl_score, lv_color_hex(BALL_COL_SCORE), 0);
     lv_label_set_text(G.s_lbl_score, "0");
-    lv_obj_align(G.s_lbl_score, LV_ALIGN_TOP_LEFT, 8, 2);
+    lv_obj_align(G.s_lbl_score, LV_ALIGN_LEFT_MID, 58, 0);
 
-    G.s_lbl_time = lv_label_create(chrome);
+    G.s_lbl_time = lv_label_create(bar);
     lv_obj_set_style_text_font(G.s_lbl_time, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(G.s_lbl_time, lv_color_hex(WATCH_COL_TEXT), 0);
+    lv_obj_set_style_text_color(G.s_lbl_time, lv_color_hex(BALL_COL_TIME), 0);
     lv_label_set_text(G.s_lbl_time, "60s");
-    lv_obj_align(G.s_lbl_time, LV_ALIGN_TOP_MID, 0, 2);
+    lv_obj_align(G.s_lbl_time, LV_ALIGN_CENTER, 0, 0);
 
-    G.s_lbl_lv = lv_label_create(chrome);
+    G.s_lbl_lv = lv_label_create(bar);
     lv_obj_set_style_text_font(G.s_lbl_lv, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(G.s_lbl_lv, lv_color_hex(0x00E676), 0);
+    lv_obj_set_style_text_color(G.s_lbl_lv, lv_color_hex(BALL_COL_LV), 0);
     lv_label_set_text(G.s_lbl_lv, "LV1");
-    lv_obj_align(G.s_lbl_lv, LV_ALIGN_TOP_RIGHT, -8, 2);
+    lv_obj_align(G.s_lbl_lv, LV_ALIGN_RIGHT_MID, -4, 0);
 
-    /* canvas 整帧缓冲(SDRAM 堆 ~138KB), 挂 root(全屏), chrome 只是顶栏 */
+    /* 玩法 canvas 仅占顶栏以下, 与顶栏分区刷新 */
     G.buf = (lv_color_t *)malloc((u32)GW * GH * sizeof(lv_color_t));
     if (!G.buf) {
         watch_ui_toast("内存不足");
@@ -718,8 +774,11 @@ lv_obj_t *app_ball_create(lv_obj_t *parent)
     memset(G.buf, 0, (u32)GW * GH * sizeof(lv_color_t));
     G.canvas = lv_canvas_create(root);
     lv_canvas_set_buffer(G.canvas, G.buf, GW, GH, LV_IMG_CF_TRUE_COLOR);
-    lv_obj_align(G.canvas, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_size(G.canvas, GW, GH);
+    lv_obj_align(G.canvas, LV_ALIGN_BOTTOM_LEFT, 0, 0);
     lv_obj_clear_flag(G.canvas, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(G.canvas, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_move_foreground(bar);
 
     for (i = 0; i < 8; i++) {
         G.trail_x[i] = 0;
@@ -733,10 +792,8 @@ lv_obj_t *app_ball_create(lv_obj_t *parent)
     ball_reset(G.canvas);
     G.playing = 1;
     G.tick = lv_timer_create(ball_tick, BALL_MS, NULL);
-
-    /* 退出清理: app 层被 watch_ui_close_app 删除时释放堆资源 */
     lv_obj_add_event_cb(root, ball_del_cb, LV_EVENT_DELETE, NULL);
-
+    lv_obj_invalidate(root);
     return root;
 }
 
@@ -759,6 +816,12 @@ static void app_ball_cleanup(void)
         free(G.buf);
         G.buf = NULL;
     }
+}
+
+static void ball_back_cb(lv_event_t *e)
+{
+    (void)e;
+    watch_ui_close_app();
 }
 
 /* app 根删除时释放 lv_timer 与堆缓冲(游戏退出/关机路径) */

@@ -1,5 +1,5 @@
-Minimal voice prompts for fw-mini-sdk watch build.
-Packaged by download.bat instead of full audlogo/ (~1.25MB -> ~0.32MB).
-
-Kept: poweron/PowerOff, LowBat*, Ota*, BtSucceed/BtDisc, NetCfgSucc/Fail, Volume, ring.
+Minimal voice pack for fw-mini-sdk.
+Kept: poweron.mp3 (placeholder so isd -res audlogo_mini is non-empty).
+App does not play other prompts; deleted Bt*/LowBat*/NetCfg*/Ota*/PowerOff/Volume/ring.
 Full set remains in ../audlogo/.
+

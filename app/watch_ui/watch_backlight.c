@@ -2,9 +2,13 @@
 #include "system/includes.h"
 #include "device/device.h"
 #include "asm/pwm.h"
+#include "syscfg/syscfg_id.h"
 #include "lcd_drive.h"
 #include "watch_backlight.h"
 #include "watch_style.h"
+
+/* 用户自定义区 1~59; 55 被平衡球占用 */
+#define WATCH_BL_CFG_ID  54
 
 static u8 s_percent = WATCH_BL_DEFAULT;
 static u8 s_saved = WATCH_BL_DEFAULT;
@@ -13,8 +17,16 @@ static struct pwm_platform_data s_pwm_cfg;
 
 void watch_backlight_init(void)
 {
+    u8 v = 0;
+
     s_percent = WATCH_BL_DEFAULT;
     s_saved = WATCH_BL_DEFAULT;
+    if (syscfg_read(WATCH_BL_CFG_ID, &v, sizeof(v)) == sizeof(v) &&
+        v >= WATCH_BL_MIN && v <= WATCH_BL_MAX) {
+        s_percent = v;
+        s_saved = v;
+    }
+
     s_pwm = dev_open("pwm_bl", &s_pwm_cfg);
     if (!s_pwm) {
         lcd_bl_pinstate(BL_ON);
@@ -54,6 +66,15 @@ void watch_backlight_set(u8 percent)
     } else {
         lcd_bl_pinstate(BL_ON);
     }
+}
+
+void watch_backlight_persist(void)
+{
+    u8 v = s_percent < WATCH_BL_MIN ? WATCH_BL_DEFAULT : s_percent;
+    if (v > WATCH_BL_MAX) {
+        v = WATCH_BL_MAX;
+    }
+    syscfg_write(WATCH_BL_CFG_ID, &v, sizeof(v));
 }
 
 u8 watch_backlight_get(void)

@@ -89,4 +89,19 @@ dts_decoder
 
 ogg_vorbis_decoder
 vir_dev_sub
-subdev_aec_enc
+
+
+
+subdev_vad_enc
+subdev_jlvad_enc
+
+vad_init
+fvad_new
+JLSP_vad_init
+
+
+
+subdev_dns_enc
+subdev_dns_dual_enc
+dns_enc_enable
+JLSP_ns_init

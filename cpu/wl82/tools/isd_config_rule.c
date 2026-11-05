@@ -317,6 +317,11 @@ EXIF_ADR=AUTO;[保留客户使用 也可自定义名字 参考example文档使�
 EXIF_LEN=0x1000;
 EXIF_OPT=1;
 
+/* 内置 Flash 录音区(phone_rec_fs / walkie): 名字必须为 REC, head_addr_get("REC") */
+REC_ADR=AUTO;
+REC_LEN=4M;
+REC_OPT=1;
+
 #if defined CONFIG_AUDIO_ENABLE && defined CONFIG_VOICE_PROMPT_FILE_SAVE_IN_RESERVED_ZONE
 AUPACKRES_FILE=packres/AUPACKRES;
 AUPACKRES_ADR=AUTO; [请根据编译后FLASH INFO打印的实际地址填写,比如0x59a000]

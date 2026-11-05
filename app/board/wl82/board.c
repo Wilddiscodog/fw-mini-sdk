@@ -96,14 +96,14 @@ PWM_PLATFORM_DATA_END();
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
 static const struct emi_platform_data emi_data = {
 	.bits_mode      = EMI_8BITS_MODE,       /* 8 位 8080 并口 */
-	/* HSB≈120M: DIV4 → ~30MHz 写时钟(DIV5≈24M 上一档; 早年 DIV4 花屏
-	 * 是初始化序列错误所致, 与速度无关——2026-10-31 用户确认提速) */
-	.baudrate       = EMI_BAUD_DIV4,
+	/* HSB≈120M: DIV2 → ~60MHz 写时钟(原 DIV4≈30M; 滑动撕裂/卡顿时提速
+	 * 缩短单帧 flush。若花屏再退回 DIV3≈40M) */
+	.baudrate       = EMI_BAUD_DIV2,
 	.colection      = EMI_FALLING_COLT,     /* 下降沿采样 */
 	.time_out       = 1 * 1000,             /* 写超时 ms */
 	.th             = EMI_TWIDTH_NO_HALF,
 	.ts             = 0,
-	.tw             = EMI_BAUD_DIV4,   /* WR 脉宽与 baud 同档 */
+	.tw             = EMI_BAUD_DIV2,   /* WR 脉宽与 baud 同档 */
 	.data_bit_en    = 0,
 };
 
@@ -356,11 +356,11 @@ const struct gpcnt_platform_data gpcnt_data = {
 #endif
 
 /*============================ 内置音频: MIC + DAC (MINI_AUDIO_SUPPORT) =========
- * 原理图接线(与芯片 pad 名对照):
- *   PH8=MIC1N, PH9=MIC1P  → 拾音(通话 MIC1 差分; 相对 ladc.h「PH8=P/PH9=N」板级对调)
- *   PH6=MIC3P, PH5=MIC3N  → 功放回采(与 ladc.h 一致)
+ * 单麦对齐原厂 develop/demo_video:
+ *   PH8=MIC1N, PH9=MIC1P  → MIC1 差分拾音
  *   PH7 高电平 = 功放使能(pa_mute_value=0 → MUTE 拉低, 开声拉高)
- * 差分仍开 LADC_CH_MIC1_P_N|MIC3_P_N(两脚都进 ADC); MIC1 板级对调仅极性反相。 */
+ *   不再打开 MIC3 回采
+ */
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
 #include "asm/audio.h"
 #include "server/audio_dev.h"           /* audio_platform_data + audio_dev_ops */
@@ -379,12 +379,17 @@ static const struct dac_platform_data dac_data = {
     .mute_delay_ms      = 200,
 };
 static const struct adc_platform_data adc_data = {
-    /* MIC1 差分(PH8/PH9) + MIC3 差分(PH5/PH6); 通道号见 app_config */
-    .mic_channel        = LADC_CH_MIC1_P_N | LADC_CH_MIC3_P_N,
-    .mic_ch_num         = 2,
-    .all_channel_open   = 1,
+    /* 与原厂 board_*_develop / demo_uvc 单麦分支一致 */
+#ifdef CONFIG_ALL_ADC_CHANNEL_OPEN_ENABLE
+    .mic_channel        = TCFG_MIC_CHANNEL_MAP,
+    .mic_ch_num         = TCFG_MIC_CHANNEL_NUM,
     .linein_channel     = 0,
     .linein_ch_num      = 0,
+    .all_channel_open   = 1,
+#else
+    .mic_channel        = LADC_CH_MIC1_P_N,
+    .mic_ch_num         = 1,
+#endif
     .isel               = 2,
     .dump_num           = 480,
 };

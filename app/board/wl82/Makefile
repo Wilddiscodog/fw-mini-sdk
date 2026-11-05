@@ -66,7 +66,7 @@ ifndef MINI_USB_ENABLE
 MINI_USB_ENABLE ?= 1
 endif
 # 音频库注入 LFLAGS 用(LFLAGS 是 := 立即展开, 此变量必须先于其定义)
-# audio_server.a: 音频服务+audio_dev_ops; libaec/libdns/libjlsp: AEC 回采算法库
+# audio_server.a: 音频服务+audio_dev_ops; libaec/libdns/libvad: 原厂通话/录音算法
 # (jl_math 源码在 LCD 条件块之后追加——必须在 c_SRC_FILES := 主赋值之后)
 AUDIO_LIB :=
 ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
@@ -77,6 +77,8 @@ AUDIO_LIB := \
 	../../../cpu/wl82/liba/media_app.a \
 	../../../cpu/wl82/liba/libaec.a \
 	../../../cpu/wl82/liba/libdns.a \
+	../../../cpu/wl82/liba/libvad.a \
+	../../../cpu/wl82/liba/lib_dvad.a \
 	../../../cpu/wl82/liba/libjlsp.a \
 	../../../cpu/wl82/liba/lib_m4a_dec_seek.a \
 	../../../cpu/wl82/liba/lib_mp3_dec.a \
@@ -239,6 +241,7 @@ endif
 # 头文件搜索路径
 INCLUDES := \
 	-I../../../app/include \
+	-I../../../app/walkie \
 	-I../../../app/common_ble/include \
 	-I../../../include_lib \
 	-I../../../include_lib/driver \
@@ -506,10 +509,21 @@ c_SRC_FILES += ../../../app/watch_ui/watch_power.c
 c_SRC_FILES += ../../../app/watch_ui/watch_battery.c
 c_SRC_FILES += ../../../app/watch_ui/watch_apps.c
 c_SRC_FILES += ../../../app/watch_ui/watch_ball.c
+c_SRC_FILES += ../../../app/watch_ui/watch_ski.c
 c_SRC_FILES += ../../../app/watch_ui/assets/watch_icons.c
+c_SRC_FILES += ../../../app/watch_ui/assets/watch_icon_ski.c
+c_SRC_FILES += ../../../app/watch_ui/assets/ski_sprites.c
+c_SRC_FILES += ../../../app/watch_ui/assets/lv_font_watch_16_cn.c
+c_SRC_FILES += ../../../app/walkie/walkie_svc.c
+c_SRC_FILES += ../../../app/walkie/walkie_net.c
+c_SRC_FILES += ../../../app/walkie/walkie_av.c
+c_SRC_FILES += ../../../app/walkie/walkie_rec.c
+c_SRC_FILES += ../../../app/walkie/walkie_msg.c
+c_SRC_FILES += ../../../app/walkie/walkie_audio_keep.c
+c_SRC_FILES += ../../../app/common/fat_nor/phone_rec_fs.c
 INCLUDES    += -I../../../third/lvgl -I$(LVGL_DIR) -I$(LVGL_DIR)/src
 INCLUDES    += -I../../../third/lvgl_port/driver -I../../../driver/lcd/include
-INCLUDES    += -I../../../app/watch_ui -I../../../app/include
+INCLUDES    += -I../../../app/watch_ui -I../../../app/include -I../../../app/walkie
 DEFINES     += -DLV_CONF_INCLUDE_SIMPLE
 endif
 

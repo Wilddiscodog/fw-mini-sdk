@@ -1251,4 +1251,36 @@ int bt_music_ui_is_playing(void)
     return __this->media_play_flag ? 1 : 0;
 }
 
+static u8 s_walkie_duck;
+static u8 s_walkie_was_playing;
+
+int bt_music_ui_duck_begin(void)
+{
+    if (s_walkie_duck) {
+        return s_walkie_was_playing;
+    }
+    s_walkie_was_playing = __this->media_play_flag ? 1 : 0;
+    if (s_walkie_was_playing) {
+        /* AVCTP PLAY 在多数手机上是切换播放/暂停 */
+        user_send_cmd_prepare(USER_CTRL_AVCTP_OPID_PLAY, 0, NULL);
+    }
+    /* 释放 A2DP 解码占用的 DAC, 交给对讲 PCM */
+    bt_music_audio_takeover();
+    s_walkie_duck = 1;
+    return s_walkie_was_playing;
+}
+
+void bt_music_ui_duck_end(void)
+{
+    if (!s_walkie_duck) {
+        return;
+    }
+    s_walkie_duck = 0;
+    if (s_walkie_was_playing) {
+        user_send_cmd_prepare(USER_CTRL_AVCTP_OPID_PLAY, 0, NULL);
+    }
+    s_walkie_was_playing = 0;
+}
+
 #endif
+

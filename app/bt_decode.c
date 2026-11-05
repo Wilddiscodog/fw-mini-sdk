@@ -630,7 +630,11 @@ static int phone_speak_start(int format, int packet_len)
 
     req.enc.cmd = AUDIO_ENC_OPEN;
     req.enc.channel = 1;
-    req.enc.volume = 100;
+#if defined CONFIG_AUDIO_ADC_GAIN
+    req.enc.volume = CONFIG_AUDIO_ADC_GAIN;
+#else
+    req.enc.volume = 80;
+#endif
     req.enc.output_buf = NULL;
     req.enc.sample_source = "mic";
     req.enc.vfs_ops = &bt_phone_audio_dec_vfs_ops;

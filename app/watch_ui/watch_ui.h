@@ -5,13 +5,13 @@
 #include "lvgl.h"
 
 enum watch_app_id {
-    WATCH_APP_GYRO = 0,
+    WATCH_APP_WALKIE = 0,
+    WATCH_APP_GYRO,
     WATCH_APP_NET_MUSIC,
     WATCH_APP_BT_MUSIC,
-    WATCH_APP_WALKIE,
-    WATCH_APP_RECORDER,
-    WATCH_APP_SETTINGS,
     WATCH_APP_BALL,
+    WATCH_APP_SKI,
+    WATCH_APP_SETTINGS,
     WATCH_APP_COUNT,
 };
 
@@ -29,6 +29,7 @@ void watch_ui_start(void);
 void watch_ui_open_app(enum watch_app_id id);
 void watch_ui_close_app(void);
 u8 watch_ui_app_is_open(void);
+enum watch_app_id watch_ui_app_current(void);
 void watch_ui_open_dropdown(void);
 void watch_ui_close_dropdown(void);
 u8 watch_ui_dropdown_is_open(void);
@@ -38,5 +39,7 @@ const struct watch_app_desc *watch_ui_app_table(void);
 /* shared chrome helpers */
 lv_obj_t *watch_ui_create_app_chrome(lv_obj_t *parent, const char *title);
 void watch_ui_toast(const char *msg);
+/* 顶部通知条(类似安卓通知), 默认约 2s 后消失 */
+void watch_ui_notify(const char *msg);
 
 #endif

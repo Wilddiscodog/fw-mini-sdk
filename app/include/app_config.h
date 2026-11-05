@@ -147,19 +147,26 @@
 #define CONFIG_AUDIO_RECORDER_CHANNEL       1
 #define CONFIG_AUDIO_RECORDER_DURATION      (30 * 1000)
 
-#define CONFIG_ALL_ADC_CHANNEL_OPEN_ENABLE        /* 多 MIC 通道 bit_map 开关 */
-#define CONFIG_AUDIO_ADC_CHANNEL_L          1     /* MIC1 拾音 */
-#define CONFIG_AUDIO_ADC_CHANNEL_R          3     /* MIC3 */
-#define CONFIG_AUDIO_ADC_GAIN               100
+/* 单麦克风(对齐原厂 wifi_story develop / demo_video): 仅 MIC1 差分 */
+#define CONFIG_ALL_ADC_CHANNEL_OPEN_ENABLE
+#define TCFG_MIC_CHANNEL_MAP                LADC_CH_MIC1_P_N
+#define TCFG_MIC_CHANNEL_NUM                1
+#define CONFIG_AUDIO_ADC_CHANNEL_L          1     /* MIC1 */
+#define CONFIG_AUDIO_ADC_CHANNEL_R          1     /* 单麦: 与 L 同通道, 勿再开 MIC3 */
+#define CONFIG_AUDIO_ADC_GAIN               30    /* 数字增益 0~100; 降底噪 */
+/* 模拟增益 0~31, 经 adc_multiplex_set_gain; 原厂 AEC 默认 mic_again≈3~12 */
+#define CONFIG_AUDIO_ADC_ANALOG_GAIN        5
 #define CONFIG_REVERB_ADC_CHANNEL           1
 
-/* AEC: MIC3(PH5/6) 回采功放; MIC1(PH8/9) 通话 MIC */
-#define CONFIG_AEC_ENC_ENABLE
-/* 暂关 DNS 深度降噪, 便于确认串扰/回声是否与 DNS 有关; libdns.a / dns_encoder 任务仍保留 */
-/* #define CONFIG_DNS_ENC_ENABLE */
+/* 对讲降噪走原厂 DNS(+VAD), 对齐 demo_audio/recorder; 不用自研改 PCM.
+ * AEC/ANS 半开曾导致 PTT 时 aec_enc_open 崩溃, 仍关闭. */
+/* #define CONFIG_AEC_ENC_ENABLE */
+/* #define CONFIG_ANS_ENC_ENABLE */
+#define CONFIG_DNS_ENC_ENABLE
+#define CONFIG_VAD_ENC_ENABLE
 #define CONFIG_PHONE_CALL_ADC_CHANNEL       1     /* MIC1 */
-#define CONFIG_AEC_ADC_CHANNEL              3     /* MIC3 回采 */
-#define CONFIG_AEC_AUDIO_ADC_GAIN           80
+#define CONFIG_AEC_ADC_CHANNEL              1     /* 单麦: 与通话同通道, 禁止误开 MIC3 */
+#define CONFIG_AEC_AUDIO_ADC_GAIN           10    /* 回采模拟增益同样 0~31 */
 
 /* EQ: 本地播放用; 已移除 USB CDC1 在线调音(cfg_tool)。
  * CDC1 闲置数据口; CDC2=user_cdc_* 日志。 */

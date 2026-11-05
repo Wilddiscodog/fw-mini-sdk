@@ -43,12 +43,8 @@ static bool touchpad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
     } else {
         data->state = LV_INDEV_STATE_REL;
     }
-    if (data->state != last_st) {
-        last_st = data->state;
-        printf("[indev] %s (%d,%d)\n",
-               data->state == LV_INDEV_STATE_PR ? "PR" : "REL",
-               data->point.x, data->point.y);
-    }
+    last_st = data->state;
+    (void)last_st;
     return false;
 }
 

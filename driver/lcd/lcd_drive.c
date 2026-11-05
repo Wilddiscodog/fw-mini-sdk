@@ -194,6 +194,20 @@ void user_lcd_poweroff(void)
     }
 }
 
+void user_lcd_enter_sleep(void)
+{
+    if (lcd_dev && lcd_dev->EnterSleep) {
+        lcd_dev->EnterSleep();
+    }
+}
+
+void user_lcd_exit_sleep(void)
+{
+    if (lcd_dev && lcd_dev->ExitSleep) {
+        lcd_dev->ExitSleep();
+    }
+}
+
 void user_ui_lcd_init(void)
 {
 #if TCFG_USE_SD_ADD_UI_FILE
@@ -405,10 +419,9 @@ void lcd_lvgl_full(u16 xs, u16 xe, u16 ys, u16 ye, char *img)
     if (!lcd_dev || !lcd_dev->LCD_Lvgl_Full) {
         return;
     }
-    /* 每帧首片(顶行)对齐 TE, 后续行条直接写, 兼顾防撕裂与吞吐 */
-    if (ys == 0) {
-        lcd_wait_te();
-    }
+    /* TE 改由 lv_port_disp 在「每帧第一片」等待; 此处只写, 避免
+     * 滑动脏区 ys!=0 时漏等 TE、或与上层重复空转 */
+    (void)ys;
     lcd_dev->LCD_Lvgl_Full(xs, xe, ys, ye, img);
 }
 

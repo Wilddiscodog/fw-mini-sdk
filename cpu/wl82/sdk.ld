@@ -96,7 +96,22 @@ dts_decoder
 
 ogg_vorbis_decoder
 vir_dev_sub
-subdev_aec_enc
+
+
+
+subdev_vad_enc
+subdev_jlvad_enc
+
+vad_init
+fvad_new
+JLSP_vad_init
+
+
+
+subdev_dns_enc
+subdev_dns_dual_enc
+dns_enc_enable
+JLSP_ns_init
 
 );
 
@@ -153,12 +168,18 @@ SECTIONS
         *(.jlsp_code)
         . = ALIGN(4);
         *(.jlsp_const)
-        *(.sms_code)
-        *(.sms_sparse_code)
+
+
         . = ALIGN(4);
-        *(.opcore_maskrom)
+        *(.dns_common_data)
         . = ALIGN(4);
-        *(.sms_const)
+        *(.dns_16k_data)
+        . = ALIGN(4);
+        *(.dns_8k_data)
+        . = ALIGN(4);
+        *(.dns_param_data_single)
+        . = ALIGN(4);
+        *(.dns_param_data_dual)
         *(.dts_dec_code)
         *(.dts_dec_const)
         *(.dts_dec_ff_const)
@@ -495,6 +516,13 @@ SECTIONS
     . = ORIGIN(sdram);
     .data ALIGN(32):
     {
+
+
+
+
+
+        . = ALIGN(4);
+        *(.jlsp_data)
         . = ALIGN(4);
         *(.ui_ram)
 

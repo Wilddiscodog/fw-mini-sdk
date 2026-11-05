@@ -5,6 +5,7 @@
 #include "lvgl.h"
 #include "lcd_config.h"
 #include "watch_battery.h"
+#include "watch_clock.h"
 #include "watch_style.h"
 
 /* 4.2V 锂电线性估算: 3.50V→0%, 4.20V→100% */
@@ -14,7 +15,9 @@
 #define PIN_CHG_FULL    IO_PORTA_00
 #define PIN_USB_DET     IO_PORTA_08
 
-static lv_obj_t *s_lbl;
+static lv_obj_t *s_bar;
+static lv_obj_t *s_lbl_time;
+static lv_obj_t *s_lbl_bat;
 static lv_timer_t *s_tm;
 static u16 s_mv;
 static u8 s_pct;
@@ -34,7 +37,6 @@ static void battery_sample(void)
 {
 	u32 v;
 
-	/* 片内 VBAT 通道已是 1/4 分压采样, *4 得电池 mV */
 	v = adc_get_voltage(AD_CH_VBAT) * 4;
 	if (v < 2000 || v > 5000) {
 		/* 异常读数时保持上次 */
@@ -52,7 +54,6 @@ static void battery_sample(void)
 	}
 
 	s_usb = gpio_read(PIN_USB_DET) ? 1 : 0;
-	/* CHRG 开漏: 0=充电中, 1=充满或未充 */
 	s_full = (s_usb && gpio_read(PIN_CHG_FULL)) ? 1 : 0;
 }
 
@@ -60,12 +61,19 @@ static void battery_ui_refresh(lv_timer_t *t)
 {
 	char buf[40];
 	u16 mv;
+	u8 h, m;
 	(void)t;
 
 	battery_sample();
 	mv = s_mv;
 
-	if (s_lbl) {
+	watch_clock_get_hm(&h, &m);
+	if (s_lbl_time) {
+		lv_snprintf(buf, sizeof(buf), "%02u:%02u", h, m);
+		lv_label_set_text(s_lbl_time, buf);
+	}
+
+	if (s_lbl_bat) {
 		if (s_usb && s_full) {
 			lv_snprintf(buf, sizeof(buf), "%d.%02dV 满",
 				    mv / 1000, (mv % 1000) / 10);
@@ -76,7 +84,7 @@ static void battery_ui_refresh(lv_timer_t *t)
 			lv_snprintf(buf, sizeof(buf), "%d.%02dV",
 				    mv / 1000, (mv % 1000) / 10);
 		}
-		lv_label_set_text(s_lbl, buf);
+		lv_label_set_text(s_lbl_bat, buf);
 	}
 }
 
@@ -87,13 +95,28 @@ void watch_battery_init(void)
 
 	battery_sample();
 
-	if (!s_lbl) {
-		s_lbl = lv_label_create(lv_layer_top());
-		lv_obj_set_style_text_font(s_lbl, &lv_font_montserrat_14, 0);
-		lv_obj_set_style_text_color(s_lbl, lv_color_hex(WATCH_COL_TEXT), 0);
-		lv_obj_set_style_bg_opa(s_lbl, LV_OPA_TRANSP, 0);
-		lv_obj_align(s_lbl, LV_ALIGN_TOP_MID, 0, 4);
-		lv_obj_add_flag(s_lbl, LV_OBJ_FLAG_FLOATING);
+	/* 最顶端居中: 时间 | 电压 并排 */
+	if (!s_bar) {
+		s_bar = lv_obj_create(lv_layer_top());
+		lv_obj_set_size(s_bar, LCD_W - WATCH_SAFE_X * 2, 18);
+		lv_obj_align(s_bar, LV_ALIGN_TOP_MID, 0, 1);
+		lv_obj_set_style_bg_opa(s_bar, LV_OPA_TRANSP, 0);
+		lv_obj_set_style_border_width(s_bar, 0, 0);
+		lv_obj_set_style_pad_all(s_bar, 0, 0);
+		lv_obj_set_style_pad_column(s_bar, 14, 0);
+		lv_obj_set_flex_flow(s_bar, LV_FLEX_FLOW_ROW);
+		lv_obj_set_flex_align(s_bar, LV_FLEX_ALIGN_CENTER,
+				      LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+		lv_obj_clear_flag(s_bar, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+		lv_obj_add_flag(s_bar, LV_OBJ_FLAG_FLOATING);
+
+		s_lbl_time = lv_label_create(s_bar);
+		lv_obj_set_style_text_font(s_lbl_time, &lv_font_montserrat_14, 0);
+		lv_obj_set_style_text_color(s_lbl_time, lv_color_hex(WATCH_COL_TEXT), 0);
+
+		s_lbl_bat = lv_label_create(s_bar);
+		lv_obj_set_style_text_font(s_lbl_bat, &lv_font_montserrat_14, 0);
+		lv_obj_set_style_text_color(s_lbl_bat, lv_color_hex(WATCH_COL_TEXT), 0);
 	}
 
 	if (s_tm) {

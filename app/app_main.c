@@ -46,13 +46,6 @@ const struct irq_info irq_info_table[] = {
     { -1,     -1,   -1    },
 };
 
-static void heartbeat_task(void *p)
-{
-    static u32 n = 0;
-    while (1) {
-        os_time_dly(100);
-    }
-}
 
 /*============================ 任务列表 ============================
  * 表项供 task_create()（OS 原生接口）查表用；
@@ -356,12 +349,10 @@ static void lcd_test_task(void *p)
                 }
             }
         }
-        /* OS tick=10ms: 有更近定时器则少睡, 提高动画刷新上限 */
-        if (next_ms == 0 || next_ms < 10) {
-            os_time_dly(1);
-        } else {
-            os_time_dly((next_ms + 9) / 10);
-        }
+        /* 尽量每 tick 跑一轮 LVGL: 滑动时少睡, 抬高实际 FPS
+         * (next_ms 大时仍短睡, 避免空转占满 CPU 影响对讲/WiFi) */
+        (void)next_ms;
+        os_time_dly(1);
     }
 #else
     while (1) { os_time_dly(10000); }
@@ -450,9 +441,5 @@ void app_main()
 #if (defined MINI_USB_ENABLE) && MINI_USB_ENABLE
     os_task_create(usb_mode_task, NULL, 8, 2048, 0, "usb_mode");
 #endif
-    os_task_create(heartbeat_task,   NULL, 30,  512, 0, "heartbeat");
-#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT && !MINI_BT_SPEAKER_EN
-    extern void audio_demo_start(void);
-    // audio_demo_start();
-#endif
+
 }

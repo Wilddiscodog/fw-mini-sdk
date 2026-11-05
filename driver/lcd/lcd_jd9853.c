@@ -255,13 +255,21 @@ static void JD9853_led_ctrl(u8 status)
     lcd_bl_pinstate(status ? BL_ON : BL_OFF);
 }
 
-/* 关机前: DISP OFF → Sleep In, 停止面板扫描/TE 翻转 */
+/* 关机/息屏: DISP OFF → Sleep In, 停止面板扫描/TE 翻转 */
 static void JD9853_enter_sleep(void)
 {
     WriteCOM(0x28);            /* Display OFF */
     lcd_delay(20);
     WriteCOM(0x10);            /* Sleep In */
     lcd_delay(50);
+}
+
+static void JD9853_exit_sleep(void)
+{
+    WriteCOM(0x11);            /* Sleep Out */
+    lcd_delay(120);
+    WriteCOM(0x29);            /* Display ON */
+    lcd_delay(20);
 }
 
 static int JD9853_init(void)
@@ -294,6 +302,7 @@ REGISTER_LCD_DEV(LCD_JD9853) = {
     .Reset             = JD9853_reset,
     .BackLightCtrl     = JD9853_led_ctrl,
     .EnterSleep        = JD9853_enter_sleep,
+    .ExitSleep         = JD9853_exit_sleep,
 };
 // *INDENT-ON*
 

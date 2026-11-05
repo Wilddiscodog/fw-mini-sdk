@@ -80,15 +80,32 @@ static void key_sys_event_handler(struct sys_event *event)
         return;
     }
     struct key_event *e = (struct key_event *)event->payload;
-    /* KEY_POWER(0) 长按: → P33 真关机 */
-    if (e->value == KEY_POWER && e->action == KEY_EVENT_LONG) {
 #if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT && \
     (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
-        extern void watch_power_key_long(void);
-        watch_power_key_long();
+    /* 对讲机: KEY_PREV 按下说话、抬起结束 */
+    {
+        extern int walkie_key_event(u8 value, u8 action);
+        if (walkie_key_event(e->value, e->action)) {
+            return;
+        }
+    }
+#endif
+    /* KEY_POWER: 短按息屏/亮屏; 长按真关机 */
+    if (e->value == KEY_POWER) {
+#if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT && \
+    (defined MINI_LVGL_SUPPORT) && MINI_LVGL_SUPPORT
+        if (e->action == KEY_EVENT_CLICK) {
+            extern void watch_power_key_click(void);
+            watch_power_key_click();
+        } else if (e->action == KEY_EVENT_LONG) {
+            extern void watch_power_key_long(void);
+            watch_power_key_long();
+        }
 #else
-        extern void sys_power_poweroff(void);
-        sys_power_poweroff();
+        if (e->action == KEY_EVENT_LONG) {
+            extern void sys_power_poweroff(void);
+            sys_power_poweroff();
+        }
 #endif
     }
 }

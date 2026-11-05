@@ -29,6 +29,7 @@
 #include "wifi/wifi_connect.h"
 #include "net_update.h"                     /* CONFIG_UPGRADE_OTA_FILE_NAME */
 #include "asm/wdt.h"
+#include "walkie.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -92,12 +93,15 @@ static char prov_stored_ssid[33];
 static char prov_stored_pwd[64];
 static char prov_ap_ssid[33];
 
+extern void walkie_on_wifi_ready(void);
+
 /* ================ 事件钩子(bt_wifi_app.c wifi_event_callback 转发) ================ */
 void wifi_prov_notify(enum WIFI_EVENT event)
 {
     switch (event) {
     case WIFI_EVENT_STA_NETWORK_STACK_DHCP_SUCC:
         prov_dhcp_ok = 1;
+        walkie_on_wifi_ready();
         break;
     case WIFI_EVENT_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID:
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_FAIL:
@@ -107,6 +111,7 @@ void wifi_prov_notify(enum WIFI_EVENT event)
         break;
     case WIFI_EVENT_AP_START:
         prov_ap_active = 1;
+        walkie_on_wifi_ready();
         break;
     case WIFI_EVENT_STA_SCAN_COMPLETED:
         prov_scan_done = 1;
@@ -179,6 +184,10 @@ static int prov_wait_sta_once(void)
     "HTTP/1.0 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n"
 #define JSON_HDR_200 \
     "HTTP/1.0 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nConnection: close\r\n\r\n"
+#define WAV_HDR_FMT \
+    "HTTP/1.0 200 OK\r\nContent-Type: audio/wav\r\n" \
+    "Content-Disposition: attachment; filename=\"walkie_%d.wav\"\r\n" \
+    "Content-Length: %u\r\nConnection: close\r\n\r\n"
 
 #define PROV_SCAN_MAX   24
 #define PROV_SCAN_WAIT  300             /* 300×50ms = 15s, 覆盖 13 信道 */
@@ -355,6 +364,7 @@ static const char *HTML_CSS =
     "button,.btn{appearance:none;border:0;border-radius:10px;padding:11px 16px;font-weight:600;cursor:pointer;"
     "background:linear-gradient(180deg,var(--acc),var(--acc2));color:#042f2e;text-decoration:none;display:inline-block}"
     "button.secondary,.btn.secondary{background:#334155;color:var(--tx)}"
+    "button.danger,.btn.danger{background:linear-gradient(180deg,#f87171,#dc2626);color:#450a0a}"
     "button:disabled{opacity:.55;cursor:wait}"
     ".list{list-style:none;margin:0;padding:0;max-height:280px;overflow:auto}"
     ".list li{display:flex;align-items:center;gap:10px;padding:10px 10px;border-radius:10px;cursor:pointer;"
@@ -376,18 +386,18 @@ static const char *HTML_CSS =
 
 static int http_render_portal(int fd)
 {
-    char *body = malloc(10240);
+    char *body = malloc(14336);
     if (!body) {
         return -1;
     }
     const char *mode = prov_ap_active ? "AP 配网" : (prov_dhcp_ok ? "STA 已联网" : "STA 连接中");
     const char *ip = prov_ap_active ? "192.168.1.1" : "路由器 DHCP";
-    snprintf(body, 10240,
+    snprintf(body, 14336,
         "<!doctype html><html lang=zh-CN><head><meta charset=utf-8>"
         "<meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>"
         "<title>WL82 设备后台</title><style>%s</style></head><body><div class=wrap>"
         "<div class=brand><div class=logo>W</div><div>"
-        "<h1>WL82 设备后台</h1><div class=sub>配网 · 固件升级</div></div></div>"
+        "<h1>WL82 设备后台</h1><div class=sub>配网 · 固件升级 · 对讲录音</div></div></div>"
         "<div class=card><span class=pill>%s</span>"
         "<p class=tip style=margin-top:10px>访问地址 <b>%s</b> · AP 密码 %s</p></div>"
         "<div class=card><h2>WiFi 连接</h2>"
@@ -399,6 +409,12 @@ static int http_render_portal(int fd)
         "<label>密码</label><input name=pwd type=password maxlength=64 placeholder='开放网络可留空'>"
         "<div class=row><button type=submit>连接 WiFi</button></div>"
         "<p class=tip>连接后热点会断开；失败约 60 秒自动回到配网模式。</p></form></div>"
+        "<div class=card><h2>对讲录音</h2>"
+        "<div class=row><button type=button id=btnRec>刷新列表</button>"
+        "<button type=button id=btnRecClr class=danger>删除全部</button>"
+        "<span id=recMsg class=tip></span></div>"
+        "<ul class=list id=recList></ul>"
+        "<p class=tip>手表对讲机录制后点刷新；下载为 16kHz 单声道 WAV，供分析噪声。调试可用删除全部清空 Flash 录音区。</p></div>"
         "<div class=card><h2>固件升级</h2>"
         "<form id=fUp method=POST action=/upload enctype='multipart/form-data'>"
         "<label>升级文件 (update-ota.ufw)</label>"
@@ -430,6 +446,31 @@ static int http_render_portal(int fd)
         "}).catch(function(){m.textContent='扫描失败(AP扫信道时手机可能短暂掉线，请重试)';m.className='tip err';})"
         ".finally(function(){b.disabled=false});}"
         "document.getElementById('btnScan').onclick=doScan;"
+        "function doRec(){"
+        "var b=document.getElementById('btnRec'),m=document.getElementById('recMsg'),ul=document.getElementById('recList');"
+        "b.disabled=true;m.className='tip';m.textContent='读取中…';ul.innerHTML='';"
+        "fetch('/api/walkie/recs',{cache:'no-store'}).then(function(t){return t.json()}).then(function(j){"
+        "m.textContent='共 '+(j.n||0)+' 段';m.className=j.n?'tip ok':'tip';ul.innerHTML='';"
+        "if(!j.n){var e=document.createElement('li');e.style.cursor='default';"
+        "e.innerHTML='<span class=n>暂无录音（请先在手表对讲机按住侧键录一段）</span>';ul.appendChild(e);return;}"
+        "(j.list||[]).forEach(function(a){var li=document.createElement('li');"
+        "li.innerHTML='<span class=n></span><span class=m></span>';"
+        "li.querySelector('.n').textContent='#'+a.i+' '+a.dir+' '+a.sec+'s';"
+        "li.querySelector('.m').textContent=Math.round((a.bytes||0)/1024)+'KB 下载';"
+        "li.onclick=function(){location.href='/api/walkie/rec?i='+a.i;};ul.appendChild(li);});"
+        "}).catch(function(e){m.textContent='读取失败';m.className='tip err';})"
+        ".finally(function(){b.disabled=false});}"
+        "document.getElementById('btnRec').onclick=doRec;"
+        "document.getElementById('btnRecClr').onclick=function(){"
+        "if(!confirm('确认删除全部对讲录音？不可恢复'))return;"
+        "var b=document.getElementById('btnRecClr'),m=document.getElementById('recMsg');"
+        "b.disabled=true;m.className='tip';m.textContent='删除中…';"
+        "fetch('/api/walkie/recs/clear',{method:'POST',cache:'no-store'}).then(function(t){return t.json()}).then(function(j){"
+        "if(j&&j.ok){m.textContent='已清空';m.className='tip ok';doRec();}"
+        "else{m.textContent=(j&&j.err)||'删除失败';m.className='tip err';}"
+        "}).catch(function(){m.textContent='删除失败';m.className='tip err';})"
+        ".finally(function(){b.disabled=false});};"
+        "doRec();"
         "function setBar(bar,pct,lab){pct=Math.max(0,Math.min(100,pct|0));"
         "document.getElementById(bar+'Bar').style.width=pct+'%%';"
         "document.getElementById(bar+'Pct').textContent=pct+'%%';"
@@ -462,6 +503,107 @@ static int http_render_portal(int fd)
     int ret = http_send(fd, HTML_HDR_200, body);
     free(body);
     return ret;
+}
+
+static int http_handle_walkie_recs_clear(int fd)
+{
+    if (walkie_rec_clear_all()) {
+        return http_send(fd, JSON_HDR_200, "{\"ok\":0,\"err\":\"clear_fail\"}");
+    }
+    return http_send(fd, JSON_HDR_200, "{\"ok\":1,\"n\":0}");
+}
+
+static int http_render_walkie_recs_json(int fd)
+{
+    char *body;
+    int i, n, off, room;
+    u8 dir;
+    u16 sec;
+    u32 pip, bytes;
+
+    if (walkie_rec_ensure()) {
+        return http_send(fd, JSON_HDR_200, "{\"n\":0,\"err\":\"no_rec_zone\"}");
+    }
+    n = walkie_rec_count();
+    body = malloc(2048);
+    if (!body) {
+        return -1;
+    }
+    room = 2048;
+    off = snprintf(body, room, "{\"n\":%d,\"rate\":16000,\"ch\":1,\"fmt\":\"s16le\",\"list\":[", n);
+    for (i = 0; i < n && off < room - 96; i++) {
+        if (walkie_rec_meta(i, &dir, &sec, &pip) != 0) {
+            continue;
+        }
+        bytes = walkie_rec_pcm_bytes(i);
+        off += snprintf(body + off, room - off,
+                        "%s{\"i\":%d,\"dir\":\"%s\",\"sec\":%u,\"bytes\":%u}",
+                        i ? "," : "",
+                        i, dir ? "RX" : "TX", (unsigned)sec, (unsigned)bytes);
+    }
+    if (off < room - 3) {
+        snprintf(body + off, room - off, "]}");
+    }
+    {
+        int ret = http_send(fd, JSON_HDR_200, body);
+        free(body);
+        return ret;
+    }
+}
+
+struct walkie_http_ctx {
+    int fd;
+    int err;
+};
+
+static int walkie_http_write_cb(void *ctx, const void *data, u32 len)
+{
+    struct walkie_http_ctx *c = (struct walkie_http_ctx *)ctx;
+    const u8 *p = (const u8 *)data;
+    u32 off = 0;
+    while (off < len) {
+        int n = send(c->fd, p + off, (int)(len - off), 0);
+        if (n <= 0) {
+            c->err = -1;
+            return -1;
+        }
+        off += (u32)n;
+        wdt_clear();
+    }
+    return 0;
+}
+
+static void http_handle_walkie_rec_wav(int fd, const char *req)
+{
+    int idx = -1;
+    char hdr[192];
+    u32 pcm, total;
+    struct walkie_http_ctx ctx;
+    const char *q = strstr(req, "i=");
+
+    if (q) {
+        idx = atoi(q + 2);
+    }
+    if (walkie_rec_ensure() || idx < 0 || idx >= walkie_rec_count()) {
+        send(fd, "HTTP/1.0 404 Not Found\r\nConnection: close\r\n\r\n", 45, 0);
+        return;
+    }
+    pcm = walkie_rec_pcm_bytes(idx);
+    /* pcm_bytes 可能为 0(旧条目); 仍尝试导出, 长度用 chunked 不便, 无长度则 404 */
+    if (!pcm) {
+        send(fd, "HTTP/1.0 404 Not Found\r\nConnection: close\r\n\r\nno pcm\r\n", 52, 0);
+        return;
+    }
+    total = pcm + 44;
+    snprintf(hdr, sizeof(hdr), WAV_HDR_FMT, idx, (unsigned)total);
+    if (send(fd, hdr, strlen(hdr), 0) < 0) {
+        return;
+    }
+    ctx.fd = fd;
+    ctx.err = 0;
+    if (walkie_rec_export_wav(idx, walkie_http_write_cb, &ctx) || ctx.err) {
+        printf("[prov] walkie wav export fail idx=%d\n", idx);
+    }
 }
 
 static int http_render_scan_json(int fd)
@@ -1299,6 +1441,12 @@ hdr_done:
 
         if (!strncmp(req, "GET /api/scan", 13)) {
             http_render_scan_json(conn);
+        } else if (!strncmp(req, "POST /api/walkie/recs/clear", 27)) {
+            http_handle_walkie_recs_clear(conn);
+        } else if (!strncmp(req, "GET /api/walkie/recs", 20)) {
+            http_render_walkie_recs_json(conn);
+        } else if (!strncmp(req, "GET /api/walkie/rec", 19)) {
+            http_handle_walkie_rec_wav(conn, req);
         } else if (!strncmp(req, "GET /scan", 9)) {
             http_render_scan(conn);
         } else if (!strncmp(req, "POST /connect", 13)) {

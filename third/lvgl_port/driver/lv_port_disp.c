@@ -5,129 +5,134 @@
 #include "lvgl.h"
 #include "lcd_config.h"
 
+extern void lcd_wait_te(void);
+extern void lcd_lvgl_full(u16 xs, u16 xe, u16 ys, u16 ye, char *img);
 
 static void disp_init(void);
-
 static void disp_flush(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p);
-//static void gpu_fill(lv_disp_drv_t * disp_drv, lv_color_t * dest_buf, lv_coord_t dest_width,
-//        const lv_area_t * fill_area, lv_color_t color);
+
+/* FPS / flush 统计 */
+static u32 s_fps_frames;
+static u32 s_flush_ms_acc;
+static u32 s_flush_ms_max;
+static u32 s_flush_cnt;
+static u32 s_fps_last_ms;
+static u8 s_frame_need_te = 1;
+
+/* 整屏双缓冲: 296*240*2 ≈ 138KB ×2 ≈ 276KB, 走 SDRAM 堆 */
+#define LCD_FB_PX   ((u32)LCD_W * (u32)LCD_H)
 
 void lv_port_disp_init(void)
 {
-    /*-------------------------
-     * Initialize your display
-     * -----------------------*/
+    static lv_disp_draw_buf_t draw_buf_dsc;
+    static lv_disp_drv_t disp_drv;
+    lv_color_t *buf1 = NULL;
+    lv_color_t *buf2 = NULL;
+    u8 full = 0;
+
     disp_init();
 
-    /*-----------------------------
-     * Create a buffer for drawing
-     *----------------------------*/
+    buf1 = (lv_color_t *)malloc(LCD_FB_PX * sizeof(lv_color_t));
+    buf2 = (lv_color_t *)malloc(LCD_FB_PX * sizeof(lv_color_t));
+    if (buf1 && buf2) {
+        lv_disp_draw_buf_init(&draw_buf_dsc, buf1, buf2, LCD_FB_PX);
+        full = 1;
+    } else {
+        const u32 rows = 80;
+        if (buf1) {
+            free(buf1);
+        }
+        if (buf2) {
+            free(buf2);
+        }
+        buf1 = (lv_color_t *)malloc(LCD_W * rows * sizeof(lv_color_t));
+        buf2 = (lv_color_t *)malloc(LCD_W * rows * sizeof(lv_color_t));
+        if (!buf1 || !buf2) {
+            printf("[lcd] ERROR: no draw buffer\n");
+            return;
+        }
+        lv_disp_draw_buf_init(&draw_buf_dsc, buf1, buf2, LCD_W * rows);
+        printf("[lcd] fallback row buf %u lines\n", (unsigned)rows);
+    }
 
-    /**
-     * LVGL requires a buffer where it internally draws the widgets.
-     * Later this buffer will passed to your display driver's `flush_cb` to copy its content to your display.
-     * The buffer has to be greater than 1 display row
-     *
-     * There are 3 buffering configurations:
-     * 1. Create ONE buffer:
-     *      LVGL will draw the display's content here and writes it to your display
-     *
-     * 2. Create TWO buffer:
-     *      LVGL will draw the display's content to a buffer and writes it your display.
-     *      You should use DMA to write the buffer's content to the display.
-     *      It will enable LVGL to draw the next part of the screen to the other buffer while
-     *      the data is being sent form the first buffer. It makes rendering and flushing parallel.
-     *
-     * 3. Double buffering
-     *      Set 2 screens sized buffers and set disp_drv.full_refresh = 1.
-     *      This way LVGL will always provide the whole rendered screen in `flush_cb`
-     *      and you only need to change the frame buffer's address.
-     */
-
-    /* Example for 1) */
-//    static lv_disp_draw_buf_t draw_buf_dsc_1;
-//    static lv_color_t buf_1[LCD_W * 10];                          /*A buffer for 10 rows*/
-//    lv_disp_draw_buf_init(&draw_buf_dsc_1, buf_1, NULL, LCD_W * 10);   /*Initialize the display buffer*/
-
-    /* Example for 2) */
-    /* 80 行双缓冲: 满屏 296x240 约 3 次 flush, 减少 SetRange+DMA 启动开销;
-     * 静态数组天然 4 字节对齐(EMI DMA 要求) */
-    static lv_disp_draw_buf_t draw_buf_dsc_2;
-    static lv_color_t buf_2_1[LCD_W * 80];
-    static lv_color_t buf_2_2[LCD_W * 80];
-    lv_disp_draw_buf_init(&draw_buf_dsc_2, buf_2_1, buf_2_2, LCD_W * 80);
-
-    /* Example for 3) also set disp_drv.full_refresh = 1 below*/
-//    static lv_disp_draw_buf_t draw_buf_dsc_3;
-//    static lv_color_t buf_3_1[LCD_W * LCD_H];            /*A screen sized buffer*/
-//    static lv_color_t buf_3_2[LCD_W * LCD_H];            /*Another screen sized buffer*/
-//    lv_disp_draw_buf_init(&draw_buf_dsc_3, buf_3_1, buf_3_2,
-//                          LCD_H * LV_VER_RES_MAX);   /*Initialize the display buffer*/
-
-    /*-----------------------------------
-     * Register the display in LVGL
-     *----------------------------------*/
-
-    static lv_disp_drv_t disp_drv;                         /*Descriptor of a display driver*/
-    lv_disp_drv_init(&disp_drv);                    /*Basic initialization*/
-
-    /*Set up the functions to access to your display*/
-
-    /*Set the resolution of the display*/
+    lv_disp_drv_init(&disp_drv);
     disp_drv.hor_res = LCD_W;
     disp_drv.ver_res = LCD_H;
-
-    /*Used to copy the buffer's content to the display*/
     disp_drv.flush_cb = disp_flush;
+    disp_drv.draw_buf = &draw_buf_dsc;
+    /* 整屏缓冲: 每帧一次连续写, 配合帧首 TE, 显著减撕裂 */
+    if (full) {
+        disp_drv.full_refresh = 1;
+    }
 
-    /*Set a display buffer*/
-    disp_drv.draw_buf = &draw_buf_dsc_2;
-
-    /*Required for Example 3)*/
-    //disp_drv.full_refresh = 1
-
-    /*Finally register the driver*/
     lv_disp_drv_register(&disp_drv);
+    s_fps_last_ms = timer_get_ms();
+    s_frame_need_te = 1;
 }
 
-/**********************
- *   STATIC FUNCTIONS
- **********************/
 static void disp_init(void)
 {
-    extern void user_lcd_init(void); //只初始化屏
+    extern void user_lcd_init(void);
     user_lcd_init();
 }
 
 volatile bool disp_flush_enabled = true;
 
-/* Enable updating the screen (the flushing process) when disp_flush() is called by LVGL
- */
 void disp_enable_update(void)
 {
     disp_flush_enabled = true;
 }
 
-/* Disable updating the screen (the flushing process) when disp_flush() is called by LVGL
- */
 void disp_disable_update(void)
 {
     disp_flush_enabled = false;
 }
 
-/*Flush the content of the internal buffer the specific area on the display
- *You can use DMA or any hardware acceleration to do this operation in the background but
- *'lv_disp_flush_ready()' has to be called when finished.*/
 static void disp_flush(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p)
 {
-//    printf(">>>>>>>>>>>>>>run lcd [run lcd]");
-    //printf(">>>>>>>xs=%d, xe=%d, ys=%d, ye=%d", area->x1, area->x2, area->y1, area->y2);
-    extern void lcd_lvgl_full(u16 xs, u16 xe, u16 ys, u16 ye, char *img);
-    lcd_lvgl_full(area->x1, area->x2, area->y1, area->y2, (u16 *)color_p);
-    //os_time_dly(10);
+    u32 t0, t1, ms;
+    u32 now, dt;
 
-    /*IMPORTANT!!!
-     *Inform the graphics library that you are ready with the flushing*/
+    /* 息屏时跳过 TE 等待与推屏, 降低功耗 */
+    if (!disp_flush_enabled) {
+        lv_disp_flush_ready(disp_drv);
+        return;
+    }
+
+    /* 每帧第一片对齐 TE 上升沿, 再开写 → 写入落在消隐后, 减撕裂 */
+    if (s_frame_need_te) {
+        lcd_wait_te();
+        s_frame_need_te = 0;
+    }
+
+    t0 = timer_get_ms();
+    if (disp_flush_enabled) {
+        lcd_lvgl_full(area->x1, area->x2, area->y1, area->y2, (u16 *)color_p);
+    }
+    t1 = timer_get_ms();
+    ms = (t1 >= t0) ? (t1 - t0) : 0;
+
+    s_flush_ms_acc += ms;
+    s_flush_cnt++;
+    if (ms > s_flush_ms_max) {
+        s_flush_ms_max = ms;
+    }
+
+    if (lv_disp_flush_is_last(disp_drv)) {
+        s_fps_frames++;
+        s_frame_need_te = 1; /* 下一帧再等 TE */
+    }
+
+    now = timer_get_ms();
+    dt = now - s_fps_last_ms;
+    if (dt >= 1000u) {
+        s_fps_frames = 0;
+        s_flush_ms_acc = 0;
+        s_flush_ms_max = 0;
+        s_flush_cnt = 0;
+        s_fps_last_ms = now;
+    }
+
     lv_disp_flush_ready(disp_drv);
 }
 

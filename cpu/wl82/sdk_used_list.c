@@ -183,14 +183,20 @@ vir_dev_sub
 #ifdef CONFIG_VAD_ENC_ENABLE
 subdev_vad_enc
 subdev_jlvad_enc
+/* LTO 仅拉 subdev_* 时会把算法 .text 收成 0, 导致 audio_set_fmt 失败 */
+vad_init
+fvad_new
+JLSP_vad_init
 #endif
 
 #ifdef CONFIG_DNS_ENC_ENABLE
 subdev_dns_enc
 subdev_dns_dual_enc
+dns_enc_enable
+JLSP_ns_init
 #endif
 
-#ifdef CONFIG_AEC_ENC_ENABLE
+#if defined CONFIG_AEC_ENC_ENABLE || defined CONFIG_ANS_ENC_ENABLE
 subdev_aec_enc
 #endif
 
