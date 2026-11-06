@@ -32,9 +32,14 @@
 
 /* ============ 匹配与订阅配置 ============ */
 
-/* 广播名匹配(前缀内含即按 compare_data_len 比对前 N 字节) */
-static const char gamepad_name_xbox[] = "Xbox Wireless Controller";
-static const char gamepad_name_xbox2[] = "Xbox Series";
+/* 广播名匹配 —— 精确长度+精确字节(非前缀):
+ * BLE 广播包 31 字节上限会截断名字, 实测 Xbox 广播为 22 字节截断版
+ * "Xbox Wireless Controll"(log remoter_name 实证); 完整名留作其它型号。 */
+static const char gamepad_name_trunc[] = "Xbox Wireless Controll";   /* 22B 截断名 */
+static const char gamepad_name_full[]  = "Xbox Wireless Controller"; /* 24B 完整名 */
+
+/* 本只手柄地址兜底(日志 hexdump 原序, CLI_CREAT_BY_ADDRESS 同序比对) */
+static const u8 gamepad_addr_ours[6] = {0x92, 0x4F, 0xD2, 0x3B, 0xDA, 0xEC};
 
 /* HID: service 0x1812 / characteristic Report 0x2A4D, 订阅 NOTIFY
  * (框架对 NOTIFY 型自动写 CCCD=value_handle+1 ← 0x01) */
@@ -52,19 +57,24 @@ static const target_uuid_t hid_uuids[] = {
     },
 };
 
+/* CLIENT_MATCH_CONN_MAX=3, 仅 3 槽: 截断名 / 完整名 / 本只地址 */
 static const client_match_cfg_t match_pads[] = {
     { .create_conn_mode = BIT(CLI_CREAT_BY_NAME),
-      .compare_data = (const u8 *)gamepad_name_xbox,
-      .compare_data_len = sizeof(gamepad_name_xbox) - 1,
+      .compare_data = (const u8 *)gamepad_name_trunc,
+      .compare_data_len = sizeof(gamepad_name_trunc) - 1,
       .bonding_flag = 1 },
     { .create_conn_mode = BIT(CLI_CREAT_BY_NAME),
-      .compare_data = (const u8 *)gamepad_name_xbox2,
-      .compare_data_len = sizeof(gamepad_name_xbox2) - 1,
+      .compare_data = (const u8 *)gamepad_name_full,
+      .compare_data_len = sizeof(gamepad_name_full) - 1,
+      .bonding_flag = 1 },
+    { .create_conn_mode = BIT(CLI_CREAT_BY_ADDRESS),
+      .compare_data = gamepad_addr_ours,
+      .compare_data_len = 6,
       .bonding_flag = 1 },
 };
 
 static client_conn_cfg_t pad_conn_cfg = {
-    .match_dev_cfg = { &match_pads[0], &match_pads[1], NULL },
+    .match_dev_cfg = { &match_pads[0], &match_pads[1], &match_pads[2] },
     .security_en          = 1,                   /* 手柄要求配对绑定 */
     .search_uuid_cnt      = ARRAY_SIZE(hid_uuids),
     .search_uuid_table    = hid_uuids,
