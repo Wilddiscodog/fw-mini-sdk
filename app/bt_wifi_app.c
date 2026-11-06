@@ -194,9 +194,11 @@ static void bt_status_event_handler(struct bt_event *bt)
     switch (bt->event) {
         case BT_STATUS_INIT_OK:
 #if MINI_BLE_CENTRAL_EN
-            /* BLE 主机: 连接 Xbox 等 HID 手柄(app/ble_gamepad.c) */
-            extern void ble_gamepad_host_init(void);
-            ble_gamepad_host_init();
+            /* 官方 INIT_OK 流程(le_net_central.c): gatt_client_init + 注册包
+             * 处理器 + 绑定信息 + ble_module_enable(1)(启动扫描/连接)。
+             * init_config 已在 btstack_init 前完成(bt_module_init)。 */
+            extern void bt_master_ble_init(void);
+            bt_master_ble_init();
 #elif MINI_BT_BLE_TRANS_EN
             bt_ble_init();          /* GAP 名/广播 + 透传服务 */
 #endif
@@ -250,6 +252,13 @@ void bt_module_init(void *p)
     extern int le_controller_set_mac(void *addr);
     lib_make_ble_address(tmp_ble_addr, (u8 *)bt_get_mac_addr());
     le_controller_set_mac((void *)tmp_ble_addr);
+#endif
+
+#if MINI_BLE_CENTRAL_EN
+    /* 官方时序: init_config 必须先于 btstack_init(demo_ble ble.c 同款);
+     * INIT_OK 时再调 bt_master_ble_init(gatt_client_init+包处理器+绑定+开扫描) */
+    extern void ble_gamepad_host_init(void);
+    ble_gamepad_host_init();
 #endif
 
 #if MINI_BT_SPEAKER_EN
