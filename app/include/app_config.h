@@ -284,8 +284,12 @@
 #define TCFG_BT_SUPPORT_AAC             0
 #endif
 #define BT_NET_HID_EN               0
-#define TRANS_DATA_EN               1
-#define BT_NET_CENTRAL_EN           0
+/* BLE 角色选择(单角色互斥, 官方 demo_ble 约束):
+ * 1 = 主机 Central: 连接 Xbox 等 BLE HID 手柄(app/ble_gamepad.c), 透传从机关闭
+ * 0 = 从机 Peripheral: 经典 BLE 透传(le_trans_data.c), 手机可连 */
+#define MINI_BLE_CENTRAL_EN         1
+#define BT_NET_CENTRAL_EN           MINI_BLE_CENTRAL_EN
+#define TRANS_DATA_EN               (1 - MINI_BLE_CENTRAL_EN)
 #define TRANS_MULTI_BLE_EN          0
 #define CONFIG_BLE_MESH_ENABLE      0
 #define TCFG_BLE_SECURITY_EN        1

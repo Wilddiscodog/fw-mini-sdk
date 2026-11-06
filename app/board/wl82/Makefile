@@ -299,6 +299,8 @@ c_SRC_FILES := \
 	../../../app/periph_demo.c \
 	../../../app/common_ble/le_hogp.c \
 	../../../app/common_ble/le_trans_data.c \
+	../../../app/common_ble/le_net_central.c \
+	../../../app/ble_gamepad.c \
 	../../../app/key/key_driver.c \
 	../../../app/key/adkey.c \
 	../../../driver/lcd/touch_cst816.c \

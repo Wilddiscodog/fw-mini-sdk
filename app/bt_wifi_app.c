@@ -193,7 +193,11 @@ static void bt_status_event_handler(struct bt_event *bt)
 {
     switch (bt->event) {
         case BT_STATUS_INIT_OK:
-#if MINI_BT_BLE_TRANS_EN
+#if MINI_BLE_CENTRAL_EN
+            /* BLE 主机: 连接 Xbox 等 HID 手柄(app/ble_gamepad.c) */
+            extern void ble_gamepad_host_init(void);
+            ble_gamepad_host_init();
+#elif MINI_BT_BLE_TRANS_EN
             bt_ble_init();          /* GAP 名/广播 + 透传服务 */
 #endif
             break;
