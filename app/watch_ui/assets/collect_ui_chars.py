@@ -3,14 +3,19 @@
 import re
 import pathlib
 
-root = pathlib.Path(__file__).resolve().parents[1]
+root = pathlib.Path(__file__).resolve().parents[1]  # watch_ui
+app_root = root.parent  # app
 chars = set()
 pat = re.compile(r"[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+")
 
-for p in root.rglob("*.c"):
-    text = p.read_text(encoding="utf-8", errors="ignore")
-    for m in pat.findall(text):
-        chars.update(m)
+scan_dirs = [root, app_root / "asr"]
+for d in scan_dirs:
+    if not d.is_dir():
+        continue
+    for p in d.rglob("*.c"):
+        text = p.read_text(encoding="utf-8", errors="ignore")
+        for m in pat.findall(text):
+            chars.update(m)
 
 # ASCII used in mixed labels / numbers / punctuation
 ascii_extra = (
@@ -29,6 +34,8 @@ extra = (
     "WiFiSSIDIP读中PH失败VolA2DPDLNA"
     "联系人管理删除配对保存发现在线离线添加取消确定附近新设备已保存未保存"
     "设备扫描正在请先连接网络未就绪台"
+    "语音识别测试监听中正在启动失败未启用可说小艾小艾播放音乐暂停增大减小上一曲下一曲识别到命令本地"
+    "未知指令请打开音频与算法"
 )
 chars.update(extra)
 

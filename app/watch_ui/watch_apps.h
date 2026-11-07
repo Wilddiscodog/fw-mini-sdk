@@ -19,5 +19,7 @@ lv_obj_t *app_sokoban_create(lv_obj_t *parent);
 void app_sokoban_exit(void);
 lv_obj_t *app_2048_create(lv_obj_t *parent);
 void app_2048_exit(void);
+lv_obj_t *app_asr_test_create(lv_obj_t *parent);
+void app_asr_test_exit(void);
 
 #endif

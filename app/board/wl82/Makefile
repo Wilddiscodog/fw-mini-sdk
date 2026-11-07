@@ -81,6 +81,7 @@ AUDIO_LIB := \
 	../../../cpu/wl82/liba/libvad.a \
 	../../../cpu/wl82/liba/lib_dvad.a \
 	../../../cpu/wl82/liba/libjlsp.a \
+	../../../cpu/wl82/liba/lib_roobo_fig.a \
 	../../../cpu/wl82/liba/lib_m4a_dec_seek.a \
 	../../../cpu/wl82/liba/lib_mp3_dec.a \
 	../../../cpu/wl82/liba/lib_wma_dec.a \
@@ -273,6 +274,7 @@ INCLUDES := \
 	-I../../../driver \
 	-I../../../driver/usb \
 	-I../../../driver/usb/include \
+	-I../../../driver/usb/include/host \
 	-I../../../third/CherryUSB/core \
 	-I../../../third/CherryUSB/common \
 	-I../../../third/CherryUSB/class/cdc \
@@ -518,12 +520,14 @@ c_SRC_FILES += ../../../app/watch_ui/watch_maze.c
 c_SRC_FILES += ../../../app/watch_ui/watch_match3.c
 c_SRC_FILES += ../../../app/watch_ui/watch_sokoban.c
 c_SRC_FILES += ../../../app/watch_ui/watch_2048.c
+c_SRC_FILES += ../../../app/watch_ui/watch_asr_test.c
 c_SRC_FILES += ../../../app/watch_ui/watch_game_bgm.c
 c_SRC_FILES += ../../../app/watch_ui/assets/watch_icons.c
 c_SRC_FILES += ../../../app/watch_ui/assets/watch_icon_tetris.c
 c_SRC_FILES += ../../../app/watch_ui/assets/watch_icon_maze.c
 c_SRC_FILES += ../../../app/watch_ui/assets/watch_icon_match3.c
 c_SRC_FILES += ../../../app/watch_ui/assets/lv_font_watch_16_cn.c
+c_SRC_FILES += ../../../app/asr/roobo/roobo_asr.c
 c_SRC_FILES += ../../../app/walkie/walkie_svc.c
 c_SRC_FILES += ../../../app/walkie/walkie_net.c
 c_SRC_FILES += ../../../app/walkie/walkie_av.c
@@ -534,6 +538,7 @@ c_SRC_FILES += ../../../app/common/fat_nor/phone_rec_fs.c
 INCLUDES    += -I../../../third/lvgl -I$(LVGL_DIR) -I$(LVGL_DIR)/src
 INCLUDES    += -I../../../third/lvgl_port/driver -I../../../driver/lcd/include
 INCLUDES    += -I../../../app/watch_ui -I../../../app/include -I../../../app/walkie
+INCLUDES    += -I../../../app/asr/roobo
 DEFINES     += -DLV_CONF_INCLUDE_SIMPLE
 endif
 

@@ -168,6 +168,15 @@
 #define CONFIG_AEC_ADC_CHANNEL              1     /* 单麦: 与通话同通道, 禁止误开 MIC3 */
 #define CONFIG_AEC_AUDIO_ADC_GAIN           10    /* 回采模拟增益同样 0~31 */
 
+/* Roobo 本地 ASR 命令词(语音识别测试 APP); 与对讲互斥占 MIC */
+#define AISP_ALGORITHM                      1
+#define ROOBO_ALGORITHM                     2
+#define WANSON_ALGORITHM                    3
+#define CONFIG_ASR_ALGORITHM                ROOBO_ALGORITHM
+#define CONFIG_AISP_MIC0_ADC_CHANNEL        CONFIG_PHONE_CALL_ADC_CHANNEL
+#define CONFIG_AISP_MIC_ADC_GAIN            80    /* ASR 数字增益略高于对讲 */
+#define CONFIG_AISP_MIC_ANALOG_GAIN         12
+
 /* EQ: 本地播放用; 已移除 USB CDC1 在线调音(cfg_tool)。
  * CDC1 闲置数据口; CDC2=user_cdc_* 日志。 */
 #define TCFG_EQ_ENABLE                      1

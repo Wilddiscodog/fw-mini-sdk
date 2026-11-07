@@ -43,6 +43,11 @@ static const struct watch_app_desc s_apps[WATCH_APP_COUNT] = {
     { "消消乐", "C", &watch_icon_match3,   0xFF8FAB, app_match3_create },
     { "推箱子", "S", NULL,                 0xFFB74D, app_sokoban_create },
     { "2048",   "2", NULL,                 0xEDC22E, app_2048_create },
+#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
+    { "语音识别测试", "A", NULL,           0x26C6DA, app_asr_test_create },
+#else
+    { "语音识别测试", "A", NULL,           0x26C6DA, NULL },
+#endif
     { "设置",   "S", &watch_icon_settings, 0x00E676, app_settings_create },
 };
 
@@ -223,6 +228,8 @@ void watch_ui_close_app(void)
     }
     if (s_app_id == WATCH_APP_WALKIE) {
         walkie_on_exit();
+    } else if (s_app_id == WATCH_APP_ASR_TEST) {
+        app_asr_test_exit();
     }
     lv_obj_clean(s_app_layer);
     lv_obj_add_flag(s_app_layer, LV_OBJ_FLAG_HIDDEN);
