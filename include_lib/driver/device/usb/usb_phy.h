@@ -204,16 +204,16 @@ void usb_phy_suspend(const usb_dev usb_id);
 
 /*            host api            */
 
-u32 usb_h_bulk_read(const usb_dev usb_id, u8 host_ep, u16 rxmaxp, u8 target_ep, u8 *ptr, u32 len);
-u32 usb_h_bulk_write(const usb_dev usb_id, u8 host_ep, u16 txmaxp, u8 target_ep, u8 *ptr, u32 len);
-u32 usb_h_intr_read(const usb_dev usb_id, u8 host_ep, u16 rxmaxp, u8 target_ep, u8 *ptr, u32 len);
-u32 usb_h_intr_write(const usb_dev usb_id, u8 host_ep, u16 txmaxp, u8 target_ep, u8 *ptr, u32 len);
-u32 usb_h_iso_read(const usb_dev usb_id, u8 host_ep, u16 rxmaxp, u8 target_ep, u8 *ptr, u32 len);
-u32 usb_h_iso_write(const usb_dev usb_id, u8 host_ep, u16 txmaxp, u8 target_ep, u8 *ptr, u32 len);
+int usb_h_bulk_read(const usb_dev usb_id, u8 host_ep, u16 rxmaxp, u8 target_ep, u8 *ptr, u32 len);
+int usb_h_bulk_write(const usb_dev usb_id, u8 host_ep, u16 txmaxp, u8 target_ep, u8 *ptr, u32 len);
+int usb_h_intr_read(const usb_dev usb_id, u8 host_ep, u16 rxmaxp, u8 target_ep, u8 *ptr, u32 len);
+int usb_h_intr_write(const usb_dev usb_id, u8 host_ep, u16 txmaxp, u8 target_ep, u8 *ptr, u32 len);
+int usb_h_iso_read(const usb_dev usb_id, u8 host_ep, u16 rxmaxp, u8 target_ep, u8 *ptr, u32 len);
+int usb_h_iso_write(const usb_dev usb_id, u8 host_ep, u16 txmaxp, u8 target_ep, u8 *ptr, u32 len);
 void usb_h_entry_suspend(const usb_dev usb_id);
 void usb_h_resume(const usb_dev usb_id);
-u32 usb_host_init(const usb_dev usb_id, u32 reset_delay, u32 timeout);
-u32 usb_host_reset(const usb_dev usb_id, u32 reset_delay, u32 timeout);
+int usb_host_init(const usb_dev usb_id, u32 reset_delay, u32 timeout);
+int usb_host_reset(const usb_dev usb_id, u32 reset_delay, u32 timeout);
 u32 usb_h_force_reset(const usb_dev usb_id);
 // u32 usb_h_sie_init(u32 reset_delay, u32 timeout);
 // void usb_h_sie_close();

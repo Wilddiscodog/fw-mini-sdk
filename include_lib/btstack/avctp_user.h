@@ -157,7 +157,6 @@ typedef enum {
     USER_CTRL_AVCTP_DISCONNECT,
 //    //AVCTP连接，是音乐控制链路，一般不使用
     USER_CTRL_AVCTP_CONN,
-
     USER_CTRL_AVCTP_CMD_END,
 
     //高级音频部分
@@ -315,7 +314,40 @@ typedef enum {
     USER_CTRL_MAP_CMD_END,
     //不看协议栈的状态去调一次exit，关机的时候可能消息被阻塞住推上来导致SNIFF无法退出，影响后续的关机流程
     USER_CTRL_ALL_SNIFF_EXIT_BY_POWEROFF,
+// 一拖二通话操作
+    USER_CTRL_MULTI_HFP_CMD_BEGIN,
+    // 设备间通话切换
+    USER_CTRL_MULTI_ESCO_SWITCH,
+    // 挂断打断设备通话
+    USER_CTRL_MULTI_HFP_CALL_HANGUP_BREAK,
+    //挂断当前通话，接听来电设备
+    USER_CTRL_MULTI_HFP_CALL_HANGUP_BREAK_ACTIVE,
+    //前台设备三方通话，挂断当前并接听
+    USER_CTRL_MULTI_HFP_THREE_WAY_ANSWER1,
+    //前台设备三方通话，保留当前并接听
+    USER_CTRL_MULTI_HFP_THREE_WAY_ANSWER2,
+    // 被打断设备三方通话，挂断当前接通来电
+    USER_CTRL_MULTI_HFP_THREE_WAY_ANSWER1_BREAK,
+    // 被打断设备三方通话，挂断当前接通来电并切换到耳机通话
+    USER_CTRL_MULTI_HFP_THREE_WAY_ANSWER1_BREAK_SWITCH,
+    // 被打断设备三方通话，保留当前接通来电
+    USER_CTRL_MULTI_HFP_THREE_WAY_ANSWER2_BREAK,
+    // 被打断设备三方通话，保留当前接通来电并切换到耳机通话
+    USER_CTRL_MULTI_HFP_THREE_WAY_ANSWER2_BREAK_SWITCH,
+    // 被打断设备三方通话，拒绝后台来电
+    USER_CTRL_MULTI_HFP_THREE_WAY_ANSWER3_BREAK,
+    USER_CTRL_MULTI_HFP_CMD_END,
+    USER_CTRL_PBAP_CONNECT,
+    USER_CTRL_PBAP_READ_LIST,
 
+    // OPP连接
+    USER_CTRL_OPP_CONNECTION,
+    USER_CTRL_OPP_DISCONNECTION,
+
+    // bip连接
+    USER_CTRL_BIP_CONNECTION,
+    USER_CTRL_BIP_DISCONNECTION,
+    USER_CTRL_BIP_GET_IMAGE,
     USER_CTRL_LAST
 } USER_CMD_TYPE;
 
@@ -383,6 +415,9 @@ typedef enum {
     BT_STATUS_BROADCAST_STATE,/*braoadcaset中*/
 
     BT_STATUS_TRIM_OVER,        /*测试盒TRIM完成*/
+    BT_STATUS_CONN_HCRP_CH,    //HCRP连接成功
+    BT_STATUS_DISCONN_HCRP_CH, //HCRP通道断开
+    BT_STATUS_PHONE_NANE,     /*来电话号码名*/
 } STATUS_FOR_USER;
 
 typedef enum {
@@ -431,9 +466,13 @@ struct sniff_ctrl_config_t {
 };
 extern u32 user_send_cmd_prepare(USER_CMD_TYPE cmd, u16 param_len, u8 *param);
 /**发射器操作的几个接口*/
+/*发射器发送命令接口*/
 extern u32 user_emitter_cmd_prepare(USER_CMD_TYPE cmd, u16 param_len, u8 *param);
+/*发射器连接状态查询接口：返回值与get_bt_connect_status()函数返回值相同，见上方状态反馈枚举*/
 u8 get_emitter_connect_status(void);
+/*发射器连接通道查询接口: 返回值通过判断 上方的SPP_CH--MAP_CH的位判断来识别连接了哪些协议*/
 u16 get_emitter_curr_channel_state();
+/*发射器音乐状态查询接口：返回值见上方 BT_MUSIC_STATE枚举*/
 u8 get_emitter_a2dp_status(void);
 
 
@@ -478,6 +517,8 @@ extern void __bt_set_update_battery_time(u8 time);
 extern void __set_user_ctrl_conn_num(u8 num);
 /*提供接口外部设置要保留hfp不要蓝牙通话*/
 extern void __set_disable_sco_flag(bool flag);
+/*提供接口外部设置要保留hfp_ag不要蓝牙通话*/
+extern void __set_disable_hfp_ag_flag(bool flag);
 
 /*提供接口外部设置简易配对参数*/
 extern void __set_simple_pair_param(u8 io_cap, u8 oob_data, u8 mitm);
@@ -492,6 +533,7 @@ extern void discon_complete_handle_register(void (*handle)(u8 *addr, int reason)
 extern void update_bt_current_status(u8 *addr, u8 new_status, u8 conn_status);
 extern u8 get_bt_connect_status(void);
 extern u8 a2dp_get_status(void);
+extern u8 get_a2dp_decoder_status();
 
 /*//回连的超时设置。ms单位。但是对手机发起的连接是没作用的*/
 extern void __set_super_timeout_value(u16 time);
@@ -567,6 +609,8 @@ extern void tws_api_clear_connect_aa();
 extern void clear_sniff_cnt(void);
 /**删除VM记录的最后一个设备信息*/
 extern u8 delete_last_device_from_vm();
+extern u8 get_second_break_call_status(u8 active_or_break); //用于获取当前设备三方通话状态和后台设备三方通话状态
+extern u8 multi_bd_get_call_incoming(void);  //一拖二获取两个设备状态
 
 #define BD_CLASS_WEARABLE_HEADSET	0x240404/*ios10.2 display headset icon*/
 #define BD_CLASS_HANDS_FREE			0x240408/*ios10.2 display bluetooth icon*/
@@ -623,6 +667,10 @@ enum {
     BD_ESCO_BUSY_CURRENT,	/*当前地址对应的设备通话中*/
     BD_ESCO_BUSY_OTHER,	 	/*通话中的设备非当前地址*/
 };
+enum {
+    BD_GET_SECOND_ACTIVE = 0,   /*获取当前设备的三方通话状态*/
+    BD_GET_SECOND_BREAK,        /*获取后台设备的三方通话状态*/
+};
 extern u8 check_esco_state_via_addr(u8 *addr);
 /*判断是否主动回连*/
 extern u8 get_auto_connect_state(u8 *addr);
@@ -667,6 +715,7 @@ typedef struct {
 extern u16 sdp_create_diy_device_ID_service(u8 *buffer, u16 buffer_size);
 extern u16 sdp_create_diy_hid_service(u8 *buffer, u16 buffer_size, const u8 *hid_descriptor, u16 hid_descriptor_size);
 u8 get_remote_vol_sync(void);
+int get_music_sync_volume();
 void set_start_search_spp_device(u8 spp);
 
 

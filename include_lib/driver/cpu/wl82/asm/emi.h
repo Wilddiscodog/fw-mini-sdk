@@ -51,11 +51,11 @@ th:0-1,0-->tw:wr不减少半个hsb时钟周期，1-->tw:wr减少半个hsb时钟�
 
 #define EMI_MAGIC                        'E'
 #define EMI_SET_ISR_CB                   _IOW(EMI_MAGIC,1,u32)
-#define EMI_USE_SEND_SEM                 _IOW(EMI_MAGIC,2,u32)
+#define EMI_USE_SEND_SEM                 _IO(EMI_MAGIC,2)
 #define IOCTL_EMI_WRITE_NON_BLOCK        _IOW(EMI_MAGIC,3,u32)
 #define IOCTL_EMI_WRITE_NON_BLOCK_FLUSH  _IOW(EMI_MAGIC,4,u32)
 #define EMI_SET_WRITE_TIMER_OUT          _IOW(EMI_MAGIC,5,u32)
-#define IOCTL_EMI_GET_NON_BLOCK			 _IOR(EMI_MAGIC,6,u32)
+#define IOCTL_EMI_GET_NON_BLOCK			  _IOR(EMI_MAGIC,6,u32)
 
 //baudrate:EMI波特率，hsb的分频
 enum EMI_BAUD {

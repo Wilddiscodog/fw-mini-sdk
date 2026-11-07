@@ -93,13 +93,14 @@ extern const int CONFIG_INQUIRY_PAGE_OFFSET_ADJUST ;
 extern const int CONFIG_LMP_NAME_REQ_ENABLE ;
 extern const int CONFIG_LMP_PASSKEY_ENABLE ;
 extern const int CONFIG_LMP_MASTER_ESCO_ENABLE ;
-extern const int config_btctler_bredr_master ;
 extern const int config_bredr_afh_user ;
 extern const int config_bredr_master_afh ;
 extern const int CONFIG_ESCO_MUX_RX_BULK_ENABLE ;
 extern const int config_bt_temperature_pll_trim ;
 extern const int CONFIG_WIFI_DETECT_ENABLE;
 extern const int ESCO_FORWARD_ENABLE;
+
+extern unsigned char config_btctler_bredr_master;
 /********************************************************************************/
 /*
  *                   API

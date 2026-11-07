@@ -1,7 +1,6 @@
 #ifndef ASM_INCLUDES_H
 #define ASM_INCLUDES_H
 
-
 #include "audio.h"
 #include "adc_api.h"
 #include "cache.h"
@@ -27,6 +26,7 @@
 #include "imr.h"
 #include "image_enc.h"
 #include "jpeg_codec.h"
+#include "jpeg_encoder.h"
 #include "imb_driver.h"
 #include "uvc_device.h"
 #include "bus_device.h"

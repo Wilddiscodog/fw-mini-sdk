@@ -8,11 +8,11 @@
 #include "asm/port_waked_up.h"
 #include "os/os_api.h"
 
-#define     FBIOGET_IMR_DOUBLE_BUFFER0  _IOR('A', 0, sizeof(int))
-#define     FBIOGET_IMR_DOUBLE_BUFFER1  _IOR('A', 1, sizeof(int))
-#define     FBIOSET_SLIDER_WINDOW		_IOR('A', 2, sizeof(int))
-#define     FBIOGET_IMR_ROTATE_BUF		_IOR('A', 3, sizeof(int))
-#define     FBIOSET_IMR_MODE            _IOW('A', 4, sizeof(int))
+#define     FBIOGET_IMR_DOUBLE_BUFFER0  _IOR('A', 0, u32)
+#define     FBIOGET_IMR_DOUBLE_BUFFER1  _IOR('A', 1, u32)
+#define     FBIOSET_SLIDER_WINDOW		_IOR('A', 2, u32)
+#define     FBIOGET_IMR_ROTATE_BUF		_IOR('A', 3, u32)
+#define     FBIOSET_IMR_MODE            _IOW('A', 4, u32)
 
 struct layer_attr {
     u8 imr_index; /* imr选择 */
@@ -48,14 +48,14 @@ extern const struct device_operations mipi_dev_ops;
 	container_of(fb_info, struct imd_layer, fb)
 
 
-#define IMD_SET_COLOR_CFG 			_IOW('F', 0, sizeof(int))
-#define IMD_GET_COLOR_CFG 			_IOR('F', 0, sizeof(int))
-#define IMD_SET_COLOR_VALID 		_IOW('F', 1, sizeof(int))
-#define IMD_GET_COLOR_CFG_SIZE 		_IOR('F', 1, sizeof(int))
-#define IMD_SET_DEFAULT_COLOR_CFG 	_IOW('F', 2, sizeof(int))
-#define IMD_GET_FRAMERATE		 	_IOR('F', 2, sizeof(int))
-#define IMD_SET_REFRESH_STATUS   	_IOW('F', 3, sizeof(int))
-#define IMD_GET_SCREEN_INFO			_IOR('F', 3, sizeof(int))
+#define IMD_SET_COLOR_CFG 			_IOW('F', 0, u32)
+#define IMD_GET_COLOR_CFG 			_IOR('F', 0, u32)
+#define IMD_SET_COLOR_VALID 		_IOW('F', 1, u32)
+#define IMD_GET_COLOR_CFG_SIZE 		_IOR('F', 1, u32)
+#define IMD_SET_DEFAULT_COLOR_CFG 	_IOW('F', 2, u32)
+#define IMD_GET_FRAMERATE		 	_IOR('F', 2, u32)
+#define IMD_SET_REFRESH_STATUS   	_IOW('F', 3, u32)
+#define IMD_GET_SCREEN_INFO			_IOR('F', 3, u32)
 
 
 #define IMD_DMM_CLK_EN 		(imd_lc_con |= BIT(0))

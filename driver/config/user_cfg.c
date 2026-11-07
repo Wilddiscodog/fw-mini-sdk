@@ -27,13 +27,6 @@
 #define LOG_CLI_ENABLE
 #include "debug.h"
 
-//
-#ifdef CONFIG_SFC_ENABLE
-const char norflash_write_cpu_unhold = 0;//在 跑SFC的情况下 写flash hold cpu,关闭所有中断
-#else
-const char norflash_write_cpu_unhold = 1;//在跑SDRAM的情况下 写flash 不需要 hold cpu和关闭所有中断 ,程序员自己懂得把相关text段放到sdram/内部ram,保证运行过程中不会访问SFC也可以写1
-#endif
-
 //======================================================================================//
 //                                        BTIF配置项表                                  //
 //    参数1: 配置项名字                                                                 //
@@ -54,6 +47,9 @@ const struct btif_item btif_table[] = {
     {CFG_PRODUCT_SN_INDEX,      PRODUCT_SN_SIZE},   		//产品SN代码
     {CFG_PRODUCT_LICENSE_INDEX, PRODUCT_LICENSE_INFO_SIZE}, //产品LICENSE相关信息
     {CFG_PRODUCT_RTC_INDEX,     PRODUCT_RTC_INFO_SIZE},     //产品RTC初始时间
+    {CFG_PRODUCT_RES_INDEX,     PRODUCT_RES_SIZE},
+    {CFG_PRODUCT_USER_INDEX,    PRODUCT_USER_DATA_SIZE},
+    {CFG_PRODUCT_CFG_INDEX,     PRODUCT_CFG_SIZE},
 #endif
 
     {0,                         0 },   //reserved cfg
@@ -71,6 +67,9 @@ int btif_item_rewrite_en(u16 id, u16 len)
     case CFG_PRODUCT_SN_INDEX:
     case CFG_PRODUCT_LICENSE_INDEX:
     case CFG_PRODUCT_RTC_INDEX:
+    case CFG_PRODUCT_RES_INDEX:
+    case CFG_PRODUCT_USER_INDEX:
+    case CFG_PRODUCT_CFG_INDEX:
         ret = 1;
         break;
 #endif
@@ -87,6 +86,7 @@ int btif_item_rewrite_en(u16 id, u16 len)
 const int vm_max_page_align_size_config   = VM_MAX_PAGE_ALIGN_SIZE_CONFIG; 		//page对齐vm管理空间最大值配置
 const int vm_max_sector_align_size_config = VM_MAX_SECTOR_ALIGN_SIZE_CONFIG; 	//sector对齐vm管理空间最大值配置
 const int VM_DEFRAG_SIZE = 60; //VM 碎片整理。百分比
+const u8 reset_vm_when_read_crc_err = 0; //当读取vm crc错误时复位整个vm
 ////======================================================================================//
 
 extern int bytecmp(unsigned char *p, unsigned char ch, unsigned int num);
@@ -104,6 +104,10 @@ const u8 *bt_get_mac_addr(void)
     static u8 mac_addr[6];
     const u8 bc_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
+    if (syscfg_read(CFG_BT_MAC_ADDR, mac_addr, 6) == 6 && memcmp(mac_addr, bc_mac, 6)) {
+        return mac_addr;
+    }
+
 #if defined CONFIG_WIFI_ENABLE && !defined CONFIG_RF_TEST_ENABLE
     wifi_get_mac(mac_addr);
     if (bytecmp(mac_addr, 0, 6)) {
@@ -111,10 +115,6 @@ const u8 *bt_get_mac_addr(void)
     } else
 #endif
     {
-        if (syscfg_read(CFG_BT_MAC_ADDR, mac_addr, 6) == 6 && memcmp(mac_addr, bc_mac, 6)) {
-            return mac_addr;
-        }
-
         u8 flash_uid[16];
         memcpy(flash_uid, get_norflash_uuid(), 16);
         do {
@@ -125,8 +125,6 @@ const u8 *bt_get_mac_addr(void)
         } while (!bytecmp(mac_addr, 0, 6));
         //此处用户可自行修改为本地生成mac地址的算法
         mac_addr[0] &= ~((1 << 0) | (1 << 1));
-        /* 写回 VM: 未写入时库内 get_bt_mac_addr 每次读 CFG_BT_MAC_ADDR 都报
-         * [SYSCFG]key_mac crc_err(WiFi 起 AP/切模式会反复触发)。VM 已验证可写。 */
         syscfg_write(CFG_BT_MAC_ADDR, mac_addr, 6);
         return mac_addr;
     }
@@ -137,7 +135,7 @@ const char *bt_get_local_name(void)
 #ifndef CONFIG_RF_TEST_ENABLE
     const u8 *mac_addr;
     mac_addr = bt_get_mac_addr();
-    sprintf(edr_name, "WL82-Speaker-%02X%02X", mac_addr[4], mac_addr[5]);
+    sprintf(edr_name, "JL-AC79XX-%02X%02X", mac_addr[4], mac_addr[5]);
 #endif
     return edr_name;
 }
@@ -204,8 +202,8 @@ typedef struct __AEC_CONFIG {
     float ans_aggress;      //噪声前级动态压制,越大越强default: 1.25f(1 ~ 2)
     float ans_suppress;     //噪声后级静态压制,越小越强default: 0.04f(0 ~ 1)
     /*DNS*/
-    float dns_gain_floor;
-    float dns_over_drive;
+    float dns_gain_floor;	//增益最小值控制, 越小降噪越强, default: 0.1f(0 ~ 1.0)
+    float dns_over_drive;	//降噪强度, 越大降噪越强, default: 1.0f(0 ~ 6.0)
 } _GNU_PACKED_ AEC_CONFIG;
 
 void get_cfg_file_aec_config(struct aec_s_attr *aec_param)
@@ -255,6 +253,8 @@ void get_cfg_file_aec_config(struct aec_s_attr *aec_param)
 #ifndef CONFIG_DNS_ENC_ENABLE
     aec_param->EnableBit &= ~BIT(5);
 #endif
+
+    aec_param->dac_ref_sr = 16000; //aec软件回采的dac参考采样率，8k或16k的整数倍
 
     aec_param->AGC_NDT_fade_in_step  = aec_config.ndt_fade_in;
     aec_param->AGC_NDT_fade_out_step = aec_config.ndt_fade_out;

@@ -2,20 +2,32 @@
 #define _WIFI_CONNECT_H_
 
 #include "generic/typedef.h"
+#include "wifi_def.h"
 
 ///  \cond DO_NOT_DOCUMENT
 enum WIFI_MODE {
-    STA_MODE = 1,//STA_MODE位置必须为第一个
+    STA_MODE = 1,//STA_MODE位置必须为第一个, 枚举顺序若修改，请务必更新wifi_dev.a库
     AP_MODE,
+    P2P_MODE,
     SMP_CFG_MODE,
     MP_TEST_MODE,
-    P2P_MODE,
     NONE_MODE,
 };
 
 enum P2P_ROLE {
     P2P_GC_MODE = 1,
     P2P_GO_MODE,
+};
+
+enum WSC_CFG_MODE {
+    STA_ENROLLEE_PIN_MODE,
+    STA_REGISTRAR_PIN_MODE,
+    STA_ENROLLEE_PBC_MODE,
+    STA_REGISTRAR_PBC_MODE,
+    AP_ENROLLEE_PIN_MODE,
+    AP_REGISTRAR_PIN_MODE,
+    AP_ENROLLEE_PBC_MODE,
+    AP_REGISTRAR_PBC_MODE,
 };
 
 struct wifi_store_info {
@@ -31,20 +43,6 @@ struct wifi_stored_sta_info {
     u8 pwd[64];
     u8 ssid[33];
 } __attribute__((packed));
-
-struct wifi_scan_ssid_info {
-    char ssid[32];
-    unsigned int ssid_len;
-    unsigned char mac_addr[6];
-    char rssi;
-    char snr;
-    char rssi_db;
-    char rssi_rsv;
-    unsigned int channel_number;
-    unsigned char	SignalStrength;//(in percentage)
-    unsigned char	SignalQuality;//(in percentage)
-    unsigned char   SupportedRates[16];
-};
 
 enum wifi_sta_connect_state {
     WIFI_STA_DISCONNECT,
@@ -110,6 +108,9 @@ enum WIFI_EVENT {
     WIFI_EVENT_PM_SUSPEND,
     WIFI_EVENT_PM_RESUME,
     WIFI_FORCE_MODE_TIMEOUT,
+    WIFI_EVENT_STA_SCANNED_SSID,
+
+    WIFI_EVENT_STA_IP_GOT_IPV6_SUCC,
 };
 
 struct wifi_mode_info {
@@ -348,7 +349,6 @@ extern void wifi_disconnect_station(char *mac, u16 reason);
 
 
 /*-------------------------------------STA MODE--------------------------------------*/
-
 /**
  * @brief wifi_set_store_ssid_cnt，用于设置WIFI最多保存多少个连接的SSID数目
  *
@@ -429,7 +429,6 @@ extern char wifi_get_cqi(void);
  */
 enum wifi_sta_connect_state wifi_get_sta_connect_state(void);
 
-
 /*-------------------------------------MONITOR MODE--------------------------------------*/
 /**
  * @brief wifi_enter_smp_cfg_mode，用于设置WIFI进入配网模式/monitor模式
@@ -483,13 +482,23 @@ extern void wifi_set_airkiss_key(u8 key[16]);
  */
 extern int wifi_get_cfg_net_result(struct smp_cfg_result *smp_cfg);
 
-// @brief 设置WIFI当前信道
 /**
  * @brief wifi_set_channel，用于设置WIFI当前信道
  *
  * @param ch 要设置的WIFI信道
  */
 extern void wifi_set_channel(u8 ch);
+
+/*-------------------------------------WSC MODE--------------------------------------*/
+/**
+ * @brief wifi_wsc_start，用于设置wifi的WSC模式
+ *
+ * @param ssid 要设置的ssid信道
+ * @param ssid 设置pincode值
+ * @param mode WSC_CFG_MODE
+ */
+extern void wifi_wsc_start(const char *ssid, const char *pincode, int mode);
+
 
 ///  \cond DO_NOT_DOCUMENT
 // @brief 使用WIFI底层接口直接发送数据帧
@@ -521,7 +530,7 @@ enum wifi_tx_rate {
  * @brief wifi_get_payload_ptr，用于获取WIFI底层接口填充payload指针
  *
  */
-u8 *wifi_get_payload_ptr(void);
+extern u8 *wifi_get_payload_ptr(void);
 
 /**
  * @brief wifi_send_data，用于使用WIFI底层接口直接发送数据帧
@@ -555,13 +564,30 @@ extern void wifi_set_short_retry(u8  retry);
  */
 extern u32 wifi_get_remain_tx_queue(char ac_queue);
 
-
 /**
  * @brief wifi 最大backoff范围设置
  *
  * @param cwmax 为最大backoff范围
  */
 extern void wifi_backoff_cfg(u8 cwmax);
+
+/**
+ * @brief wifi_get_tbtt 获取 wifi 下一个 beacon 抵达的剩余预测时间
+ *
+ * @return 返回值范围 0 ~ 1600，单位为 64 us，即最小误差为 64 us
+ */
+extern u32 wifi_get_tbtt(void);
+
+/**
+ * @brief 设置edca参数，在dhcp成功后调用以确保覆盖之前配置
+ * @param ac_type 0:AC_BE, 1:AC_BK, 2:AC_VI, 3:AC_VO
+ * @param txop_limit 取值范围0~255 ,单位：32us
+ * @param cwmin 取值范围0~15
+ * @param cwmax 取值范围0~15
+ * @param aifsn 取值范围0~15
+ *
+ */
+void wifi_edca_parm_set(u8 ac_type, u8 txop_limit, u8 cwmin, u8 cwmax, u8 aifsn);
 
 #endif  //_WIFI_CONNECT_H_
 

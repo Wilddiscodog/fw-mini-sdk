@@ -10,20 +10,20 @@
 
 
 
-#define IIC_IOCTL_TX_START_BIT 				_IOW('I', 0,  0)
-#define IIC_IOCTL_TX_WITH_START_BIT 		_IOW('I', 1,  1)
-#define IIC_IOCTL_TX_STOP_BIT 				_IOW('I', 2,  1)
-#define IIC_IOCTL_TX 						_IOW('I', 3,  8)
-#define IIC_IOCTL_TX_WITH_STOP_BIT 			_IOW('I', 4,  9)
-#define IIC_IOCTL_RX 						_IOR('I', 5,  8)
-#define IIC_IOCTL_RX_WITH_STOP_BIT 			_IOR('I', 6,  9)
-#define IIC_IOCTL_RX_WITH_NOACK 			_IOR('I', 7,  9)
-#define IIC_IOCTL_RX_WITH_ACK 				_IOR('I', 8,  9)
-#define IIC_IOCTL_RX_WITH_START_BIT			_IOR('I', 9,  9)
+#define IIC_IOCTL_TX_START_BIT 				_IO('I', 0)
+#define IIC_IOCTL_TX_WITH_START_BIT 		_IOW('I', 1, u8)
+#define IIC_IOCTL_TX_STOP_BIT 				_IO('I', 2)
+#define IIC_IOCTL_TX 						_IO('I', 3)
+#define IIC_IOCTL_TX_WITH_STOP_BIT 			_IOW('I', 4, u8)
+#define IIC_IOCTL_RX 						_IOR('I', 5, u8)
+#define IIC_IOCTL_RX_WITH_STOP_BIT 			_IOR('I', 6, u8)
+#define IIC_IOCTL_RX_WITH_NOACK 			_IOR('I', 7, u8)
+#define IIC_IOCTL_RX_WITH_ACK 				_IOR('I', 8, u8)
+#define IIC_IOCTL_RX_WITH_START_BIT			_IOR('I', 9, u8)
 
-#define IIC_IOCTL_START 					_IOW('I', 10,  0)
-#define IIC_IOCTL_STOP 						_IOW('I', 11,  0)
-#define IIC_IOCTL_SET_NORMAT_RATE 			_IOW('I', 12,  0)
+#define IIC_IOCTL_START 					_IO('I', 10)
+#define IIC_IOCTL_STOP 						_IO('I', 11)
+#define IIC_IOCTL_SET_NORMAT_RATE 			_IOW('I', 12, u32)
 
 
 struct iic_device;
@@ -60,7 +60,10 @@ struct hw_iic_platform_data {
 
 
 #define SW_IIC_PLATFORM_DATA_BEGIN(data) \
-	extern int sw_iic_ops_link(void);module_initcall(sw_iic_ops_link);\
+	static int link_##data(void) {\
+	extern int sw_iic_ops_link(void);\
+	return sw_iic_ops_link(); }\
+	module_initcall(link_##data);\
 	static struct iic_device _iic_device_##data;\
 	static const struct sw_iic_platform_data data = { \
 		.head = { \

@@ -145,7 +145,7 @@ struct dhcp_msg {
                      (((x) & (u32_t)0x00ff0000UL) >>  8) | \
                      (((x) & (u32_t)0xff000000UL) >> 24))
 
-void dhcps_init(void);
+void dhcps_init(u8 netif);
 void dhcps_uninit(void);
 void display_IPAddress(void);
 void dhcps_appcall(void);

@@ -31,7 +31,6 @@ static enum watch_app_id s_app_id = WATCH_APP_COUNT;
 
 static const struct watch_app_desc s_apps[WATCH_APP_COUNT] = {
     { "对讲",   "T", &watch_icon_walkie,   0xFF6D00, app_walkie_create },
-    { "陀螺仪", "G", &watch_icon_gyro,     0x00BCD4, app_gyro_create },
 #ifdef CONFIG_NET_MUSIC_MODE_ENABLE
     { "网络",   "N", &watch_icon_net,      0x7C4DFF, app_net_music_create },
 #else
@@ -44,7 +43,6 @@ static const struct watch_app_desc s_apps[WATCH_APP_COUNT] = {
     { "消消乐", "C", &watch_icon_match3,   0xFF8FAB, app_match3_create },
     { "推箱子", "S", NULL,                 0xFFB74D, app_sokoban_create },
     { "2048",   "2", NULL,                 0xEDC22E, app_2048_create },
-    { "Pong",   "P", NULL,                 0x212121, app_pong_create },
     { "设置",   "S", &watch_icon_settings, 0x00E676, app_settings_create },
 };
 

@@ -9,6 +9,10 @@
 
 typedef u16 vm_hdl;
 
+extern int vm_open(vm_hdl index);
+
+extern CFG_ERR vm_close(vm_hdl hdl);
+
 /*格式化VM_区域*/
 extern CFG_ERR vm_eraser(void);
 

@@ -2,6 +2,7 @@
 #include "app_config.h"
 #include "lbuf.h"
 #include "system/init.h"
+#include "host_uvc.h"
 
 #define LOG_TAG_CONST       USB
 #define LOG_TAG             "[USB]"
@@ -24,10 +25,11 @@
 //使用，后续再细调大小，需要注意的是，每次调用lbuf_alloc()都需要额外的
 //空间来保存头信息，因此需要预留比实际所需稍大的buffer空间
 #if defined CONFIG_UVC_VIDEO2_ENABLE
+#if ISO_INTR_MODE == 2
+static u8 usb_dma_buf[24 * 1024 + 512] SEC(.usb_fifo) __attribute__((aligned(64)));
+#else
 static u8 usb_dma_buf[10 * 1024] SEC(.usb_fifo) __attribute__((aligned(64)));
-#elif (defined CDC_DUAL_ENABLE) && CDC_DUAL_ENABLE
-/* 双 CDC HS bulk(4x512) + EP0 等, 留余量给 lbuf 头 */
-static u8 usb_dma_buf[4 * 1024] SEC(.usb_fifo) __attribute__((aligned(64)));
+#endif
 #elif (defined USB_DEVICE_CLASS_CONFIG_2_0) && (USB_DEVICE_CLASS_CONFIG_2_0 != 0)
 static u8 usb_dma_buf[4 * 1024] SEC(.usb_fifo) __attribute__((aligned(64)));
 #else

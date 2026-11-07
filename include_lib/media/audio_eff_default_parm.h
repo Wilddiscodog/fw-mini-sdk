@@ -67,6 +67,7 @@ extern struct phone_parm_tool_set phone_mode[4];//通话上下行模式 0:下行
 // extern struct eff_parm eff_mode[EFFECT_REVERB_PARM_MAX];//混响的8个模式
 extern struct music_parm_tool_set music_mode[mode_add];//音乐模式
 extern struct music_eq2_tool music_eq2_parm[mode_add];
+extern wdrc_struct_TOOL_SET last_whole_drc_parm[mode_add];
 extern DynamicEQParam_TOOL_SET  dynamic_eq[mode_add];//动态eq
 // extern Gain_Process_TOOL_SET gain_parm[mode_add];//音乐模式尾部的增益调节
 // extern LowPassParam_TOOL_SET  low_pass_parm[mode_add];//rl rr通道低通滤波器
@@ -92,7 +93,7 @@ extern struct eq_tool muisc_fr_ext_eq[mode_add];
 extern ADC_PGA_TOOL_SET adc_pga;
 
 extern const struct eq_seg_info phone_eq_tab_normal[3];
-extern const struct eq_seg_info ul_eq_tab_normal[3];
+extern const struct eq_seg_info ul_eq_tab_normal[10];
 extern const struct eq_seg_info eq_tab_normal[10];
 extern const u16 eff_mode_seq[8];
 extern const u16 mic_eq_name[5] ;
@@ -284,5 +285,8 @@ void music_rl_high_wdrc_snap_parm_switch(u8 tar_snap);
 void music_rl_whole_wdrc_snap_parm_switch(u8 tar_snap);
 void music_rl_crossover_wdrc_snap_parm_switch(u8 tar_snap);
 
+void last_whole_wdrc_parm_default_init();
+void last_whole_wdrc_file_analyze_init();
+void last_whole_wdrc_snap_parm_switch(u8 tar_snap);
 
 #endif

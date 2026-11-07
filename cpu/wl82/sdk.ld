@@ -1,6 +1,8 @@
 
 
 
+mkey_entry_addr = 0x4000000 + 0x128;
+
 
 
 EXTERN(
@@ -10,6 +12,9 @@ _start
 
 
 sdfile_vfs_ops
+
+
+
 nor_sdfile_vfs_ops
 clock_timer1
 clock_port
@@ -59,6 +64,9 @@ cvsd_package_ops
 
 
 
+
+
+
 mp3_decoder
 wma_decoder
 
@@ -91,10 +99,6 @@ flac_decoder
 
 
 dts_decoder
-
-
-
-ogg_vorbis_decoder
 vir_dev_sub
 
 
@@ -102,16 +106,10 @@ vir_dev_sub
 subdev_vad_enc
 subdev_jlvad_enc
 
-vad_init
-fvad_new
-JLSP_vad_init
-
 
 
 subdev_dns_enc
 subdev_dns_dual_enc
-dns_enc_enable
-JLSP_ns_init
 
 );
 
@@ -157,14 +155,51 @@ SECTIONS
         *startup.S.o(.text)
         *(.boot_code)
         *(.text*)
-        *(.LOG_TAG_CONST*)
         *(.rodata*)
+
+
+
+        *(.LOG_TAG_CONST*)
+
         *(.fat_data_code)
+
+        . = ALIGN(4);
+        *(.update_const)
+        *(.update_code)
+        *(.bt_updata_ram_code)
 
         . = ALIGN(4);
         __VERSION_BEGIN = .;
         KEEP(*(.sys.version))
         __VERSION_END = .;
+        crypto_begin = .;
+        *(.crypto_ecdh_code)
+        *(.crypto_ecdh_const)
+
+        *(.crypto_bigint_code)
+        *(.crypto_bigint_const)
+
+        *(.crypto_code)
+        *(.crypto_const)
+
+        *(.ECDH_sample_code)
+        *(.ECDH_sample_const)
+
+        *(.uECC_code)
+        *(.uECC_const)
+
+        *(.hmac_code)
+        *(.hmac_const)
+
+        *(.hash_sample_code)
+        *(.hash_sample_const)
+
+        *(.aes_cmac_sample_code)
+        *(.aes_cmac_sample_const)
+        crypto_end = .;
+        crypto_size = . - crypto_begin;
+
+
         *(.jlsp_code)
         . = ALIGN(4);
         *(.jlsp_const)
@@ -203,13 +238,13 @@ SECTIONS
         *(.compressor_sparse_const)
         *(.limiter_sparse_code)
         *(.limiter_sparse_const)
-        *(.crossOver_sparse_code)
         *(.crossOver_sparse_const)
         *(.limiter_code)
         *(.limiter_const)
         *(.compressor_code)
         *(.compressor_const)
 
+        *(.crossOver_sparse_code)
 
 
         *(.wav_dec_sparse_code)
@@ -233,45 +268,16 @@ SECTIONS
 
 
 
-        . = ALIGN(4);
+        *(.bt_audioplc_code)
+        *(.bt_audioplc_sparse_code)
+        *(.bt_audioplc_const)
+        *(.plc_code)
+        *(.plc_const)
+
+
+
         *(.sbc_eng_code)
 
-        . = ALIGN(4);
-        *(.h4_const)
-
-        . = ALIGN(4);
-        crypto_begin = .;
-        *(.crypto_ecdh_code)
-        *(.crypto_ecdh_const)
-
-        *(.crypto_bigint_code)
-        *(.crypto_bigint_const)
-
-        *(.crypto_code)
-        *(.crypto_const)
-
-        *(.ECDH_sample_code)
-        *(.ECDH_sample_const)
-
-        *(.uECC_code)
-        *(.uECC_const)
-
-        *(.hmac_code)
-        *(.hmac_const)
-
-        *(.hash_sample_code)
-        *(.hash_sample_const)
-
-        *(.aes_cmac_sample_code)
-        *(.aes_cmac_sample_const)
-        crypto_end = .;
-        crypto_size = . - crypto_begin;
-
-
-        . = ALIGN(4);
-        *(.update_const)
-        *(.update_code)
-        *(.bt_updata_ram_code)
 
         . = ALIGN(4);
 
@@ -449,6 +455,7 @@ SECTIONS
 
         BTSTACK_CODE_TOTAL_SIZE = btstack_code_end - btstack_code_start;
 
+
         . = ALIGN(4);
 
         lcd_interface_begin = .;
@@ -488,23 +495,7 @@ SECTIONS
         battery_notify_end = .;
 
 
-        PROVIDE(__fsymtab_start = .);
-        KEEP(*(.FSymTab))
-        PROVIDE(__fsymtab_end = .);
-        PROVIDE(__vsymtab_start = .);
-        KEEP(*(.VSymTab))
-        PROVIDE(__vsymtab_end = .);
-        PROVIDE(__rtatcmdtab_start = .);
-        KEEP(*(.RtAtCmdTab))
-        PROVIDE(__rtatcmdtab_end = .);
-
-
-        . = ALIGN(4);
         *(*.rf.text.cache.L2.rf_trim)
-
-        __rf_trim_movable_region_start = .;
-        *(.movable.region.1);
-        __rf_trim_movable_region_end = .;
 
         . = ALIGN(32);
         _text_rodata_end = .;
@@ -514,6 +505,10 @@ SECTIONS
 
  >rom
     . = ORIGIN(sdram);
+
+
+
+
     .data ALIGN(32):
     {
 
@@ -609,12 +604,6 @@ SECTIONS
     _device_node_end = .;
     PROVIDE(device_node_end = .);
 
-    __usbh_class_info_start__ = .;
-    PROVIDE(usbh_class_info_start = .);
-        KEEP(*(.usbh_class_info))
-    __usbh_class_info_end__ = .;
-    PROVIDE(usbh_class_info_end = .);
-
     lp_target_begin = .;
     PROVIDE(lp_target_begin = .);
         *(.lp_target)
@@ -675,7 +664,6 @@ SECTIONS
     _video_pkg_end = .;
     PROVIDE(video_pkg_end = .);
 
-
         . = ALIGN(4);
 
  _app_begin = .;
@@ -707,6 +695,8 @@ SECTIONS
     *(.clock_critical_txt)
  _clock_critical_handler_end = .;
  PROVIDE(clock_critical_handler_end = .);
+
+        . = ALIGN(4);
 
 
    _audio_decoder_begin = .;
@@ -777,7 +767,6 @@ SECTIONS
     _video_subdev_end = .;
     PROVIDE(video_subdev_end = .);
 
-
         . = ALIGN(4);
 
 
@@ -836,6 +825,7 @@ SECTIONS
         btstack_data_end = .;
 
 
+
         . = ALIGN(4);
         *(.data)
 
@@ -857,6 +847,7 @@ SECTIONS
         *(.os_bss)
         *(.update_bss)
 
+
         . = ALIGN(4);
 
 
@@ -875,6 +866,7 @@ SECTIONS
         BTSTACK_LE_HOST_MESH_BSS_SIZE = ABSOLUTE(. - BTSTACK_LE_HOST_MESH_BSS_START);
 
         btstack_bss_end = .;
+
 
 
         . = ALIGN(4);
@@ -903,6 +895,7 @@ SECTIONS
         . = ALIGN(4);
         _SPI_CODE_END = . ;
 
+        *(.sdram_re_trim_code)
         *(.flushinv_icache)
         *(.volatile_ram_code)
 
@@ -932,21 +925,16 @@ SECTIONS
         PROVIDE(os_end = .);
 
 
-        . = ALIGN(4);
-        *(.movable.stub.1)
+
+
+
+
+
         *(*.text.cache.L1)
         *(*.text.cache.L2)
-        *(*.text.const.cache.L2)
-
-  . = ALIGN(4);
-        __rf_trim_movable_slot_start = .;
-        *(.movable.slot.1);
-        __rf_trim_movable_slot_end = .;
 
 
-
-
-
+        . = ALIGN(4);
         _ram_text_rodata_end = .;
         PROVIDE(ram_text_rodata_end = .);
 
@@ -954,6 +942,7 @@ SECTIONS
         *(.non_volatile_ram)
         *(.fft_data)
         *(.deepsleep_target)
+
 
         . = ALIGN(4);
 
@@ -990,11 +979,13 @@ SECTIONS
         btctler_data_end = .;
 
 
+
         . = ALIGN(4);
     } > ram0
 
     .ram0_bss ALIGN(4):
     {
+
 
 
         btctler_bss_start = .;
@@ -1058,39 +1049,37 @@ SECTIONS
         btctler_bss_end = .;
 
 
+
         . = ALIGN(4);
         *(.the_debug_isr_stack_c0)
         *(.the_debug_isr_stack_c1)
+        *(.stack_magic)
+        *(.stack_magic0)
 
+
+
+
+
+
+
+        . = ALIGN(4);
         _stack_info_begin = .;
         PROVIDE(stack_info_begin = .);
-
-        *(.stack)
         *(.cpu0_ustack)
-  *(.stack_magic)
-  *(.stack_magic0)
-
         _cpu0_sstack_begin = .;
         PROVIDE(cpu0_sstack_begin = .);
         *(.cpu0_sstack)
         _cpu0_sstack_end = .;
         PROVIDE(cpu0_sstack_end = .);
-
         *(.cpu1_ustack)
-
         _cpu1_sstack_begin = .;
         PROVIDE(cpu1_sstack_begin = .);
         *(.cpu1_sstack)
         _cpu1_sstack_end = .;
         PROVIDE(cpu1_sstack_end = .);
-
         _stack_info_end = .;
         PROVIDE(stack_info_end = .);
 
-
-
-
-        *(.sd_var)
         *(.sram)
 
         . = ALIGN(4);
@@ -1178,6 +1167,7 @@ PROVIDE(usb_data_end = .);
 
 
 
+
     BTCTLER_LE_RAM_TOTAL = BTCTLER_LE_CONTROLLER_DATA_SIZE + BTCTLER_LE_CONTROLLER_BSS_SIZE;
     BTCTLER_LE_CODE_TOTAL = BTCTLER_LE_CONTROLLER_CODE_SIZE;
 
@@ -1192,6 +1182,8 @@ PROVIDE(usb_data_end = .);
 
     BTSTACK_LE_HOST_MESH_RAM_TOTAL = BTSTACK_LE_HOST_MESH_DATA_SIZE + BTSTACK_LE_HOST_MESH_BSS_SIZE;
     BTSTACK_LE_HOST_MESH_FLASH_TOTAL = BTSTACK_LE_HOST_MESH_CODE_SIZE;
+
+
 
 
 EXTERN(
@@ -1215,6 +1207,7 @@ EXTERN(
     lib_wifi_version
     lib_wl82_rf_version
     lib_httpcli_version
+    lib_httpscli_version
     lib_airplay_version
     lib_aliyun_version
     lib_cjson_version
@@ -1235,11 +1228,11 @@ EXTERN(
     lib_coap_version
     lib_duer_version
     lib_mpeg_version
-    lib_lwip_2_0_3_version
-    lib_lwip_2_1_2_version
     lib_lwip_2_1_3_version
+    lib_lwip_2_2_0_version
     lib_mbedtls_2_2_1_version
     lib_mbedtls_2_26_0_version
+    lib_mbedtls_3_4_0_version
     lib_mdns_version
     lib_mongoose_version
     lib_mqtt_version

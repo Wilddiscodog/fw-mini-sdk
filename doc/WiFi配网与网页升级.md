@@ -1,6 +1,8 @@
-# WiFi 网页配网 + 网页固件升级 (V1.0.0)
+# WiFi 网页配网 + 网页固件升级
 
-> 日期: 2026-10-24 · 文件: `app/net/wifi_prov.c` + `app/bt_wifi_app.c`(钩子) · 宏: `MINI_WIFI_SUPPORT`
+> 更新日期: 2026-11-07 · 文件: `app/net/wifi_prov.c` + `app/bt_wifi_app.c`(钩子) · 宏: `MINI_WIFI_SUPPORT`  
+> 固件: V1.9.0 · OTA 文件请用 **`update-ota.ufw`**（双备份）；`VM_OPT=1` 尽量保留配网凭据。  
+> **改 Flash 预留布局后 USB 整烧可能清空 VM**（WiFi 需重配），日常升级优先网页/U盘 OTA。
 
 ## 1. 行为规格
 

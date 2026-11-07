@@ -21,5 +21,20 @@ int rgb24_to_yuv420p(unsigned char *rgb24, unsigned char *yuv420p, int width, in
 void RGB565_to_RGB888(unsigned char *rgb565, unsigned char *rgb888, int width, int height);
 /**********RGB888转RGYUV420***********/
 void RGB888_to_YUV420(u8 *rgb_buf, u8 *yuv_buf, u16 width, u16 heigh);
+/**********yuv420p旋转转码rgb565**********/
+void yuv420p_quto_rotate_rgb565(u8 *in_yuv, u8 *out_rgb, int in_w, int in_h);
+void yuv420p_quto_rotate_rgb565_90(u8 *in_yuv, u8 *out_rgb, int in_w, int in_h);
+/**********yuv422p旋转转码rgb565**********/
+void yuv422p_quto_rotate_rgb565(u8 *in_yuv, u8 *out_rgb, int in_w, int in_h);
+void yuv422p_quto_rotate_rgb565_90(u8 *in_yuv, u8 *out_rgb, int in_w, int in_h);
 
+/**
+ * YUV420P转RGB565并旋转180度
+ * @param yuv    输入YUV420P格式数据缓存区，需包含完整Y+U+V平面
+ * @param rgb    输出RGB565格式数据缓存区，需预先分配width*height*2字节空间
+ * @param width  图像宽度（像素），需与源数据匹配
+ * @param height 图像高度（像素），需与源数据匹配
+ */
+void yuv420p_to_rgb565_rot180(uint8_t *yuv, uint16_t *rgb, int width, int height);
+void yuv420p_to_rgb565_rot180_1(uint8_t *yuv, uint16_t *rgb, int width, int height);
 #endif

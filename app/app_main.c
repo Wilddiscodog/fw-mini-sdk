@@ -29,14 +29,19 @@
 #endif
 #endif
 
-/* 双核: SOFT5→CPU0 / SOFT4→CPU1 (FreeRTOS IPI 与 soft_poweroff 跨核同步) */
+/*
+ * 双核: SOFT5→CPU0 / SOFT4→CPU1 (FreeRTOS IPI + soft_poweroff/SFC 的 another_cpu_irq).
+ * 优先级必须 ≥7: local_irq_disable 把 IPMASK=7, 仅「≥7」为不可屏蔽;
+ * 原厂 demo 双核亦用 7。若用 6, CPU1 在 BT/WiFi 临界区关中断时 soft_poweroff
+ * 会永久卡在 "other cpu hold", 实际进不了 P33.
+ */
 const struct irq_info irq_info_table[] = {
 #if CPU_CORE_NUM > 1
-    { IRQ_SOFT5_IDX,      6,   0    },
-    { IRQ_SOFT4_IDX,      6,   1    },
+    { IRQ_SOFT5_IDX,      7,   0    },
+    { IRQ_SOFT4_IDX,      7,   1    },
 #elif defined(CONFIG_IPMASK_ENABLE)
-    { IRQ_SOFT5_IDX,      6,   0    },
-    { IRQ_SOFT4_IDX,      6,   1    },
+    { IRQ_SOFT5_IDX,      7,   0    },
+    { IRQ_SOFT4_IDX,      7,   1    },
 #endif
 #if CPU_CORE_NUM == 1
     { IRQ_SOFT5_IDX,      7,   0    },
@@ -439,7 +444,7 @@ void app_main()
     bt_wifi_start_deferred();
 #endif
 #if (defined MINI_USB_ENABLE) && MINI_USB_ENABLE
-    os_task_create(usb_mode_task, NULL, 8, 2048, 0, "usb_mode");
+    // os_task_create(usb_mode_task, NULL, 8, 2048, 0, "usb_mode");
 #endif
 
 }

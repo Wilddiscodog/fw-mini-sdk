@@ -1,7 +1,7 @@
 .section .sys.version, "ax"
 
-.global include_lib_btctrler_version
+.global include_lib_btstack_version
 
-include_lib_net_version:
+include_lib_btstack_version:
 
-.asciz "INCLUDE_BTCTRLER-$941bdff"
+.asciz "INCLUDE_BTSTACK-$8e1f81d"

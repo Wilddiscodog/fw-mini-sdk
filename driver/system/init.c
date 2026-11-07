@@ -8,6 +8,18 @@
 #include "jiffies.h"
 #include "system/timer.h"
 
+
+#include <unistd.h>
+long sysconf(int name)
+{
+    if (name == _SC_NPROCESSORS_CONF) {
+        return CPU_CORE_NUM;
+    } else {
+        printf("[%s, %d][%d]is not supported yet\n", __FUNCTION__, __LINE__, name);
+    }
+    return -1;
+}
+
 int errno;
 __attribute__((used)) int *__errno(void)
 {
@@ -161,6 +173,7 @@ static void malloc_debug_dump(void *p)
 extern void setup_arch(void);
 extern int sys_timer_init(void);
 extern void app_main(void);
+extern void sdfile_ext_mount_init(void);
 void __attribute__((weak)) board_init() {}
 void __attribute__((weak)) board_early_init() {}
 
@@ -180,6 +193,9 @@ static void app_task_handler(void *p)
 
     board_early_init();
     __do_initcall(early_initcall);
+#ifdef CONFIG_SDFILE_EXT_ENABLE
+    sdfile_ext_mount_init();
+#endif
     __do_initcall(platform_initcall);
     board_init();
 
@@ -200,7 +216,7 @@ static void app_task_handler(void *p)
     __do_initcall(late_initcall);
     app_main();
 
-#ifdef FINSH_ENABLE
+#ifdef CONFIG_FINSH_ENABLE
     extern int finsh_system_init(void);
     finsh_system_init();
 #endif
@@ -291,38 +307,77 @@ int eSystemConfirmStopStatus(void)
     return 0;
 }
 
-/* 无 BT 时不要用跨核 bt_lock 包 local_irq_*: 易与 soft_poweroff
- * 的 other-cpu softIRQ 互锁(bisect=0 仍 other cpu hold 即此因之一) */
-#if (defined MINI_BT_SUPPORT) && MINI_BT_SUPPORT
+/* 官方默认开跨核 bt_lock; soft_poweroff 的 enter_soft_hold 也会调 local_irq_disable,
+ * 与另一核 softIRQ 互锁会卡 "other cpu hold"。关机前通过 sys_power_bt_lock_bypass 旁路。 */
 #define CONFIG_BT_ENABLE_SPINLOCK	1
-#else
-#define CONFIG_BT_ENABLE_SPINLOCK	0
-#endif
 
 #if CONFIG_BT_ENABLE_SPINLOCK && CPU_CORE_NUM > 1
 
 static volatile u32 bt_lock_cnt[CPU_CORE_NUM] SEC_USED(.volatile_ram) = {0};
 static spinlock_t bt_lock SEC_USED(.volatile_ram) = {0};
+static volatile u8 s_bt_lock_bypass SEC_USED(.volatile_ram);
 
-__attribute__((always_inline))
+void sys_power_bt_lock_bypass(u8 on)
+{
+    u32 t = 0;
+
+    if (!on) {
+        s_bt_lock_bypass = 0;
+        return;
+    }
+    while ((bt_lock_cnt[0] | bt_lock_cnt[1]) && t < 50000) {
+        delay_us(20);
+        t++;
+    }
+    s_bt_lock_bypass = 1;
+    __asm_csync();
+    printf("[power] bt_lock bypass cnt=%u/%u wait=%u\n",
+           bt_lock_cnt[0], bt_lock_cnt[1], t);
+}
+
+__attribute__((noinline))
 void local_irq_disable(void)
 {
     __local_irq_disable();
+    if (s_bt_lock_bypass) {
+        return;
+    }
     if (bt_lock_cnt[current_cpu_id()]++ == 0) {
         arch_spin_lock(&bt_lock);
     }
 }
 
-__attribute__((always_inline))
+__attribute__((noinline))
 void local_irq_enable(void)
 {
+    if (s_bt_lock_bypass) {
+        __local_irq_enable();
+        return;
+    }
     if (--bt_lock_cnt[current_cpu_id()] == 0) {
         arch_spin_unlock(&bt_lock);
     }
     __local_irq_enable();
 }
 
+__attribute__((used))
+void __rt_local_irq_disable(void)
+{
+    local_irq_disable();
+}
+
+__attribute__((used))
+void __rt_local_irq_enable(void)
+{
+    local_irq_enable();
+}
+
 #else
+
+void sys_power_bt_lock_bypass(u8 on)
+{
+    (void)on;
+}
 
 __attribute__((always_inline))
 void local_irq_disable(void)
@@ -454,7 +509,7 @@ void sys_local_irq_enable(void)
 }
 
 // just fix build&link
-#if !defined CONFIG_NET_ENABLE && !defined CONFIG_BT_ENABLE
+#if (!defined CONFIG_NET_ENABLE && !defined CONFIG_BT_ENABLE) || defined CONFIG_EXT_WIFI_ENABLE
 __attribute__((weak)) void wf_set_phcom_cnt(u32 phcom_cnt)
 {
 }

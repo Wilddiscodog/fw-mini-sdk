@@ -1,6 +1,9 @@
 #ifndef ASM_GPIO_H
 #define ASM_GPIO_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "asm/gpio.h"
 
@@ -312,4 +315,7 @@ unsigned int usb_set_dieh(unsigned int gpio, unsigned int value);
 unsigned int usb_set_die(unsigned int gpio, unsigned int value);
 unsigned int usb_read(unsigned int gpio);
 /// \endcond
+#ifdef __cplusplus
+}
+#endif
 #endif

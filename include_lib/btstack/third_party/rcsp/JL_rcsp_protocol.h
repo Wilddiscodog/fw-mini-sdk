@@ -109,6 +109,8 @@ enum {
 
     JL_OPCODE_SIMPLE_FILE_TRANS = 0x28,
 
+    JL_OPCODE_REQUEST_EXCEPTION_INFO = 0x29,
+
     JL_OPCODE_SPORTS_DATA_INFO_GET = 0xA0,
     JL_OPCODE_SPORTS_DATA_INFO_SET = 0xA1,
     JL_OPCODE_SPORTS_DATA_INFO_AUTO_UPDATE = 0xA2,
@@ -205,6 +207,8 @@ extern bool rcsp_send_list_is_empty(void);
 extern void JL_send_packet_process(void);
 extern void JL_recieve_packet_parse_process(void);
 
+extern void JL_protocol_timeout_set(int timeout_value);
+extern void JL_protocol_timeout_resume(void);
 
 #endif//__JL_PROTOCOL_H__
 

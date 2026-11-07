@@ -27,6 +27,14 @@
 #define     FBIOGET_PRIVATE_ATTR        _IOR('F', 13, sizeof(void *))
 #define     FBIOSET_EVENT_HANDLER       _IOR('F', 14, sizeof(void *))
 
+//万花筒特效操作
+#define     FBIOSET_EFFECT_INIT			_IOW('F', 15, sizeof(int))//初始化
+#define     FBIOSET_EFFECT_ENABLE		_IOW('F', 16, sizeof(int))//使能显示
+#define     FBIOSET_EFFECT_UNENABLE		_IOW('F', 17, sizeof(int))//关闭使能
+#define     FBIOSET_EFFECT_MODE			_IOW('F', 18, sizeof(int))//模式切换
+#define     FBIOSET_EFFECT_FREE			_IOW('F', 19, sizeof(int))//释放内存
+
+
 enum fb_event {
     FB_EVT_PAUSE,
     FB_EVT_RESUME,

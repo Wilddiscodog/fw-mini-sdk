@@ -52,6 +52,8 @@
 #define ROOT_TABLE_OFFSET ((RESERVED_SECTOR_SIZE + FAT_TABLE_SECTOR_SIZE * 2) * BLOCK_SIZE)
 #define FILE_START_OFFSET ((RESERVED_SECTOR_SIZE + FAT_TABLE_SECTOR_SIZE * 2) * BLOCK_SIZE + CLUSTER_SIZE * 4)
 
+static u8 ram_disk_online;
+
 #if TCFG_USER_VIRTUAL_PLAY_ENABLE
 static struct {
     const char *file_name;	//暂时只支持短文件名8+3规则
@@ -229,7 +231,7 @@ static const struct audio_vfs_ops user_virtual_vfs_ops = {
     .fclose = user_virtual_vfs_fclose,
 };
 
-static u32 mp3_read_input(u8 *buf, u32 len)
+static int mp3_read_input(u8 *buf, u32 len)
 {
     u32 rlen = 0;
 
@@ -331,6 +333,11 @@ int user_virtual_play_read_data(void *buf, u32 len)
     return rlen;
 }
 
+int check_user_virtual_audio_if_running(void)
+{
+    return ram_disk_online;
+}
+
 void *get_user_virtual_audio_server(void)
 {
     return ufs->audio_enc;
@@ -427,11 +434,13 @@ static int ram_disk_dev_open(const char *name, struct device **device, void *arg
 {
     *device = &ram_disk_dev;
     (*device)->private_data = NULL;
+    ram_disk_online = 1;
     return 0;
 }
 
 static int ram_disk_dev_close(struct device *device)
 {
+    ram_disk_online = 0;
     return 0;
 }
 

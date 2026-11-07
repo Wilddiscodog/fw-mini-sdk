@@ -19,6 +19,13 @@ SECTIONS
         *(.ble_mesh_tinycrypt_data)
         BTSTACK_LE_HOST_MESH_DATA_SIZE = ABSOLUTE(. - BTSTACK_LE_HOST_MESH_DATA_START);
 
+	/*Le audio big*/
+        BTSTACK_LE_AUDIO_BIG_DATA_START = .;
+        *(.big_rx_data)
+        *(.big_tx_data)
+        *(.big_common_data)
+        BTSTACK_LE_AUDIO_BIG_DATA_SIZE = ABSOLUTE(. - BTSTACK_LE_AUDIO_BIG_DATA_START);
+
         btstack_data_end = .;
 
         . = ALIGN(4);
@@ -39,6 +46,13 @@ SECTIONS
         *(.ble_mesh_bss)
         *(.ble_mesh_tinycrypt_bss)
         BTSTACK_LE_HOST_MESH_BSS_SIZE = ABSOLUTE(. - BTSTACK_LE_HOST_MESH_BSS_START);
+
+	/*Le audio big*/
+        BTSTACK_LE_AUDIO_BIG_BSS_START = .;
+        *(.big_rx_bss)
+        *(.big_tx_bss)
+        *(.big_common_bss)
+        BTSTACK_LE_AUDIO_BIG_BSS_SIZE = ABSOLUTE(. - BTSTACK_LE_AUDIO_BIG_BSS_START);
 
         btstack_bss_end = .;
         . = ALIGN(4);
@@ -92,6 +106,17 @@ SECTIONS
         *(.ble_mesh_const)
         *(.ble_mesh_tinycrypt_const)
         BTSTACK_LE_HOST_MESH_CODE_SIZE = ABSOLUTE(. - BTSTACK_LE_HOST_MESH_CODE_START);
+
+	/*Le audio big*/
+        BTSTACK_LE_AUDIO_BIG_TEXT_START = .;
+        *(.big_rx_const)
+        *(.big_tx_const)
+        *(.big_common_const)
+
+        *(.big_rx_code)
+        *(.big_tx_code)
+        *(.big_common_code)
+        BTSTACK_LE_AUDIO_BIG_TEXT_SIZE = ABSOLUTE(. - BTSTACK_LE_AUDIO_BIG_TEXT_START);
 
         btstack_code_end = .;
 		. = ALIGN(4);

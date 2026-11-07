@@ -16,17 +16,30 @@ static u8 s_busy;
 static volatile u8 s_off_req;       /* 长按 → 真关机 */
 static volatile u8 s_sleep_tog;     /* 短按 → 息屏/亮屏切换 */
 static volatile u8 s_do_poweroff;
+static u32 s_boot_ms;               /* 开机时刻: 5s 内禁止息屏 */
+
+#define WATCH_LOCK_GUARD_MS  5000u
+
+static u8 watch_power_lock_allowed(void)
+{
+    return (timer_get_ms() - s_boot_ms) >= WATCH_LOCK_GUARD_MS;
+}
 
 void watch_power_boot_anim(void)
 {
     s_busy = 0;
     s_on = 1;
     s_asleep = 0;
+    s_boot_ms = timer_get_ms();
+    s_sleep_tog = 0; /* 丢掉开机松手可能积压的短按 */
 }
 
 static void watch_power_sleep(void)
 {
     if (s_busy || s_asleep) {
+        return;
+    }
+    if (!watch_power_lock_allowed()) {
         return;
     }
     s_asleep = 1;
@@ -86,6 +99,7 @@ void watch_power_init(void)
     s_off_req = 0;
     s_sleep_tog = 0;
     s_do_poweroff = 0;
+    s_boot_ms = timer_get_ms();
 }
 
 u8 watch_power_is_on(void)
@@ -115,9 +129,10 @@ void watch_power_poll(lv_timer_t *timer)
         s_sleep_tog = 0;
         if (s_asleep) {
             watch_power_wake();
-        } else if (!s_busy) {
+        } else if (!s_busy && watch_power_lock_allowed()) {
             watch_power_sleep();
         }
+        /* 开机 5s 内的短按(含长按开机松手)直接丢弃, 避免误息屏 */
     }
     if (!s_off_req) {
         return;

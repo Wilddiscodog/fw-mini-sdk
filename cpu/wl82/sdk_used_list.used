@@ -3,6 +3,9 @@
 
 
 sdfile_vfs_ops
+
+
+
 nor_sdfile_vfs_ops
 clock_timer1
 clock_port
@@ -52,6 +55,9 @@ cvsd_package_ops
 
 
 
+
+
+
 mp3_decoder
 wma_decoder
 
@@ -84,10 +90,6 @@ flac_decoder
 
 
 dts_decoder
-
-
-
-ogg_vorbis_decoder
 vir_dev_sub
 
 
@@ -95,13 +97,7 @@ vir_dev_sub
 subdev_vad_enc
 subdev_jlvad_enc
 
-vad_init
-fvad_new
-JLSP_vad_init
-
 
 
 subdev_dns_enc
 subdev_dns_dual_enc
-dns_enc_enable
-JLSP_ns_init

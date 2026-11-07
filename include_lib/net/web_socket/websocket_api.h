@@ -7,8 +7,6 @@
 #include "websocket_base64.h"
 #include "websocket_sha_1.h"
 #include "websocket_intlib.h"
-#include "websocket_api.h"
-#include "string.h"
 
 #include "mbedtls/mbedtls_config.h"
 //#include "mbedtls/platform.h"
@@ -18,11 +16,11 @@
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/error.h"
-#include "generic/typedef.h"
 #include "mbedtls/certs.h"
 #include "lwip/sockets.h"
 #include "lwip/inet.h"
 #include "lwip/netdb.h"
+#include "os/os_api.h"
 
 
 #define websockets_sleep  msleep
@@ -62,6 +60,7 @@ typedef enum {
 } WS_CMD_Type;
 
 typedef struct websockets_mbedtls {
+    OS_MUTEX ssl_mutex;
     /*client*/
     mbedtls_net_context server_fd;
     mbedtls_entropy_context entropy;
@@ -89,6 +88,10 @@ struct websocket_req_head {
     u8 version[8];
 };
 
+struct websocket_session_info {
+    mbedtls_ssl_session saved_session;
+    int session_is_saved;
+};
 typedef struct websocket_struct {
     void *sk_fd;
     void *lst_fd;
@@ -99,15 +102,20 @@ typedef struct websocket_struct {
     u8 websocket_data_type;
     u8 send_data_use_seq;
     u16 port;
+    u16 websocket_valid;
     struct sockaddr_in servaddr;
     struct sockaddr_in clientaddr;
     u8 *ip_or_url;
     const char *origin_str;
+    const char *user_agent_str;
     u8 ip_addr[16];
     u8 key[32];
     u8 msg[MAX_MSG];
     u8 msg_write;
     u8 msg_read;
+    u16 recv_tmp_offset;
+    u16 recv_tmp_size;
+    u8 *recv_tmp_buf;
     u8 *recv_buf;
     u32 recv_buf_size;
     u64 recv_len;
@@ -116,7 +124,7 @@ typedef struct websocket_struct {
     u32 payload_data_continue;
     struct websocket_req_head req_head;
     struct websockets_mbedtls websockets_mbtls_info;
-    u16 websocket_valid;
+    void *priv;
     int (*_init)(struct websocket_struct *websocket_info);
     void (*_exit)(struct websocket_struct *websocket_info);
     int (*_handshack)(struct websocket_struct *websocket_info);
@@ -124,8 +132,9 @@ typedef struct websocket_struct {
     void (*_recv_thread)(void *param);
     int (*_recv)(struct websocket_struct *websocket_info);
     int (*_send)(struct websocket_struct *websocket_info, u8 *buf, int len, char type);
-    void (*_recv_cb)(u8 *buf, u32 len, u8 type);
+    void (*_recv_cb)(u8 *buf, u32 len, u8 type, void *priv);
     int (*_exit_notify)(struct websocket_struct *websocket_info);
+    struct websocket_session_info *(*_get_session)();
 } WEBSOCKET_INFO;
 
 typedef enum {
@@ -143,7 +152,7 @@ void websockets_send_data_set_seq_packet(struct websocket_struct *websockets_inf
 int websockets_socket_send(struct websocket_struct *websockets_info, u8 *buf, int len, char type);//通用数据发送，type自定义指定类型
 
 /******************websockets**************************************/
-int  websockets_pong_heart_beat(struct websocket_struct *websockets_info, u8 *buf, char index);
+int websockets_pong_heart_beat(struct websocket_struct *websockets_info, u8 *buf, u64 *len, char index);
 int  websockets_ping_heart_beat(struct websocket_struct *websockets_info, u8 *buf, char index);
 void websockets_client_socket_heart_thread(void *param);
 void websockets_client_socket_recv_thread(void *param);

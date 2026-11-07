@@ -441,7 +441,14 @@ struct uac_iso_endpoint_descriptor {
 #define UAC1_STATUS_TYPE_IRQ_PENDING		(1 << 7)
 #define UAC1_STATUS_TYPE_MEM_CHANGED		(1 << 6)
 
+#define UAC_BYTE(x)     LOBYTE(x)
+#define UAC_WORD(x)     LOBYTE(x), HIBYTE(x)
+#define UAC_3BYTE(x)    DW1BYTE(x), DW2BYTE(x), DW3BYTE(x)
+#define UAC_DWORD(x)    DW1BYTE(x), DW2BYTE(x), DW3BYTE(x), DW4BYTE(x)
+
 #include "asm/usb.h"
+#include "usb/device/usb_stack.h"
+
 struct uac1_status_word {
     u8 bStatusType;
     u8 bOriginator;

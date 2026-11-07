@@ -28,6 +28,9 @@
 #define     KEY_COLLECT         19
 #define     KEY_LOCAL           20
 
+#define     KEY_ADD             21
+#define     KEY_MINUS           22
+
 #define 	KEY_0 				30
 #define 	KEY_1 				31
 #define 	KEY_2 				32

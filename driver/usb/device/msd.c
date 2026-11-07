@@ -170,6 +170,10 @@ inline static u8 __get_max_msd_dev(void)
     cnt++;
 #endif
 
+#ifdef CONFIG_DMSDX_ENABLE
+    cnt++;
+#endif
+
     if (!cnt) {
         cnt = 1;
     } else if (cnt >= MAX_MSD_DEV) {
@@ -329,7 +333,7 @@ static u32 msd_itf_hander(struct usb_device_t *usb_device, struct usb_ctrlreques
     case USB_TYPE_CLASS:
         switch (setup->bRequest) {
         case USB_MSD_MAX_LUN:
-            msd_endpoint_init(usb_device, -1);
+            /* msd_endpoint_init(usb_device, -1); */
             tx_len = 1;
             tx_payload[0] = __get_max_msd_dev() - 1;
             usb_set_data_payload(usb_device, setup, tx_payload, tx_len);
@@ -442,6 +446,7 @@ static void stall_inep(const struct usb_device_t *usb_device)
     u32 txcsr;
 
     while (1) {
+        udelay(100);
         if (ot-- == 0) {
             break;
         }
@@ -463,6 +468,7 @@ static void stall_outep(const struct usb_device_t *usb_device)
     u32 rxcsr;
 
     while (1) {
+        udelay(100);
         if (ot-- == 0) {
             break;
         }
@@ -581,6 +587,8 @@ static void msd_write_10_async(const struct usb_device_t *usb_device, u8 cur_lun
     u8  buf_idx = 0;
     u32 have_send_stall = FALSE;
     void *dev_fd = NULL;
+    u32 block_offset = 0;
+
     while (lba_num) {
         wdt_clear();
         num = lba_num > MSD_BLOCK_SIZE ? MSD_BLOCK_SIZE : lba_num;
@@ -605,8 +613,9 @@ static void msd_write_10_async(const struct usb_device_t *usb_device, u8 cur_lun
         }
         dev_fd = check_disk_status(usb_id, cur_lun);
         if (dev_fd) {
+            dev_ioctl(dev_fd, IOCTL_GET_BLOCK_OFFSET, (u32)&block_offset);
             dev_ioctl(dev_fd, IOCTL_SET_ASYNC_MODE, 0);
-            err = dev_bulk_write(dev_fd, msd_handle[usb_id]->msd_buf + buf_idx * MSD_BUFFER_SIZE, lba, num);
+            err = dev_bulk_write(dev_fd, msd_handle[usb_id]->msd_buf + buf_idx * MSD_BUFFER_SIZE, lba + block_offset, num);
             if (err != num) {
                 log_error("write_10 write fail, %d, dev = %s",
                           err, msd_handle[usb_id]->info.dev_name[cur_lun]);
@@ -646,6 +655,7 @@ static void msd_read_10_async(const struct usb_device_t *usb_device, u8 cur_lun,
     u8 buf_idx = 0;
     u32 last_lba = 0, last_num = 0;
     void *dev_fd = NULL;
+    u32 block_offset = 0;
 
     if (lba_num == 0) {
         log_error("lba_num == 0\n");
@@ -655,8 +665,9 @@ static void msd_read_10_async(const struct usb_device_t *usb_device, u8 cur_lun,
     num = lba_num > MSD_BLOCK_SIZE ? MSD_BLOCK_SIZE : lba_num;
     dev_fd = check_disk_status(usb_id, cur_lun);
     if (dev_fd) {
+        dev_ioctl(dev_fd, IOCTL_GET_BLOCK_OFFSET, (u32)&block_offset);
         dev_ioctl(dev_fd, IOCTL_SET_ASYNC_MODE, 0);
-        err = dev_bulk_read(dev_fd, msd_handle[usb_id]->msd_buf + buf_idx * MSD_BUFFER_SIZE, lba, num);
+        err = dev_bulk_read(dev_fd, msd_handle[usb_id]->msd_buf + buf_idx * MSD_BUFFER_SIZE, lba + block_offset, num);
         if (err != num) {
             log_error("read disk error0 = %d, dev = %s\n", err, msd_handle[usb_id]->info.dev_name[cur_lun]);
             stall_error(usb_device, 0, MEDIUM_ERROR);
@@ -686,8 +697,9 @@ static void msd_read_10_async(const struct usb_device_t *usb_device, u8 cur_lun,
         dev_fd = check_disk_status(usb_id, cur_lun);
         if (dev_fd) {
             if (num) {
+                dev_ioctl(dev_fd, IOCTL_GET_BLOCK_OFFSET, (u32)&block_offset);
                 dev_ioctl(dev_fd, IOCTL_SET_ASYNC_MODE, 0);
-                err = dev_bulk_read(dev_fd, msd_handle[usb_id]->msd_buf + buf_idx * MSD_BUFFER_SIZE, lba, num);
+                err = dev_bulk_read(dev_fd, msd_handle[usb_id]->msd_buf + buf_idx * MSD_BUFFER_SIZE, lba + block_offset, num);
                 if (err != num) {
                     log_error("read disk error1 = %d, dev = %s",
                               err, msd_handle[usb_id]->info.dev_name[cur_lun]);
@@ -740,6 +752,7 @@ static void write_10(const struct usb_device_t *usb_device)
     lba_num = ((u16)(msd_handle[usb_id]->cbw.LengthH) << 8) | (msd_handle[usb_id]->cbw.LengthL);
     u8 cur_lun = msd_handle[usb_id]->cbw.bCBWLUN;
     void *dev_fd = msd_handle[usb_id]->info.dev_handle[cur_lun];
+    u32 block_offset = 0;
 
 #if USB_MSD_BULK_DEV_USE_ASYNC
     /* u32 old_speed;                                           */
@@ -776,14 +789,13 @@ static void write_10(const struct usb_device_t *usb_device)
         }
         dev_fd = check_disk_status(usb_id, cur_lun);
         if (dev_fd) {
+            dev_ioctl(dev_fd, IOCTL_GET_BLOCK_OFFSET, (u32)&block_offset);
             dev_ioctl(dev_fd, IOCTL_CMD_RESUME, 0);
-            err = dev_bulk_write(dev_fd, msd_handle[usb_id]->msd_buf, lba, num);
+            err = dev_bulk_write(dev_fd, msd_handle[usb_id]->msd_buf, lba + block_offset, num);
             dev_ioctl(dev_fd, IOCTL_CMD_SUSPEND, 0);
             if (err != num) {
                 stall_error(usb_device, 1, MEDIUM_ERROR);
                 log_error("write disk error =%d, dev = %s", err, msd_handle[usb_id]->info.dev_name[cur_lun]);
-                break;
-            } else {
                 break;
             }
             lba += num;
@@ -807,6 +819,7 @@ static void read_10(const struct usb_device_t *usb_device)
     lba_num = ((u16)(msd_handle[usb_id]->cbw.LengthH) << 8) | (msd_handle[usb_id]->cbw.LengthL);
     u8 cur_lun = msd_handle[usb_id]->cbw.bCBWLUN;
     void *dev_fd = msd_handle[usb_id]->info.dev_handle[cur_lun];
+    u32 block_offset = 0;
 
 #if USB_MSD_BULK_DEV_USE_ASYNC
     msd_read_10_async(usb_device, cur_lun, lba, lba_num);
@@ -824,8 +837,9 @@ static void read_10(const struct usb_device_t *usb_device)
         }
         dev_fd = check_disk_status(usb_id, cur_lun);
         if (dev_fd) {
+            dev_ioctl(dev_fd, IOCTL_GET_BLOCK_OFFSET, (u32)&block_offset);
             dev_ioctl(dev_fd, IOCTL_CMD_RESUME, 0);
-            err = dev_bulk_read(dev_fd, msd_handle[usb_id]->msd_buf, lba, num);
+            err = dev_bulk_read(dev_fd, msd_handle[usb_id]->msd_buf, lba + block_offset, num);
             dev_ioctl(dev_fd, IOCTL_CMD_SUSPEND, 0);
             if (err != num) {
                 log_error("read disk error =%d, dev = %s", err, msd_handle[usb_id]->info.dev_name[cur_lun]);
@@ -853,6 +867,7 @@ static void read_capacity(const struct usb_device_t *usb_device)
     const usb_dev usb_id = usb_device2id(usb_device);
     u32 err;
     u32 capacity_temp;
+    u32 block_offset = 0;
     u8 capacity[8] = {0};
     u8 cur_lun = msd_handle[usb_id]->cbw.bCBWLUN;
     void *dev_fd = check_disk_status(usb_id, cur_lun);
@@ -861,6 +876,8 @@ static void read_capacity(const struct usb_device_t *usb_device)
         return;
     }
     dev_ioctl(dev_fd, IOCTL_GET_CAPACITY, (u32)&capacity_temp);
+    dev_ioctl(dev_fd, IOCTL_GET_BLOCK_OFFSET, (u32)&block_offset);
+    capacity_temp -= block_offset;
     capacity_temp = cpu_to_be32(capacity_temp - 1);
     memcpy(capacity, &capacity_temp, 4);
     dev_ioctl(dev_fd, IOCTL_GET_BLOCK_SIZE, (u32)&capacity_temp);
@@ -880,6 +897,7 @@ static void read_format_capacity(const struct usb_device_t *usb_device)
     u32 err;
     u8 capacity[12] = {0};
     u32 capacity_temp;
+    u32 block_offset = 0;
     u8 cur_lun = msd_handle[usb_id]->cbw.bCBWLUN;
     void *dev_fd = check_disk_status(usb_id, cur_lun);
     if (!dev_fd) {
@@ -888,7 +906,8 @@ static void read_format_capacity(const struct usb_device_t *usb_device)
     }
 
     dev_ioctl(dev_fd, IOCTL_GET_CAPACITY, (u32)&capacity_temp);
-
+    dev_ioctl(dev_fd, IOCTL_GET_BLOCK_OFFSET, (u32)&block_offset);
+    capacity_temp -= block_offset;
     capacity_temp = cpu_to_be32(capacity_temp);
     memcpy(&capacity[4], &capacity_temp, 4);
     dev_ioctl(dev_fd, IOCTL_GET_BLOCK_SIZE, (u32)&capacity_temp);
@@ -937,7 +956,7 @@ void USB_MassStorage(const struct usb_device_t *usb_device)
         usb_set_intr_rxe(usb_id, MSD_BULK_EP_OUT);
         return;
     }
-    log_debug("opcode %x", msd_handle[usb_id]->cbw.operationCode);
+    /* log_debug("opcode %x", msd_handle[usb_id]->cbw.operationCode); */
     if (private_scsi_cmd(usb_device, &(msd_handle[usb_id]->cbw))) {
         msd_handle[usb_id]->info.bError = 0;
         msd_handle[usb_id]->csw.uCSWDataResidue = 0;
@@ -984,7 +1003,12 @@ void USB_MassStorage(const struct usb_device_t *usb_device)
 
         default:
             log_error("opcode %x", msd_handle[usb_id]->cbw.operationCode);
-            stall_error(usb_device, 0, !(msd_handle[usb_id]->cbw.bmCBWFlags & 0x80));
+            if (msd_handle[usb_id]->cbw.dCBWDataTransferLength) {
+                stall_error(usb_device, !(msd_handle[usb_id]->cbw.bmCBWFlags & 0x80), 2);
+            } else {
+                msd_handle[usb_id]->csw.bCSWStatus = 1;
+                msd_handle[usb_id]->info.bError = 2;
+            }
             break;
         }
     }

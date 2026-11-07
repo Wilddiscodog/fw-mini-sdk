@@ -3,7 +3,6 @@
 
 #include "lvgl.h"
 
-lv_obj_t *app_gyro_create(lv_obj_t *parent);
 lv_obj_t *app_net_music_create(lv_obj_t *parent);
 lv_obj_t *app_bt_music_create(lv_obj_t *parent);
 lv_obj_t *app_walkie_create(lv_obj_t *parent);
@@ -20,7 +19,5 @@ lv_obj_t *app_sokoban_create(lv_obj_t *parent);
 void app_sokoban_exit(void);
 lv_obj_t *app_2048_create(lv_obj_t *parent);
 void app_2048_exit(void);
-lv_obj_t *app_pong_create(lv_obj_t *parent);
-void app_pong_exit(void);
 
 #endif

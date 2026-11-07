@@ -27,3 +27,16 @@ cpu/wl82/tools/cache_ram_data.bin
 app/board/wl82/*cpuwl82toolsdownload.bat
 ref_disasm.txt
 __pycache__/
+
+# 本地构建日志 / SDK 备份 / 临时目录(不入库)
+_build_*.log
+_sdk_bak*/
+_tmp*/
+tmp_wav/
+.zcode/
+_nm_*.txt
+_undef_*.txt
+**/sdk.ld~*
+**/sdk_used_list.used~*
+**/download.bat~*
+**/section.txt~*

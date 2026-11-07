@@ -13,6 +13,9 @@
 
 #define NOR_SDFILE_ENABLE  1
 
+#define SDFILE_PAGE_SIZE 	256
+#define SDFILE_SECTOR_SIZE 	4096
+
 /********* sdfile 文件头 **********/
 #define SDFILE_NAME_LEN 			16
 
@@ -85,6 +88,8 @@ struct sdfile_scn {
     u8 cycle_mode;
     u8 attr;
     u8 deepth;
+    u8 part_index; //标记分区，0为res 1：app 2:ext_reserve
+    u8 scan_dir_flag; //按目录扫描标志
     u16 dirCounter;
     u16 fileCounter;
     u16	fileNumber;			// 当前文件序号
@@ -93,6 +98,7 @@ struct sdfile_scn {
     u16 fileTotalInDir;     // 当前目录的根下有效文件的个数
     u16 fileTotalOutDir;	// 当前目录前的文件总数，目录循环模式下，需要用它来计算文件序号
     u32 sclust_id;
+    u32 root_addr; //分区根地址
     const char *ftypes;
     struct sdfile_file_head head;
     struct sdfile_folder folder[SDFILE_MAX_DEEPTH];
@@ -183,9 +189,6 @@ static inline int fget_attrs(SDFILE *fp, struct vfs_attr *attr)
 
 #endif  /* VFS_ENABLE */
 
-int sdfile_delete_data(SDFILE *fp);
-#define fdel_data   sdfile_delete_data
-
 #ifndef SDFILE_MOUNT_PATH
 #define SDFILE_MOUNT_PATH     	"mnt/sdfile"
 #endif /* #ifndef SDFILE_MOUNT_PATH */
@@ -201,6 +204,7 @@ int sdfile_delete_data(SDFILE *fp);
 #endif /* #ifndef SDFILE_RES_ROOT_PATH */
 
 #else
+
 #ifndef SDFILE_RES_ROOT_PATH
 #define SDFILE_RES_ROOT_PATH       	SDFILE_MOUNT_PATH"/C/"
 #endif /* #ifndef SDFILE_RES_ROOT_PATH */
@@ -209,15 +213,29 @@ int sdfile_delete_data(SDFILE *fp);
 
 //获取flash物理大小, 单位: Byte
 u32 sdfile_get_disk_capacity(void);
+u32 sdfile_ext_get_disk_capacity(void);
 //flash addr  -> cpu addr
 u32 sdfile_flash_addr2cpu_addr(u32 offset);
+u32 sdfile_ext_flash_addr2cpu_addr(u32 offset);
 //cpu addr  -> flash addr
 u32 sdfile_cpu_addr2flash_addr(u32 offset);
+u32 sdfile_ext_cpu_addr2flash_addr(u32 offset);
 
 u32 decode_data_by_user_key_in_sdfile(u16 key, u8 *buff, u16 size, u32 dec_addr, u8 dec_len);
-
 u32 init_norsdfile_hdl(void);
 int set_res_startaddr(int offset);
+void set_vm_addr_info(u32 addr, u32 size);
+
+int sdfile_ext_read_origin(void *buf, u32 addr, u32 len);
+int sdfile_ext_read(void *buf, u32 addr, u32 len);
+int sdfile_ext_write(void *buf, u32 addr, u32 len);
+int sdfile_ext_erase(u32 addr, u32 len);
+
+int sdfile_reserve_zone_read(void *buf, u32 addr, u32 len, int mode);
+int sdfile_reserve_zone_write(void *buf, u32 addr, u32 len, int mode);
+int sdfile_reserve_zone_erase(u32 addr, u32 len, int mode);
+
+extern const int config_sdfile_ext_enable;
 
 #endif /* _SDFILE_H_ */
 

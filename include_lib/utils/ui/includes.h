@@ -12,6 +12,7 @@
 
 
 
+#define MP3_VOLUME   50
 #define UI_TOUCH_DEBUG 1
 
 #if (UI_TOUCH_DEBUG == 1)

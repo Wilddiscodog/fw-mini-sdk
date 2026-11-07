@@ -9,7 +9,7 @@
 struct task_info {
     const char *name;	/*!< 任务名，需要独一无二 */
     u8 prio;			/*!< 任务优先级 */
-    u16 stack_size;		/*!< 任务堆栈大小，以word为单位 */
+    u32 stack_size;		/*!< 任务堆栈大小，以word为单位 */
     u16 qsize;			/*!< 任务队列消息大小，以word为单位 */
     u8 *tcb_stk_q;		/*!< 静态堆栈和队列消息内存，填空则采用动态分配 */
 };

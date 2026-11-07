@@ -23,7 +23,6 @@ extern int get_app_music_volume(void);
 #endif
 
 #include "bt_music.h"
-#include "imu.h"
 #include "walkie.h"
 
 static lv_obj_t *make_app_root(lv_obj_t *parent, const char *title)
@@ -56,102 +55,6 @@ static void stub_btn_cb(lv_event_t *e)
 {
     (void)e;
     watch_ui_toast("功能开发中");
-}
-
-/* -------- 陀螺仪 (SC7U22 / ICM-42607-C 自动探测) -------- */
-static lv_obj_t *s_gyro_lab;
-static lv_timer_t *s_gyro_tm;
-
-/* JL newlib 无 %f: 转定点再 %d 打印 */
-static int q_round(float v, int scale)
-{
-    float s = (float)scale;
-    return (int)(v * s + (v >= 0.0f ? 0.5f : -0.5f));
-}
-
-static int snprint_q(char *dst, int dst_sz, int q, int scale)
-{
-    int neg = q < 0;
-    int a = neg ? -q : q;
-    int ip = a / scale;
-    int fp = a % scale;
-    if (scale == 100) {
-        return snprintf(dst, dst_sz, "%s%d.%02d", neg ? "-" : "+", ip, fp);
-    }
-    return snprintf(dst, dst_sz, "%s%d.%d", neg ? "-" : "+", ip, fp);
-}
-
-static void gyro_refresh(lv_timer_t *t)
-{
-    char buf[192];
-    char ax[12], ay[12], az[12], gx[12], gy[12], gz[12], tc[12];
-    struct sc7u22_si s;
-    (void)t;
-
-    if (!s_gyro_lab) {
-        return;
-    }
-    if (!imu_ready()) {
-        lv_label_set_text(s_gyro_lab, "IMU 未就绪\n检查 PH0/PH1 总线");
-        return;
-    }
-    if (imu_read_si(&s)) {
-        lv_label_set_text(s_gyro_lab, "读数失败");
-        return;
-    }
-    snprint_q(ax, sizeof(ax), q_round(s.ax, 100), 100);
-    snprint_q(ay, sizeof(ay), q_round(s.ay, 100), 100);
-    snprint_q(az, sizeof(az), q_round(s.az, 100), 100);
-    snprint_q(gx, sizeof(gx), q_round(s.gx, 10), 10);
-    snprint_q(gy, sizeof(gy), q_round(s.gy, 10), 10);
-    snprint_q(gz, sizeof(gz), q_round(s.gz, 10), 10);
-    snprint_q(tc, sizeof(tc), q_round(s.temp_c, 10), 10);
-
-    snprintf(buf, sizeof(buf),
-             "%s\n"
-             "ID:0x%02X\n"
-             "Acc g:\n"
-             " X:%s Y:%s Z:%s\n"
-             "Gyro dps:\n"
-             " X:%s Y:%s Z:%s\n"
-             "T:%sC",
-             imu_chip_name(),
-             imu_whoami(),
-             ax, ay, az, gx, gy, gz, tc);
-    lv_label_set_text(s_gyro_lab, buf);
-}
-
-static void gyro_del(lv_event_t *e)
-{
-    (void)e;
-    if (s_gyro_tm) {
-        lv_timer_del(s_gyro_tm);
-        s_gyro_tm = NULL;
-    }
-    s_gyro_lab = NULL;
-}
-
-lv_obj_t *app_gyro_create(lv_obj_t *parent)
-{
-    lv_obj_t *root = make_app_root(parent, "陀螺仪");
-    lv_obj_t *body = make_body(root);
-    lv_obj_add_event_cb(root, gyro_del, LV_EVENT_DELETE, NULL);
-
-    if (imu_init()) {
-        watch_ui_toast("陀螺仪初始化失败");
-    }
-
-    s_gyro_lab = lv_label_create(body);
-    lv_obj_set_style_text_font(s_gyro_lab, &lv_font_watch_16_cn, 0);
-    lv_obj_set_style_text_color(s_gyro_lab, lv_color_hex(WATCH_COL_TEXT), 0);
-    lv_label_set_long_mode(s_gyro_lab, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(s_gyro_lab, LCD_W - 40);
-    lv_obj_align(s_gyro_lab, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_label_set_text(s_gyro_lab, "读取中...");
-
-    gyro_refresh(NULL);
-    s_gyro_tm = lv_timer_create(gyro_refresh, 200, NULL);
-    return root;
 }
 
 /* -------- 网络/DLNA -------- */
@@ -491,7 +394,7 @@ static void walkie_peer_row_click(lv_event_t *e)
 
 static void walkie_close_chat(void)
 {
-    walkie_ptt_stop();
+    walkie_session_end();
     walkie_peer_select(-1);
     s_wk_in_chat = 0;
     s_wk_chat_peer = -1;
@@ -1127,6 +1030,8 @@ static lv_obj_t *s_set_sw;
 static lv_obj_t *s_set_bl_lab;
 static lv_obj_t *s_set_vol_lab;
 static lv_obj_t *s_set_bgm_lab;
+static lv_obj_t *s_set_bgm_sl;
+static lv_obj_t *s_set_body;
 static lv_timer_t *s_set_tm;
 static lv_timer_t *s_set_persist_tm;
 static u8 s_set_dirty;
@@ -1240,12 +1145,20 @@ static void settings_vol_cb(lv_event_t *e)
     settings_schedule_persist();
 }
 
-static void settings_bgm_cb(lv_event_t *e)
+static void settings_bgm_apply_ui(int v)
 {
-    int v = (int)lv_slider_get_value(lv_event_get_target(e));
     char buf[32];
 
+    if (v < WATCH_BGM_VOL_MIN) {
+        v = WATCH_BGM_VOL_MIN;
+    }
+    if (v > WATCH_BGM_VOL_MAX) {
+        v = WATCH_BGM_VOL_MAX;
+    }
     watch_game_bgm_vol_set((u8)v);
+    if (s_set_bgm_sl) {
+        lv_slider_set_value(s_set_bgm_sl, v, LV_ANIM_OFF);
+    }
     if (s_set_bgm_lab) {
         if (v <= 0) {
             lv_label_set_text(s_set_bgm_lab, "游戏音乐 关");
@@ -1255,6 +1168,27 @@ static void settings_bgm_cb(lv_event_t *e)
         }
     }
     settings_schedule_persist();
+}
+
+static void settings_bgm_cb(lv_event_t *e)
+{
+    int v = (int)lv_slider_get_value(lv_event_get_target(e));
+    settings_bgm_apply_ui(v);
+}
+
+/* 滑条拖动时禁止父页竖滑抢走手势(尤其是往低调) */
+static void settings_slider_drag_cb(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+
+    if (!s_set_body) {
+        return;
+    }
+    if (code == LV_EVENT_PRESSED) {
+        lv_obj_clear_flag(s_set_body, LV_OBJ_FLAG_SCROLLABLE);
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        lv_obj_add_flag(s_set_body, LV_OBJ_FLAG_SCROLLABLE);
+    }
 }
 
 static void settings_del(lv_event_t *e)
@@ -1274,6 +1208,8 @@ static void settings_del(lv_event_t *e)
     s_set_bl_lab = NULL;
     s_set_vol_lab = NULL;
     s_set_bgm_lab = NULL;
+    s_set_bgm_sl = NULL;
+    s_set_body = NULL;
 }
 
 lv_obj_t *app_settings_create(lv_obj_t *parent)
@@ -1288,6 +1224,7 @@ lv_obj_t *app_settings_create(lv_obj_t *parent)
 
     lv_obj_add_event_cb(root, settings_del, LV_EVENT_DELETE, NULL);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    s_set_body = body;
 
     /* 亮度 */
     s_set_bl_lab = lv_label_create(body);
@@ -1307,8 +1244,12 @@ lv_obj_t *app_settings_create(lv_obj_t *parent)
     lv_obj_set_style_bg_color(sl, lv_color_hex(WATCH_COL_ACCENT), LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(sl, lv_color_hex(WATCH_COL_ACCENT2), LV_PART_KNOB);
     lv_obj_set_ext_click_area(sl, 10);
+    lv_obj_clear_flag(sl, LV_OBJ_FLAG_SCROLL_CHAIN);
     lv_obj_align(sl, LV_ALIGN_TOP_MID, 0, y);
     lv_obj_add_event_cb(sl, settings_bl_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(sl, settings_slider_drag_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(sl, settings_slider_drag_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(sl, settings_slider_drag_cb, LV_EVENT_PRESS_LOST, NULL);
     y += 28;
 
     /* 音量 */
@@ -1329,11 +1270,15 @@ lv_obj_t *app_settings_create(lv_obj_t *parent)
     lv_obj_set_style_bg_color(sl, lv_color_hex(WATCH_COL_ACCENT2), LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(sl, lv_color_hex(WATCH_COL_ACCENT), LV_PART_KNOB);
     lv_obj_set_ext_click_area(sl, 10);
+    lv_obj_clear_flag(sl, LV_OBJ_FLAG_SCROLL_CHAIN);
     lv_obj_align(sl, LV_ALIGN_TOP_MID, 0, y);
     lv_obj_add_event_cb(sl, settings_vol_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(sl, settings_slider_drag_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(sl, settings_slider_drag_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(sl, settings_slider_drag_cb, LV_EVENT_PRESS_LOST, NULL);
     y += 28;
 
-    /* 游戏背景音乐 */
+    /* 游戏背景音乐: 仅滑条调节 */
     s_set_bgm_lab = lv_label_create(body);
     lv_obj_set_style_text_font(s_set_bgm_lab, &lv_font_watch_16_cn, 0);
     lv_obj_set_style_text_color(s_set_bgm_lab, lv_color_hex(WATCH_COL_TEXT), 0);
@@ -1346,17 +1291,21 @@ lv_obj_t *app_settings_create(lv_obj_t *parent)
     lv_obj_align(s_set_bgm_lab, LV_ALIGN_TOP_LEFT, 0, y);
     y += 22;
 
-    sl = lv_slider_create(body);
-    lv_obj_set_width(sl, LCD_W - 48);
-    lv_obj_set_height(sl, 16);
-    lv_slider_set_range(sl, WATCH_BGM_VOL_MIN, WATCH_BGM_VOL_MAX);
-    lv_slider_set_value(sl, watch_game_bgm_vol_get(), LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(sl, lv_color_hex(WATCH_COL_CARD_HL), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(sl, lv_color_hex(0xA66CFF), LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(sl, lv_color_hex(WATCH_COL_ACCENT), LV_PART_KNOB);
-    lv_obj_set_ext_click_area(sl, 10);
-    lv_obj_align(sl, LV_ALIGN_TOP_MID, 0, y);
-    lv_obj_add_event_cb(sl, settings_bgm_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    s_set_bgm_sl = lv_slider_create(body);
+    lv_obj_set_width(s_set_bgm_sl, LCD_W - 48);
+    lv_obj_set_height(s_set_bgm_sl, 16);
+    lv_slider_set_range(s_set_bgm_sl, WATCH_BGM_VOL_MIN, WATCH_BGM_VOL_MAX);
+    lv_slider_set_value(s_set_bgm_sl, watch_game_bgm_vol_get(), LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(s_set_bgm_sl, lv_color_hex(WATCH_COL_CARD_HL), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_set_bgm_sl, lv_color_hex(0xA66CFF), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(s_set_bgm_sl, lv_color_hex(WATCH_COL_ACCENT), LV_PART_KNOB);
+    lv_obj_set_ext_click_area(s_set_bgm_sl, 10);
+    lv_obj_clear_flag(s_set_bgm_sl, LV_OBJ_FLAG_SCROLL_CHAIN);
+    lv_obj_align(s_set_bgm_sl, LV_ALIGN_TOP_MID, 0, y);
+    lv_obj_add_event_cb(s_set_bgm_sl, settings_bgm_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(s_set_bgm_sl, settings_slider_drag_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(s_set_bgm_sl, settings_slider_drag_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(s_set_bgm_sl, settings_slider_drag_cb, LV_EVENT_PRESS_LOST, NULL);
     y += 28;
 
     /* 对讲自动播放 */

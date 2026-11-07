@@ -33,13 +33,13 @@ const int support_ota_tws_same_time_new = 0;
 #endif
 
 //支持预留区域文件双备份升级
-const int support_reaserved_zone_file_dual_bank_update_en = 1;
+const int support_reaserved_zone_file_dual_bank_update_en = 0;
 
 //支持被动升级新文件结构
 const int support_passive_update_new_file_structure = 1;
 
 //开启备份区空间不够时，支持资源强制写入预留区
-const int support_reserved_zone_forced_update = 1;
+const int support_reserved_zone_forced_update = 0;
 
 //检测升级的文件是否与本地相同
 const int update_file_check_same = 1;
@@ -57,8 +57,8 @@ const int single_bank_update_back_4K_aligne = 1;
 //是否支持升级之后保留vm数据
 const int support_vm_data_keep = 1;
 
-const char log_tag_const_v_UPDATE AT(.LOG_TAG_CONST) = LIB_DEBUG & FALSE;
-const char log_tag_const_i_UPDATE AT(.LOG_TAG_CONST) = LIB_DEBUG & TRUE;
-const char log_tag_const_d_UPDATE AT(.LOG_TAG_CONST) = LIB_DEBUG & FALSE;
-const char log_tag_const_w_UPDATE AT(.LOG_TAG_CONST) = LIB_DEBUG & TRUE;
-const char log_tag_const_e_UPDATE AT(.LOG_TAG_CONST) = LIB_DEBUG & TRUE;
+const char log_tag_const_v_UPDATE AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(FALSE);
+const char log_tag_const_i_UPDATE AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(TRUE);
+const char log_tag_const_d_UPDATE AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(FALSE);
+const char log_tag_const_w_UPDATE AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(TRUE);
+const char log_tag_const_e_UPDATE AT(.LOG_TAG_CONST) = CONFIG_DEBUG_LIB(TRUE);

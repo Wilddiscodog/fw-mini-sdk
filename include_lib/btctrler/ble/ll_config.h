@@ -181,6 +181,7 @@ extern const int config_btctler_le_slave_conn_update_winden;
  *-------------------LE Multi-link CONTROL
  */
 extern const int config_btctler_le_master_multilink;
+extern const int config_btctler_le_slave_multilink;
 /*-----------------------------------------------------------*/
 
 /*

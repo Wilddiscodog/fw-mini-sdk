@@ -5,6 +5,8 @@
 #include "generic/list.h"
 #include "os/os_api.h"
 
+#define EQ_SECTION_MAX 20
+
 /**
  * @brief EQ运行模式
  */
@@ -153,7 +155,13 @@ struct hw_eq_ch {
     float *N_coeff[8];                       /*!<  */
     float N_gain[8];                         /*!<  */
     float *eq_LRmem;                         /*!< eq系数地址（包含运算的中间数据） */
+    int ram_inbuf_size;                      /*!< 内部ram输入buf大小 */
+    int ram_outbuf_size;                     /*!< 内部ram输出buf大小 */
+    s16 *ram_inbuf;                          /*!< 内部ram输入buf地址 */
+    s16 *ram_outbuf;                         /*!< 内部ram输出buf地址 */
     s16 *out_buf;                            /*!< 输出buf地址 */
+	s16 *tmp_outbuf;				 //临时输出buf地址, 目的为了规避DMA读的慢导致越界问题
+	int tmp_outbuf_size;			 //临时输出buf地址大小
     s16 *in_buf;                             /*!< 输入buf地址 */
     int in_len;                              /*!< 输入数据长度 */
     void *priv;                              /*!< 保存eq管理层的句柄 */

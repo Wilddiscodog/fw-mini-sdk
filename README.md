@@ -1,15 +1,17 @@
 # fw-mini-sdk（AC7912BB / WL82 精简 SDK）
 
-当前版本: **V1.1.6**（`app/include/fw_version.h`，启动横幅打印）
-- USB **组合设备**（CherryUSB，高速口）：CDC 日志串口 + MSC 3MB 虚拟U盘
-   （VID=0xFFFF/PID=0x0003，Win10+/Linux 免驱）；拖入 `.UFW` 静默 3s 自动校验烧写复位
-- USB **主机 MSC**（CherryUSB，U盘）可用，全速主机（`CONFIG_USBH_JL82_FORCE_FS=1`），插盘跑 1MB 读写基准
-- **LCD 240×320 JD9853（EMI 8 位并口）+ CST816 触摸 + LVGL 8.2.0 benchmark** 默认开启
-- **蓝牙 + WiFi**（原厂协议栈）：BT 开机自启；WiFi 按键2 触发，AP 配网 + 网页固件升级
-- **内置音频**可选（MIC+DAC 回环自检 + AEC 回采，`MINI_AUDIO_SUPPORT` 默认关）
+当前版本: **V1.9.0**（`app/include/fw_version.h`，启动横幅打印）  
+SDK 基线: 官方 **AC79NN SDK V1.2.14** · 屏 **296×240** · 分支常用 `lcd_demo`
 
-从官方 AC79 AIoT SDK 精简而来的开发框架：外设驱动 + FreeRTOS + CherryUSB，
-蓝牙/WiFi/OTA/音频按宏开关裁剪。应用逻辑全部在 `app/` 下自定义。
+- **手表 UI**（LVGL）：主页滑页；对讲 / 网络 / 蓝牙 / 小游戏 / 设置
+- **对讲机**：WiFi UDP；聊天气泡依赖 Flash `REC` 分区（详见 `doc/当前固件说明_V1.9.md`）
+- **WiFi**：AP 配网 + 网页 OTA（`update-ota.ufw`）；凭据在 VM（`VM_OPT=1`）
+- **电源**：短按息屏；长按软关机；**长按电源键 4s 硬件复位**
+- USB **组合设备**（CherryUSB）：CDC 日志 + MSC 虚拟U盘升级；主机 MSC 可选
+- **蓝牙 + WiFi** 原厂协议栈；音频/对讲走 `audio_server`
+
+从官方 AC79 AIoT SDK 精简：外设 + FreeRTOS + CherryUSB，应用在 `app/`。  
+近期行为与烧录注意见 **`doc/当前固件说明_V1.9.md`**。
 
 ## 目录结构
 
@@ -62,7 +64,7 @@ C++ 开关说明：开启后自动加入全局构造调用（`cpp_run_init`）�
 
 | 功能 | 引脚 | 现象 |
 |---|---|---|
-| LCD 彩条自检 | EMI 8位并口 + 背光 PA6 | 开机 8s（与 USB 枚举解耦）后 8 色彩条循环，JD9853 240×320，2s/色 |
+| LCD / 表盘 | EMI 8位并口 + 触摸 | 296×240 LVGL 主页；短按息屏(开机 5s 内禁用) |
 | USB 组合设备（默认） | USB D+/D- | CDC 日志串口 + MSC 3MB 虚拟U盘；拖入 `.UFW` 静默 3s 自动升级复位 |
 | USB 主机(MSC) | USB D+/D-（需 VBUS 5V 供电） | `MINI_USB_MODE_HOST` 时 U盘枚举，跑 1MB 读写基准并打印速率 |
 | UART 收发 | PB3=TX, PB4=RX @115200 | 发什么回什么（回显） |
@@ -162,6 +164,8 @@ C++ 开关说明：开启后自动加入全局构造调用（`cpp_run_init`）�
 | V1.1.0 | 内置音频移植（MIC+DAC 回环 + AEC 回采），`MINI_AUDIO_SUPPORT` 默认关 |
 | V1.1.5 | 升级链路修复（流控/CRC 约定）；OTA 打包强制带芯片 KEY；AP 扫描配网页；BT MAC 写回 VM |
 | V1.1.6 | **重新启用 LCD**；调试日志瘦身：删除 OTASTAT.TXT 诊断机制、屏显状态色通道、[usbh-mon] 寄存器转储与扇区/加密头 hex 转储；修 Makefile recipe 内 `#` 注释行被 mingw32-make 当命令执行的构建错误 |
+| V1.8.x | 296×240 表盘；对讲/游戏/BGM；软关机与按键唤醒 |
+| V1.9.0 | 同步官方 **V1.2.14**；对讲 REC 落盘+RAM 回退；移除陀螺仪 App/Pong/猎人；平衡球加时规则调整；长按复位 **8s→4s**；开机 5s 防误息屏 |
 
 USB 移植调试方法论备忘：ISR 内 PRE/POST 寄存器回读探针 + EP0 SETUP 跟踪打印 +
 风暴熔断，配合版本号，每轮日志都能把问题边界收窄一层。
@@ -185,8 +189,8 @@ apps/common/ui 与 LVGL 补丁；**只编一个面板驱动**——框架取第�
 
 ## 与官方 SDK 的关系
 
-- 闭源库、头文件、链接/烧录工具均原样复制自官方 `AC79NN_SDK_V1.1.9_2023-08-01`；
-- 官方 SDK 保持在 `D:\fw-AC79_AIoT_SDK` 不动，日后升级可对比替换 `cpu/wl82/liba` + `include_lib`；
+- 闭源库/头文件当前对齐官方 **`AC79NN_SDK_V1.2.14`**（历史上曾基于 V1.1.9）；
+- 升级时可对比替换 `cpu/wl82/liba` + `include_lib`，并复查 `isd_config_rule.c` 预留区；
 - 源码级差异：C++ 运行时/蓝牙/WiFi/音频按宏开关裁剪（`MINI_CXX_SUPPORT`/
   `MINI_AUDIO_SUPPORT` 等，BT/WiFi 默认随官方栈链接）；不注册 OTG 自动检测
   （双控制器共用管脚，OTG 双口检测会误拆从机会话）。

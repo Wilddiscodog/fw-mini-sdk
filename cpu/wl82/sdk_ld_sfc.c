@@ -23,7 +23,11 @@ SDRAM_SIZE = __SDRAM_SIZE__;
 RAM0_SIZE = 0x1c7fe00 - 0x1c00000 - TLB_SIZE - BOOT_INFO_SIZE - 128;
 UPDATA_BEG = 0x1c7fe00 - 128;
 
+#if !defined CONFIG_DYNAMIC_SDRAM_ONOFF_ENABLE
 FREE_DACHE_WAY = 7; //max is 7
+#else
+FREE_DACHE_WAY = 0; //max is 7
+#endif
 FREE_IACHE_WAY = 0; //max is 7
 CACHE_RAM_SIZE = FREE_DACHE_WAY*4K+FREE_IACHE_WAY*4K;
 
@@ -48,133 +52,39 @@ SECTIONS
         *startup.S.o(.text)
         *(.boot_code)
         *(.text*)
-        *(.LOG_TAG_CONST*)
+#if defined CONFIG_DYNAMIC_SDRAM_ONOFF_ENABLE
+        *(.lwip_text)
+        *(.wifi_text)
+#endif
         *(.rodata*)
-        *(.fat_data_code)
-
-        *(.dlmalloc_code)
-        *(.dlmalloc_const)
-        *(.mem_heap_code)
-        *(.mem_heap_const)
-
-        _os_begin = .;
-        PROVIDE(os_begin = .);
-        *(.os_code)
-        *(.os_const)
-        *(.os_str)
-        *(.os_critical_code)
-        *(.os_port_code)
-        *(.os_port_const)
-        _os_end = .;
-        PROVIDE(os_end = .);
-
         . = ALIGN(4);
-        __VERSION_BEGIN = .;
-        KEEP(*(.sys.version))
-         __VERSION_END = .;
 
-#if defined CONFIG_CXX_SUPPORT
-		. = ALIGN(4);
-        _ctors_begin = .;
-        PROVIDE(ctors_begin = .);
-        *(.ctors*)
-        _ctors_end = .;
-        PROVIDE(ctors_end = .);
-		. = ALIGN(4);
-#endif
-
+        #include "system/system_lib_text.ld"
+        #include "common/movable/movable_text.ld"
         #include "driver/cpu/wl82/media_text.ld"
-
-#if defined CONFIG_ASR_ALGORITHM
-        . = ALIGN(4);
-        *(.libaisp.rodata)
-        *(.libaisp.text)
-#endif
-
+#if defined CONFIG_BT_ENABLE
         . = ALIGN(4);
         #include "btctrler/btctler_lib_text.ld"
         . = ALIGN(4);
         #include "btstack/btstack_lib_text.ld"
-
-#if defined CONFIG_BT_ENABLE
-        . = ALIGN(4);
-        *(.sbc_eng_code)
-
-        . = ALIGN(4);
-        *(.h4_const)
-
-        . = ALIGN(4);
-        crypto_begin = .;
-        *(.crypto_ecdh_code)
-        *(.crypto_ecdh_const)
-
-        *(.crypto_bigint_code)
-        *(.crypto_bigint_const)
-
-        *(.crypto_code)
-        *(.crypto_const)
-
-        *(.ECDH_sample_code)
-        *(.ECDH_sample_const)
-
-        *(.uECC_code)
-        *(.uECC_const)
-
-        *(.hmac_code)
-        *(.hmac_const)
-
-        *(.hash_sample_code)
-        *(.hash_sample_const)
-
-        *(.aes_cmac_sample_code)
-        *(.aes_cmac_sample_const)
-        crypto_end = .;
-        crypto_size = . - crypto_begin;
 #endif
-
-        . = ALIGN(4);
-        *(.update_const)
-        *(.update_code)
-        *(.bt_updata_ram_code)
-
-#ifdef CONFIG_UI_ENABLE
-        . = ALIGN(4);
-        *(.ui_ram)
-#endif
-
         . = ALIGN(4);
         #include "driver/cpu/wl82/system.ld"
         . = ALIGN(4);
-        #include "ui/ui/ui.ld"
-        . = ALIGN(4);
         #include "server/media.ld"
-
-        PROVIDE(__fsymtab_start = .);
-        KEEP(*(.FSymTab))
-        PROVIDE(__fsymtab_end = .);
-        PROVIDE(__vsymtab_start = .);
-        KEEP(*(.VSymTab))
-        PROVIDE(__vsymtab_end = .);
-        PROVIDE(__rtatcmdtab_start = .);
-        KEEP(*(.RtAtCmdTab))
-        PROVIDE(__rtatcmdtab_end = .);
-
-#if !defined CONFIG_RF_TRIM_CODE_AT_RAM
         . = ALIGN(4);
+        #include "ui/ui/ui.ld"
+#if defined CONFIG_UI_ENABLE
+        . = ALIGN(4);
+        *(.ui_ram)
+#endif
+#if !defined CONFIG_RF_TRIM_CODE_AT_RAM && !defined CONFIG_RF_TRIM_CODE_MOVABLE
         *(*.rf.text.cache.L2.rf_trim)
 #endif
-        __rf_trim_movable_region_start = .;
-        *(.movable.region.1);
-        __rf_trim_movable_region_end = .;
-
         . = ALIGN(32);
         _text_rodata_end = .;
         PROVIDE(text_rodata_end = .);
     } >rom
-
-#if defined CONFIG_CXX_SUPPORT
-	PROVIDE(ctors_count = _ctors_end - _ctors_begin);
-#endif
 
     . = ORIGIN(sdram);
     .data ALIGN(32):
@@ -187,6 +97,29 @@ SECTIONS
         . = ALIGN(4);
     } > sdram
 
+
+
+    .dynamic_data ALIGN(32):
+    {
+#if defined CONFIG_DYNAMIC_SDRAM_ONOFF_ENABLE
+        *(.lwip_data)
+        *(.wifi_data)
+#endif
+        . = ALIGN(4);
+    } > sdram
+
+    .dynamic_bss ALIGN(32):
+    {
+#if defined CONFIG_DYNAMIC_SDRAM_ONOFF_ENABLE
+        *(.wifi_bss)
+        *(.lwip_bss)
+        . = ALIGN(32);
+        *(.wifi_mem_pool)
+        . = ALIGN(32);
+        *(.memp_memory_x)
+#endif
+        . = ALIGN(4);
+    } > sdram
 /********************************************/
     . =ORIGIN(ram0);
     .ram0_data ALIGN(4):
@@ -203,22 +136,11 @@ SECTIONS
         _SPI_CODE_END = . ;
         *(.flushinv_icache)
         *(.volatile_ram_code)
-
-        . = ALIGN(4);
-        *(.movable.stub.1)
-        *(*.text.cache.L1)
-        *(*.text.cache.L2)
-        *(*.text.const.cache.L2)
-
-        . = ALIGN(4);
-        __rf_trim_movable_slot_start = .;
-        *(.movable.slot.1);
-        __rf_trim_movable_slot_end = .;
-
 #if defined CONFIG_RF_TRIM_CODE_AT_RAM
         *(*.rf.text.cache.L2.rf_trim)
 #endif
-
+        #include "common/movable/movable_data.ld"
+        . = ALIGN(4);
         _ram_text_rodata_end = .;
         PROVIDE(ram_text_rodata_end = .);
 
@@ -237,22 +159,30 @@ SECTIONS
         . = ALIGN(4);
         *(.jlsp_data)
 #endif
+#if defined CONFIG_DYNAMIC_SDRAM_ONOFF_ENABLE
+        . = ALIGN(4);
+        #include "driver/cpu/wl82/system_data.ld"
+#endif
         . = ALIGN(4);
         #include "net/server/net_server_data.ld"
+#if defined CONFIG_BT_ENABLE
         . = ALIGN(4);
         #include "btctrler/btctler_lib_data.ld"
         . = ALIGN(4);
         #include "btstack/btstack_lib_data.ld"
+#endif
 
         . = ALIGN(4); // must at tail, make ram0_data size align 4
     } > ram0
 
     .ram0_bss ALIGN(4) (NOLOAD):
     {
+#if defined CONFIG_BT_ENABLE
         . = ALIGN(4);
         #include "btctrler/btctler_lib_bss.ld"
         . = ALIGN(4);
         #include "btstack/btstack_lib_bss.ld"
+#endif
 
         *(.bss)
 #if defined CONFIG_CXX_SUPPORT
@@ -260,44 +190,40 @@ SECTIONS
 #endif
         *(COMMON)
         *(.mem_heap)
+#if defined CONFIG_DYNAMIC_SDRAM_ONOFF_ENABLE
+#endif
+
+        . = ALIGN(4);
+        *(.os_port_bss)
+        *(.os_bss)
+        *(.update_bss)
 
         . = ALIGN(4);
         *(.the_debug_isr_stack_c0)
         *(.the_debug_isr_stack_c1)
-
-        _stack_info_begin = .;
-        PROVIDE(stack_info_begin = .);
-
-        *(.stack)
         *(.stack_magic)
         *(.stack_magic0)
 
+        . = ALIGN(4);
+        _stack_info_begin = .;
+        PROVIDE(stack_info_begin = .);
         *(.cpu0_ustack)
         _cpu0_sstack_begin = .;
         PROVIDE(cpu0_sstack_begin = .);
         *(.cpu0_sstack)
         _cpu0_sstack_end = .;
         PROVIDE(cpu0_sstack_end = .);
-
         *(.cpu1_ustack)
         _cpu1_sstack_begin = .;
         PROVIDE(cpu1_sstack_begin = .);
         *(.cpu1_sstack)
         _cpu1_sstack_end = .;
         PROVIDE(cpu1_sstack_end = .);
-
         _stack_info_end = .;
         PROVIDE(stack_info_end = .);
 
-        /*
-         * sd卡全局变量要放sram，否则会读写出错
-         */
-        *(.sd_var)
         *(.sram)
-        . = ALIGN(4);
-        *(.os_port_bss)
-        *(.os_bss)
-        *(.update_bss)
+
         . = ALIGN(4);
         #include "device/usb/usb_data.ld"
 
@@ -326,13 +252,17 @@ SECTIONS
     . =ORIGIN(cache_ram);
     .cache_ram_data ALIGN(4):
     {
+#if !defined CONFIG_DYNAMIC_SDRAM_ONOFF_ENABLE
         #include "driver/cpu/wl82/system_data.ld"
+#endif
         . = ALIGN(4); // must at tail, make ram0_data size align 4
     } > cache_ram
 
     .cache_ram_bss ALIGN(4):
     {
+#if !defined CONFIG_DYNAMIC_SDRAM_ONOFF_ENABLE
         *(.memp_memory_x)
+#endif
         . = ALIGN(4); // must at tail, make ram0_data size align 4
     } > cache_ram
 
@@ -351,13 +281,23 @@ SECTIONS
     data_size =  SIZEOF(.data);
     PROVIDE(data_size = SIZEOF(.data));
 
+    dynamic_bss_begin = ADDR(.dynamic_bss);
+    dynamic_bss_size  = SIZEOF(.dynamic_bss);
+    PROVIDE(bss_size = SIZEOF(.dynamic_bss));
+
+    dynamic_data_vma  = ADDR(.dynamic_data);
+    dynamic_data_lma =  text_begin + SIZEOF(.text) + SIZEOF(.data);
+    dynamic_data_size =  SIZEOF(.dynamic_data);
+    PROVIDE(dynamic_data_size = SIZEOF(.dynamic_data));
+
+
 /********************************************/
     _ram0_bss_vma = ADDR(.ram0_bss);
     _ram0_bss_size = SIZEOF(.ram0_bss);
     PROVIDE(ram0_bss_size = SIZEOF(.ram0_bss));
 
     _ram0_data_vma = ADDR(.ram0_data);
-    _ram0_data_lma = text_begin + SIZEOF(.text) + SIZEOF(.data);
+    _ram0_data_lma = text_begin + SIZEOF(.text) + SIZEOF(.data) + SIZEOF(.dynamic_data);
     _ram0_data_size = SIZEOF(.ram0_data);
     PROVIDE(ram0_data_size = SIZEOF(.ram0_data));
 /********************************************/
@@ -365,10 +305,12 @@ SECTIONS
     PROVIDE(cache_ram_bss_vma = ADDR(.cache_ram_bss));
     PROVIDE(cache_ram_bss_size = SIZEOF(.cache_ram_bss));
     PROVIDE(cache_ram_data_vma = ADDR(.cache_ram_data));
-    PROVIDE(cache_ram_data_lma = text_begin + SIZEOF(.text) + SIZEOF(.data) + SIZEOF(.ram0_data));
+    PROVIDE(cache_ram_data_lma = text_begin + SIZEOF(.text) +SIZEOF(.data) + SIZEOF(.dynamic_data) + SIZEOF(.ram0_data));
+
     PROVIDE(cache_ram_data_size = SIZEOF(.cache_ram_data));
 
 
+#if defined CONFIG_BT_ENABLE
 	/*代码统计 Code & RAM : 蓝牙协议栈*/
     BTCTLER_LE_RAM_TOTAL   = BTCTLER_LE_CONTROLLER_DATA_SIZE + BTCTLER_LE_CONTROLLER_BSS_SIZE;
     BTCTLER_LE_CODE_TOTAL  = BTCTLER_LE_CONTROLLER_CODE_SIZE;
@@ -384,8 +326,10 @@ SECTIONS
 
     BTSTACK_LE_HOST_MESH_RAM_TOTAL = BTSTACK_LE_HOST_MESH_DATA_SIZE + BTSTACK_LE_HOST_MESH_BSS_SIZE;
     BTSTACK_LE_HOST_MESH_FLASH_TOTAL = BTSTACK_LE_HOST_MESH_CODE_SIZE;
+#endif
 
 // *INDENT-ON*
+
 EXTERN(
     lib_audio_server_version
     lib_system_version
@@ -407,6 +351,7 @@ EXTERN(
     lib_wifi_version
     lib_wl82_rf_version
     lib_httpcli_version
+    lib_httpscli_version
     lib_airplay_version
     lib_aliyun_version
     lib_cjson_version
@@ -427,11 +372,11 @@ EXTERN(
     lib_coap_version
     lib_duer_version
     lib_mpeg_version
-    lib_lwip_2_0_3_version
-    lib_lwip_2_1_2_version
     lib_lwip_2_1_3_version
+    lib_lwip_2_2_0_version
     lib_mbedtls_2_2_1_version
     lib_mbedtls_2_26_0_version
+    lib_mbedtls_3_4_0_version
     lib_mdns_version
     lib_mongoose_version
     lib_mqtt_version

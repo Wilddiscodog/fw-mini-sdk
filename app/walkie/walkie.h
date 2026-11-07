@@ -33,6 +33,8 @@ int walkie_av_ensure(void);
 void walkie_ptt_start(void);
 void walkie_ptt_stop(void);
 u8 walkie_ptt_is_on(void);
+/* 离开聊天页: 停 PTT 并释放音频通路 */
+void walkie_session_end(void);
 
 int walkie_peer_count(void);
 const struct walkie_peer *walkie_peer_get(int idx);

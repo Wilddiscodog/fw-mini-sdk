@@ -31,6 +31,10 @@ extern int osd_attr_set(void *isc, struct video_osd_attr *osd_attr);
 extern int osd_attr_get(void *isc, struct video_osd_attr *osd_attr);
 extern int osd_set_src_width_height(void *isc, u16 w, u16 h);
 
+//使用例子：osd_buf_ram_set(osd_buf_base), OSD的格式长度如strlen("yyyy-nn-dd hh:mm:ss")
+//buf地址要在内部sram(buf大小:字宽*字高*格式长度/8，如:32*16*strlen("yyyy-nn-dd hh:mm:ss"))/8
+extern void osd_buf_ram_set(void *buf);
+
 #define OSD_DEFAULT_WIDTH	16	//与net_video_rec请求的OSD宽相同
 #define OSD_DEFAULT_HEIGHT	32	//与net_video_rec请求的OSD高相同
 

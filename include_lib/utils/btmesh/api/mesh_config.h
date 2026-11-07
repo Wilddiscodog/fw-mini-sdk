@@ -78,12 +78,12 @@
 
 /* Net config */
 #define CONFIG_BT_MESH_SUBNET_COUNT             2
-#define CONFIG_BT_MESH_MSG_CACHE_SIZE           3
+#define CONFIG_BT_MESH_MSG_CACHE_SIZE           10
 #define CONFIG_BT_MESH_IVU_DIVIDER              4
 
 /* Transport config */
 #define CONFIG_BT_MESH_TX_SEG_MAX 			    6
-#define CONFIG_BT_MESH_TX_SEG_MSG_COUNT 	    1
+#define CONFIG_BT_MESH_TX_SEG_MSG_COUNT 	    3
 #define CONFIG_BT_MESH_RX_SEG_MSG_COUNT 	    1
 #define CONFIG_BT_MESH_RX_SDU_MAX 			    72
 
@@ -147,6 +147,7 @@
 /*-----------------------------------------------------------*/
 extern const int config_bt_mesh_features;
 
+extern const u8 config_bt_mesh_is_provisioner;
 /**
  * @brief Config adv bearer hardware param when node send messages
  */

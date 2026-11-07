@@ -14,7 +14,7 @@
 #define DMA_HANDLER_ID    0x600     /*百度DMA协议接口ID*/
 #define TME_HANDLER_ID    0x700     /*腾讯酷狗TME协议接口ID*/
 #define AMA_HANDLER_ID    0x800     /*亚马逊的AMA协议接口ID*/
-#define GFPS_HANDLER_ID   0x900     /*谷歌快对的协议接口ID*/
+#define GFPS_HANDLER_ID   0xA00     /*谷歌快对的协议接口ID*/
 
 //app protocol公共消息
 enum {
@@ -77,6 +77,17 @@ enum {
     APP_PROTOCOL_DMA_READ_OTA_INFO,
     APP_PROTOCOL_DMA_NOTICE_END             = DMA_HANDLER_ID + 0xFF,
 };
+
+// GFPS私有消息
+enum {
+    APP_PROTOCOL_GFPS_RING_STOP_ALL                     =   GFPS_HANDLER_ID,
+    APP_PROTOCOL_GFPS_RING_RIGHT,
+    APP_PROTOCOL_GFPS_RING_LEFT,
+    APP_PROTOCOL_GFPS_RING_ALL,
+};
+
+#define GFP_TWS_ENABLE  0
+
 //APP_PROTOCOL获取电量的类型
 #define APP_PROTOCOL_BAT_T_CHARGE_FLAG   0
 #define APP_PROTOCOL_BAT_T_MAIN          1

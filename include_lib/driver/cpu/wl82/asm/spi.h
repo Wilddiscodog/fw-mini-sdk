@@ -1,4 +1,3 @@
-
 #ifndef __SPI_H__
 #define __SPI_H__
 
@@ -29,40 +28,40 @@
 
 #define SPI_UNIDIR_MODE			BIT(10) //单向：只用SPI_DO一根线数据传输（一般只用于作为从机接收数据）
 #define SPI_BIDIR_MODE			BIT(11) //双向：用SPI_DO/DI两根线数据传输
-#define SPI_WR_UNUSE_SEM		BIT(12) //SPI读写等待不使用信号量
 #define SPI_SCLK_PORT_HD		BIT(13) //SPI CLK时钟开启强电流强驱
 
-#define IOCTL_SPI_SET_CS              _IOW('S', 1, 1)
-#define IOCTL_SPI_SEND_BYTE           _IOW('S', 2, 1)
-#define IOCTL_SPI_SEND_CMD_2BIT_MODE  _IOW('S', 3, 1)
-#define IOCTL_SPI_GET_BIT_MODE        _IOW('S', 4, 1)
-#define IOCTL_SPI_READ_BYTE           _IOW('S', 5, 1)
-#define IOCTL_SPI_SET_CRC             _IOW('S', 6, 1)
-#define IOCTL_SPI_READ_CRC            _IOR('S', 7, 1)
+#define IOCTL_SPI_SET_CS                    _IOW('S', 1, u8)
+#define IOCTL_SPI_SEND_BYTE                 _IOW('S', 2, u8)
+#define IOCTL_SPI_SEND_CMD_2BIT_MODE        _IOW('S', 3, u32)
+#define IOCTL_SPI_GET_BIT_MODE              _IOW('S', 4, u32)
+#define IOCTL_SPI_READ_BYTE                 _IOW('S', 5, u8)
+#define IOCTL_SPI_SET_CRC                   _IOW('S', 6, u16)
+#define IOCTL_SPI_READ_CRC                  _IOR('S', 7, u16)
 
-#define IOCTL_SFC_SEND_ADDR           _IOW('S', 8, 4)
-#define IOCTL_SFC_SWITCH_TO_SPI       _IOW('S', 9, 4)
-#define IOCTL_SFC_DATA_UPDATE         _IOW('S', 10, 4)
-#define IOCTL_SFC_DATA_ERASE          _IOW('S', 11, 4)
+#define IOCTL_SFC_SEND_ADDR                 _IOW('S', 8, u32)
+#define IOCTL_SFC_SWITCH_TO_SPI             _IOW('S', 9, u32)
+#define IOCTL_SFC_DATA_UPDATE               _IOW('S', 10, u32)
+#define IOCTL_SFC_DATA_ERASE                _IOW('S', 11, u32)
 
-#define IOCTL_SPI_SET_IRQ_CPU_ID	  _IOW('S', 12, 4)
-#define IOCTL_SPI_SET_USER_INFO	  	  _IOW('S', 13, 4)
-#define IOCTL_SPI_READ_DATA       	  _IOR('S', 13, 4)
-#define IOCTL_SPI_FREE_DATA       	  _IOW('S', 14, 4)
-#define IOCTL_SPI_SET_CB         	  _IOW('S', 15, 4)
-#define IOCTL_SPI_SET_USE_SEM     	  _IOW('S', 16, 4)
-#define IOCTL_SPI_SET_IRQ_FUNC 		  _IOW('S', 17, 4)
+#define IOCTL_SPI_SET_IRQ_CPU_ID	        _IOW('S', 12, u32)
+#define IOCTL_SPI_SET_USER_INFO	  	        _IOW('S', 13, u32)
+#define IOCTL_SPI_READ_DATA       	        _IOR('S', 13, u32)
+#define IOCTL_SPI_FREE_DATA       	        _IOW('S', 14, u32)
+#define IOCTL_SPI_SET_CB         	        _IOW('S', 15, u32)
+#define IOCTL_SPI_SET_USE_SEM     	        _IOW('S', 16, u32)
+#define IOCTL_SPI_SET_IRQ_FUNC 		        _IOW('S', 17, u32)
 
-#define IOCTL_SPI_SET_BIT_MODE        _IOW('S', 18, 1)
-
+#define IOCTL_SPI_SET_BIT_MODE              _IOW('S', 18, u32)
 //SPI同一组多ABC口同时使用时切换口命令，使用示例：ioctl(spi_hdl, IOCTL_SPI_SET_PORT, 0);
-#define IOCTL_SPI_SET_PORT      	_IOW('S', 19, 1)
+#define IOCTL_SPI_SET_PORT      	        _IOW('S', 19, u32)
 //非阻塞方式发包
-#define IOCTL_SPI_NON_BLOCK      	_IOW('S', 20, 1)
+#define IOCTL_SPI_NON_BLOCK      	        _IOW('S', 20, u32)
 //休眠前需要调用这个当使用非阻塞方式发包时候
-#define IOCTL_SPI_WRITE_NON_BLOCK_FLUSH      	_IOW('S', 21, 1)
+#define IOCTL_SPI_WRITE_NON_BLOCK_FLUSH    	_IOW('S', 21, u32)
 //获取spi配置是否阻塞发送
-#define IOCTL_SPI_GET_NON_BLOCK          _IOR('S', 22, 1)
+#define IOCTL_SPI_GET_NON_BLOCK             _IOR('S', 22, u32)
+#define IOCTL_SPI_SET_THRESHOLD_SEM_WAIT    _IOW('S', 23, u32)
+#define IOCTL_SPI_READ_PACKAGE_DUAL_MODE    _IOR('S', 24, u32)
 
 struct spi_io {
     u8 cs_pin;

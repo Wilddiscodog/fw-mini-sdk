@@ -102,9 +102,9 @@ void *port_wakeup_reg(PORT_EVENT_E event, unsigned int gpio, PORT_EDGE_E edge, v
         return NULL;
     }
 
-    if (event > EVENT_PH7) {
-        return NULL;
-    }
+    //if (event > EVENT_PH7) {
+    //    return NULL;
+    //}
 
     if (gpio > IO_PORT_USB_DMB) {
         return NULL;
@@ -182,10 +182,10 @@ void *port_wakeup_reg(PORT_EVENT_E event, unsigned int gpio, PORT_EDGE_E edge, v
 
     spin_unlock(&lock);
 
-    log_i("ENABLE REG = 0x%x.\n", JL_WAKEUP->CON0);
-    log_i("EDGE REG = 0x%x.\n", JL_WAKEUP->CON1);
-    log_i("PEND REG = 0x%x.\n", JL_WAKEUP->CON3);
-    log_i("JL_IOMAP->CON2=0x%x\n", JL_IOMAP->CON2);
+    //log_i("ENABLE REG = 0x%x.\n", JL_WAKEUP->CON0);
+    //log_i("EDGE REG = 0x%x.\n", JL_WAKEUP->CON1);
+    //log_i("PEND REG = 0x%x.\n", JL_WAKEUP->CON3);
+    //log_i("JL_IOMAP->CON2=0x%x\n", JL_IOMAP->CON2);
 
     return (void *)PORT_WAKED_ID_GIVE(i);
 }

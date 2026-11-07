@@ -214,7 +214,7 @@ u32 usb_h_set_intr_hander(const usb_dev usb_id, u32 ep, usb_h_interrupt hander);
   * usb_host_mount(usb_id , 5 , 10 , 1000 );
   * @encode
   */
-u32 usb_host_mount(const usb_dev usb_id, u32 retry, u32 reset_delay, u32 mount_timeout);
+int usb_host_mount(const usb_dev usb_id, u32 retry, u32 reset_delay, u32 mount_timeout);
 
 /**@brief   USB主机模式卸载
   * @param[in]  usb_id USB的id号
@@ -224,7 +224,7 @@ u32 usb_host_mount(const usb_dev usb_id, u32 retry, u32 reset_delay, u32 mount_t
   * usb_host_unmount(usb_id);
   * @encode
   */
-u32 usb_host_unmount(const usb_dev usb_id);
+int usb_host_unmount(const usb_dev usb_id);
 
 /**@brief   USB主机模式重新挂载
   * @param[in]  usb_id USB的id号
@@ -238,7 +238,7 @@ u32 usb_host_unmount(const usb_dev usb_id);
   * usb_host_remount(usb_id , 5 , 10 , 1000 , 1);
   * @encode
   */
-u32 usb_host_remount(const usb_dev usb_id, u32 retry, u32 delay, u32 ot, u8 notify);
+int usb_host_remount(const usb_dev usb_id, u32 retry, u32 delay, u32 ot, u8 notify);
 
 /**@brief   USB主机模式挂起
   * @param[in]  usb_id USB的id号

@@ -34,13 +34,14 @@ struct dac_platform_data {
     u8 differ_output;           /*!< 是否使用硬件差分输出模式  0:不使用 1:使用 */
     u8 hw_channel;              /*!< 硬件DAC模拟通道 */
     u8 ch_num;                  /*!< 数字通道，软件输出通道数 */
-    u8 fade_enable;				/*!< 模拟音量淡入淡出使能位 */
-    u8 auto_src_enable;			/*!< 根据当前解码的最高采样率自动调整最佳DAC采样率 */
-    u16 mute_delay_ms;			/*!< MUTE延时 */
-    u16 fade_delay_ms;			/*!< 模拟音量淡入淡出延时 */
-    u16 sr_points;				/*!< 多少个采样点进一次中断，一般不建议修改 */
-    u16 vcm_init_delay_ms;		/*!< VCM电压初始化后等待稳定的延时ms */
-    u32 poweron_delay;			/*!< 低功耗睡眠时恢复DAC模块的延迟us */
+    u8 fade_enable;             /*!< 模拟音量淡入淡出使能位 */
+    u8 auto_src_enable;         /*!< 根据当前解码的最高采样率自动调整最佳DAC采样率 */
+    u16 mute_delay_ms;          /*!< MUTE延时 */
+    u16 fade_delay_ms;          /*!< 模拟音量淡入淡出延时 */
+    u16 sr_points;              /*!< 多少个采样点进一次中断，一般不建议修改 */
+    u16 vcm_init_delay_ms;      /*!< VCM电压初始化后等待稳定的延时ms */
+    u32 poweron_delay;          /*!< 低功耗睡眠时恢复DAC模块的延迟us */
+    void (*pa_mute_cb)(u8 mute);/*!< 功放mute用户操作回调 */
 };
 /// \endcond
 

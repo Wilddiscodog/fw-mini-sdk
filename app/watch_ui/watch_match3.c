@@ -14,17 +14,17 @@
 #include <string.h>
 #include <stdio.h>
 
-#define TOP_H     28
+#define TOP_H     18          /* 缩顶栏换 CELL+1 */
 #define GW        LCD_W
 #define GH        (LCD_H - TOP_H)
 #define TICK_MS   33
 
 #define N         7
-#define CELL      26
+#define CELL      ((GH - 4) / N) /* 31: 留上下描边, 尽量铺满 */
 #define BOARD_W   (N * CELL)
 #define BOARD_H   (N * CELL)
 #define OX        ((GW - BOARD_W) / 2)
-#define OY        ((GH - BOARD_H) / 2 + 4)
+#define OY        2              /* 贴顶, 余量留在下方 */
 
 #define COLORS    5
 #define TARGET0   200
@@ -508,7 +508,7 @@ lv_obj_t *app_match3_create(lv_obj_t *parent)
     lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
 
     back = lv_btn_create(bar);
-    lv_obj_set_size(back, 44, 22);
+    lv_obj_set_size(back, 44, 16);
     lv_obj_align(back, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_style_bg_color(back, C(0xFF6B8A), 0);
     lv_obj_set_style_radius(back, 10, 0);

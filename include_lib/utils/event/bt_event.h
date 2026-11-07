@@ -13,6 +13,7 @@ enum bt_event_from {
     BT_EVENT_FROM_AI,
     BT_EVENT_FROM_BLE,
     BT_EVENT_FROM_USER,
+    BT_EVENT_FROM_BLE_RCSP_UPDATE,
 };
 
 struct bt_event {

@@ -135,7 +135,7 @@ void sys_timeout_del(u16 id);
 /**
  * @brief   sys_timer定时器重置
  * @param	id	sys_timer和分sys_timeout配的id号
- * @note    重置之后重新计时
+ * @note    在定时时间到之前进行重置之后重新计时,sys_timeout定时到之后会被删除,re_run无效
  */
 void sys_timer_re_run(u16 id);
 

@@ -1,4 +1,3 @@
-#include "app_config.h"
 #include "usb/device/usb_stack.h"
 #include "usb_config.h"
 #include "usb/device/msd.h"
@@ -7,9 +6,11 @@
 #include "usb/device/uac_audio.h"
 #include "usb/device/cdc.h"
 #include "usb/device/slave_uvc.h"
+#include "usb/device/printer.h"
 #include "irq.h"
 #include "init.h"
 #include "gpio.h"
+#include "app_config.h"
 
 #define LOG_TAG_CONST       USB
 #define LOG_TAG             "[USB]"
@@ -93,6 +94,10 @@ int usb_device_mode(const usb_dev usb_id, const u32 class)
 #if TCFG_USB_SLAVE_HID_ENABLE
         hid_release(usb_id);
 #endif
+
+#if TCFG_USB_SLAVE_PRINTER_ENABLE
+        printer_release();
+#endif
         usb_device_hold(usb_id);
         os_time_dly(15);
 
@@ -159,6 +164,14 @@ int usb_device_mode(const usb_dev usb_id, const u32 class)
         log_info("add desc uvc");
         usb_add_desc_config(usb_id, class_index++, uvc_desc_config);
         uvc_register(usb_id);
+    }
+#endif
+
+#if TCFG_USB_SLAVE_PRINTER_ENABLE
+    if ((class & PRINTER_CLASS) == PRINTER_CLASS) {
+        log_info("add desc printer");
+        usb_add_desc_config(usb_id, class_index++, printer_desc_config);
+        printer_register(usb_id);
     }
 #endif
 

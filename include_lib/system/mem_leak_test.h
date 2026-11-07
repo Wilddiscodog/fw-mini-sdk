@@ -1,10 +1,14 @@
 #ifndef __MEM_LEAK_TEST_H__
 #define __MEM_LEAK_TEST_H__
 
-void *_vrealloc_dbg(void *pv, unsigned int sz, const char *func, int line);
-void *_vmalloc_dbg(unsigned int sz, const char *func, int line);
-void *_vcalloc_dbg(unsigned int n, unsigned int sz, const char *func, int line);
-void _vfree_dbg(void *pbuf);
+#if defined __cplusplus
+extern "C" {
+#endif
+
+    void *_vrealloc_dbg(void *pv, unsigned int sz, const char *func, int line);
+    void *_vmalloc_dbg(unsigned int sz, const char *func, int line);
+    void *_vcalloc_dbg(unsigned int n, unsigned int sz, const char *func, int line);
+    void _vfree_dbg(void *pbuf);
 
 #define malloc(sz)		        _vmalloc_dbg((sz), __FUNCTION__, __LINE__)
 #define calloc(n, sz)		    _vcalloc_dbg((n), (sz), __FUNCTION__, __LINE__)
@@ -17,12 +21,13 @@ void _vfree_dbg(void *pbuf);
 #define kzalloc(sz, flags)	    _vcalloc_dbg(1, (sz), __FUNCTION__, __LINE__)
 #define zalloc(sz)	            _vcalloc_dbg(1, (sz), __FUNCTION__, __LINE__)
 
+    extern void malloc_debug_start(void);
+    extern void malloc_debug_stop(void);
+    extern void malloc_debug_show(void);
 
-
-
-extern void malloc_debug_start(void);
-extern void malloc_debug_stop(void);
-extern void malloc_debug_show(void);
+#if defined __cplusplus
+}
+#endif
 
 #endif
 

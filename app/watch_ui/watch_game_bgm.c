@@ -159,10 +159,10 @@ static void apply_dac_vol(void)
 {
     union audio_req req = {0};
 
-    /* 设置滑条 0~100 → DAC 音量; 略压一点避免方波刺耳 */
-    B.dac_vol = (u8)((u16)s_bgm_vol * 70 / 100);
-    if (s_bgm_vol && B.dac_vol < 8) {
-        B.dac_vol = 8;
+    /* 0~100 线性映射到 DAC; 允许真正调小(不再卡在约 50% 听感) */
+    B.dac_vol = (u8)((u16)s_bgm_vol * 80 / 100);
+    if (s_bgm_vol && B.dac_vol < 3) {
+        B.dac_vol = 3;
     }
     if (!B.dec || !B.run) {
         return;
@@ -246,10 +246,10 @@ static void synth_fill(s16 *out, u32 n)
         B.ph_pulse += B.step_pulse;
         B.ph_tri += B.step_tri;
 
-        /* 主旋律方波清晰; 低音三角很轻, 只垫底不抢 */
+        /* 主旋律方波清晰; 低音三角很轻; PCM 再乘用户音量保证能明显调小 */
         lead = pulse50(B.ph_pulse, (s16)(B.env * 1100));
         bass = tri32(B.ph_tri, (s16)(B.env * 220));
-        mix = (s32)lead + (s32)bass;
+        mix = ((s32)lead + (s32)bass) * (s32)s_bgm_vol / 100;
         if (mix > 26000) {
             mix = 26000;
         }

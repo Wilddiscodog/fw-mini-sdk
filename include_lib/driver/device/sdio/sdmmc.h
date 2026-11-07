@@ -3,7 +3,7 @@
 
 #include "generic/typedef.h"
 #include "generic/ioctl.h"
-
+#include "generic/list.h"
 
 #define     SD_CMD_DECT 	0
 #define     SD_CLK_DECT  	1

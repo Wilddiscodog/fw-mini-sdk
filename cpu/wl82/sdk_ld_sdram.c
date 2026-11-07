@@ -47,93 +47,22 @@ SECTIONS
         *startup.S.o(.text)
         *(.boot_code)
         *(.text*)
-        *(.LOG_TAG_CONST*)
         *(.rodata*)
-        *(.fat_data_code)
 
-        . = ALIGN(4);
-        __VERSION_BEGIN = .;
-        KEEP(*(.sys.version))
-        __VERSION_END = .;
-
-#if defined CONFIG_CXX_SUPPORT
-		. = ALIGN(4);
-        _ctors_begin = .;
-        PROVIDE(ctors_begin = .);
-        *(.ctors*)
-        _ctors_end = .;
-        PROVIDE(ctors_end = .);
-		. = ALIGN(4);
-#endif
-
+        #include "system/system_lib_text.ld"
+        #include "common/movable/movable_text.ld"
         #include "driver/cpu/wl82/media_text.ld"
-
 #if defined CONFIG_BT_ENABLE
-        . = ALIGN(4);
-        *(.sbc_eng_code)
-
-        . = ALIGN(4);
-        *(.h4_const)
-
-        . = ALIGN(4);
-        crypto_begin = .;
-        *(.crypto_ecdh_code)
-        *(.crypto_ecdh_const)
-
-        *(.crypto_bigint_code)
-        *(.crypto_bigint_const)
-
-        *(.crypto_code)
-        *(.crypto_const)
-
-        *(.ECDH_sample_code)
-        *(.ECDH_sample_const)
-
-        *(.uECC_code)
-        *(.uECC_const)
-
-        *(.hmac_code)
-        *(.hmac_const)
-
-        *(.hash_sample_code)
-        *(.hash_sample_const)
-
-        *(.aes_cmac_sample_code)
-        *(.aes_cmac_sample_const)
-        crypto_end = .;
-        crypto_size = . - crypto_begin;
-#endif
-
-        . = ALIGN(4);
-        *(.update_const)
-        *(.update_code)
-        *(.bt_updata_ram_code)
-
         . = ALIGN(4);
         #include "btctrler/btctler_lib_text.ld"
         . = ALIGN(4);
         #include "btstack/btstack_lib_text.ld"
+#endif
         . = ALIGN(4);
         #include "ui/ui/ui.ld"
-
-        PROVIDE(__fsymtab_start = .);
-        KEEP(*(.FSymTab))
-        PROVIDE(__fsymtab_end = .);
-        PROVIDE(__vsymtab_start = .);
-        KEEP(*(.VSymTab))
-        PROVIDE(__vsymtab_end = .);
-        PROVIDE(__rtatcmdtab_start = .);
-        KEEP(*(.RtAtCmdTab))
-        PROVIDE(__rtatcmdtab_end = .);
-
-#if !defined CONFIG_RF_TRIM_CODE_AT_RAM
-        . = ALIGN(4);
+#if !defined CONFIG_RF_TRIM_CODE_AT_RAM && !defined CONFIG_RF_TRIM_CODE_MOVABLE
         *(*.rf.text.cache.L2.rf_trim)
 #endif
-        __rf_trim_movable_region_start = .;
-        *(.movable.region.1);
-        __rf_trim_movable_region_end = .;
-
         . = ALIGN(32);
         _text_rodata_end = .;
         PROVIDE(text_rodata_end = .);
@@ -144,10 +73,6 @@ SECTIONS
     . = ORIGIN(sdram);
 #else
 	> sdram
-#endif
-
-#if defined CONFIG_CXX_SUPPORT
-	PROVIDE(ctors_count = _ctors_end - _ctors_begin);
 #endif
 
     .data ALIGN(32):
@@ -178,22 +103,22 @@ SECTIONS
         _os_end = .;
         PROVIDE(os_end = .);
 #endif
-#ifdef CONFIG_UI_ENABLE
+#if defined CONFIG_UI_ENABLE
         . = ALIGN(4);
         *(.ui_ram)
 #endif
         . = ALIGN(4);
         #include "driver/cpu/wl82/system.ld"
-
         . = ALIGN(4);
         #include "driver/cpu/wl82/system_data.ld"
+        . = ALIGN(4);
         #include "server/media.ld"
-
         . = ALIGN(4);
         #include "net/server/net_server_data.ld"
-
+#if defined CONFIG_BT_ENABLE
         . = ALIGN(4);
         #include "btstack/btstack_lib_data.ld"
+#endif
 
         . = ALIGN(4);
         *(.data)
@@ -216,8 +141,10 @@ SECTIONS
         *(.os_bss)
         *(.update_bss)
 
+#if defined CONFIG_BT_ENABLE
         . = ALIGN(4);
         #include "btstack/btstack_lib_bss.ld"
+#endif
 
         . = ALIGN(4);
     } > sdram
@@ -244,6 +171,22 @@ SECTIONS
         *(.spi_code)
         . = ALIGN(4);
         _SPI_CODE_END = . ;
+
+        *(.sdram_re_trim_code)
+
+#ifdef CONFIG_AEC_USE_SMS_TDE
+	*(.sms_data)
+        *(.smsvf_data)
+        *(.sms_const)
+        *(.sms_code)
+        *(.sms_sparse_code)
+        *(.smsvf_const)
+        *(.smsvf_code)
+        *(.smsvf_sparse_code)
+        *(.fft_const)
+        *(.fft_code)
+        *(.fft_sparse_code)
+#endif
 
         *(.flushinv_icache)
         *(.volatile_ram_code)
@@ -274,21 +217,12 @@ SECTIONS
         PROVIDE(os_end = .);
 #endif
 
-        . = ALIGN(4);
-        *(.movable.stub.1)
-        *(*.text.cache.L1)
-        *(*.text.cache.L2)
-        *(*.text.const.cache.L2)
-
-		. = ALIGN(4);
-        __rf_trim_movable_slot_start = .;
-        *(.movable.slot.1);
-        __rf_trim_movable_slot_end = .;
-
 #if defined CONFIG_RF_TRIM_CODE_AT_RAM
         *(*.rf.text.cache.L2.rf_trim)
 #endif
+        #include "common/movable/movable_data.ld"
 
+        . = ALIGN(4);
         _ram_text_rodata_end = .;
         PROVIDE(ram_text_rodata_end = .);
 
@@ -297,49 +231,50 @@ SECTIONS
         *(.fft_data)
         *(.deepsleep_target)
 
+#if defined CONFIG_BT_ENABLE
         . = ALIGN(4);
         #include "btctrler/btctler_lib_data.ld"
+#endif
 
         . = ALIGN(4); // must at tail, make ram0_data size align 4
     } > ram0
 
     .ram0_bss ALIGN(4):
     {
+#if defined CONFIG_BT_ENABLE
         #include "btctrler/btctler_lib_bss.ld"
+#endif
 
         . = ALIGN(4);
         *(.the_debug_isr_stack_c0)
         *(.the_debug_isr_stack_c1)
+        *(.stack_magic)
+        *(.stack_magic0)
 
+#ifdef CONFIG_AEC_USE_SMS_TDE
+        *(.sms_bss)
+        *(.smsvf_bss)
+        *(.fft_bss)
+#endif
+
+        . = ALIGN(4);
         _stack_info_begin = .;
         PROVIDE(stack_info_begin = .);
-
-        *(.stack)
         *(.cpu0_ustack)
-		*(.stack_magic)
-		*(.stack_magic0)
-
         _cpu0_sstack_begin = .;
         PROVIDE(cpu0_sstack_begin = .);
         *(.cpu0_sstack)
         _cpu0_sstack_end = .;
         PROVIDE(cpu0_sstack_end = .);
-
         *(.cpu1_ustack)
-
         _cpu1_sstack_begin = .;
         PROVIDE(cpu1_sstack_begin = .);
         *(.cpu1_sstack)
         _cpu1_sstack_end = .;
         PROVIDE(cpu1_sstack_end = .);
-
         _stack_info_end = .;
         PROVIDE(stack_info_end = .);
 
-        /*
-         * sd卡全局变量要放sram，否则会读写出错
-         */
-        *(.sd_var)
         *(.sram)
 
         . = ALIGN(4);
@@ -409,6 +344,7 @@ SECTIONS
     PROVIDE(cache_ram_data_size = SIZEOF(.cache_ram_data));
 
 
+#if defined CONFIG_BT_ENABLE
 	/*代码统计 Code & RAM : 蓝牙协议栈*/
     BTCTLER_LE_RAM_TOTAL   = BTCTLER_LE_CONTROLLER_DATA_SIZE + BTCTLER_LE_CONTROLLER_BSS_SIZE;
     BTCTLER_LE_CODE_TOTAL  = BTCTLER_LE_CONTROLLER_CODE_SIZE;
@@ -424,8 +360,10 @@ SECTIONS
 
     BTSTACK_LE_HOST_MESH_RAM_TOTAL = BTSTACK_LE_HOST_MESH_DATA_SIZE + BTSTACK_LE_HOST_MESH_BSS_SIZE;
     BTSTACK_LE_HOST_MESH_FLASH_TOTAL = BTSTACK_LE_HOST_MESH_CODE_SIZE;
+#endif
 
 // *INDENT-ON*
+
 EXTERN(
     lib_audio_server_version
     lib_system_version
@@ -447,6 +385,7 @@ EXTERN(
     lib_wifi_version
     lib_wl82_rf_version
     lib_httpcli_version
+    lib_httpscli_version
     lib_airplay_version
     lib_aliyun_version
     lib_cjson_version
@@ -467,11 +406,11 @@ EXTERN(
     lib_coap_version
     lib_duer_version
     lib_mpeg_version
-    lib_lwip_2_0_3_version
-    lib_lwip_2_1_2_version
     lib_lwip_2_1_3_version
+    lib_lwip_2_2_0_version
     lib_mbedtls_2_2_1_version
     lib_mbedtls_2_26_0_version
+    lib_mbedtls_3_4_0_version
     lib_mdns_version
     lib_mongoose_version
     lib_mqtt_version

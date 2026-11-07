@@ -28,6 +28,8 @@
 
 static usb_interrupt usb_interrupt_tx[USB_MAX_HW_NUM][MAX_EP_TX];// SEC(.usb_g_bss);
 static usb_interrupt usb_interrupt_rx[USB_MAX_HW_NUM][MAX_EP_RX];// SEC(.usb_h_bss);
+static usb_sof_ep_hander usb_sof_ep_tx[USB_MAX_HW_NUM][MAX_EP_TX];
+static usb_sof_ep_hander usb_sof_ep_rx[USB_MAX_HW_NUM][MAX_EP_RX];
 
 #if TCFG_USB_SLAVE_MSD_ENABLE
 #define     MSD_DMA_SIZE (64*2)
@@ -48,10 +50,7 @@ static usb_interrupt usb_interrupt_rx[USB_MAX_HW_NUM][MAX_EP_RX];// SEC(.usb_h_b
 #endif
 
 #if TCFG_USB_SLAVE_CDC_ENABLE
-#if CDC_DUAL_ENABLE
-/* 双 CDC: 对齐原厂 64B MPS, 每口 IN+OUT 各 64 */
-#define     CDC_DMA_SIZE    (64 * 4)
-#elif CDC_INTR_EP_ENABLE
+#if CDC_INTR_EP_ENABLE
 #define     CDC_DMA_SIZE    (64*3)
 #else
 #define     CDC_DMA_SIZE    (64*2)
@@ -287,8 +286,21 @@ void usb_sof_isr(const usb_dev usb_id)
 {
     usb_sof_clr_pnd(usb_id);
     static u32 sof_count = 0;
+    u32 frame = usb_read_sofframe(usb_id);
+    struct usb_device_t *usb_device = usb_id2device(usb_id);
+
     if ((sof_count++ % 1000) == 0) {
         log_d("sof 1s isr frame:%d", usb_read_sofframe(usb_id));
+    }
+    for (int i = 0; i < MAX_EP_TX; i++) {
+        if (usb_sof_ep_tx[usb_id][i]) {
+            usb_sof_ep_tx[usb_id][i](usb_device, i, frame);
+        }
+    }
+    for (int i = 0; i < MAX_EP_RX; i++) {
+        if (usb_sof_ep_rx[usb_id][i]) {
+            usb_sof_ep_rx[usb_id][i](usb_device, i, frame);
+        }
     }
 }
 
@@ -338,6 +350,16 @@ u32 usb_g_set_intr_hander(const usb_dev usb_id, u32 ep, usb_interrupt hander)
     }
     return 0;
 }
+__attribute__((always_inline_when_const_args))
+u32 usb_g_set_sof_hander(const usb_dev usb_id, u32 ep, usb_sof_ep_hander hander)
+{
+    if (ep & USB_DIR_IN) {
+        usb_sof_ep_tx[usb_id][ep & 0xf] = hander;
+    } else {
+        usb_sof_ep_rx[usb_id][ep] = hander;
+    }
+    return 0;
+}
 void usb_g_isr_reg(const usb_dev usb_id, u8 priority, u8 cpu_id)
 {
     if (usb_id == 0) {
@@ -364,6 +386,8 @@ u32 usb_config(const usb_dev usb_id)
 {
     memset(usb_interrupt_rx[usb_id], 0, sizeof(usb_interrupt_rx[usb_id]));
     memset(usb_interrupt_tx[usb_id], 0, sizeof(usb_interrupt_tx[usb_id]));
+    memset(usb_sof_ep_rx[usb_id], 0, sizeof(usb_interrupt_rx[usb_id]));
+    memset(usb_sof_ep_tx[usb_id], 0, sizeof(usb_interrupt_tx[usb_id]));
 
     if (!usb_config_var[usb_id]) {
 #if USB_MALLOC_ENABLE

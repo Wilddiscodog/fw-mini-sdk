@@ -227,7 +227,7 @@ typedef enum JL_CONFIG_ERR_TABLE {
 #define    VM_BLE_MESH_IDX_END         179
 
 //WIFI类配置项[180 ~ 250]
-#define    NETWORK_SSID_INFO_CNT       5 //配置VM里面保存多少个路由器信息, 如果不需要写0
+#define    NETWORK_SSID_INFO_CNT       6 //配置VM里面保存多少个路由器信息, 如果不需要写0
 #define    WIFI_STA_INFO_IDX_START     180
 #define    WIFI_STA_INFO_IDX_END       (WIFI_STA_INFO_IDX_START+NETWORK_SSID_INFO_CNT)
 #define    VM_WIFI_RF_INIT_INFO        187
@@ -249,6 +249,7 @@ typedef enum JL_CONFIG_ERR_TABLE {
 #define    VM_FM_INFO_INDEX             199
 #define    VM_SD_LOG_INDEX              200
 #define    VM_AG_KEY_INFO_IDX_START     201
+
 #define    VM_AG_KEY_INFO_IDX_END       214
 #define    VM_UPG_INDEX                 215
 #define    VM_FIR_INDEX                 216
@@ -275,7 +276,14 @@ typedef enum JL_CONFIG_ERR_TABLE {
 #define    CFG_PRODUCT_LICENSE_INDEX    248
 #define    CFG_PRODUCT_RTC_INDEX        249
 
-//60-61 249-255可使用
+#define    EXT_WIFI_INFO_IDX            250
+#define    EXT_WIFI_MAC_IDX             251
+
+#define    CFG_PRODUCT_RES_INDEX        252
+#define    CFG_PRODUCT_USER_INDEX       253
+
+#define    VM_SDRAM_TRIM_VALUE_INDEX    254
+#define    CFG_PRODUCT_CFG_INDEX        255
 
 //=================================================================================//
 //                   只存于sys_cfg.bin的配置项[512 ~ 700]                		   //

@@ -168,10 +168,11 @@ typedef struct S_PICTURE_SIZE {
 #define container_of(ptr, type, memb) \
 	((type *)((char *)(ptr) - offsetof(type, memb)))
 
-void delay(unsigned int);
+void delay(unsigned int n);
 
-void delay_us(unsigned int);
+void delay_us(unsigned int us);
 
+void hw_udelay(unsigned int us);
 
 #endif
 

@@ -4,4 +4,4 @@
 
 include_lib_net_version:
 
-.asciz "INCLUDE_NET-$decd1f4"
+.asciz "INCLUDE_NET-$dbfcab1"

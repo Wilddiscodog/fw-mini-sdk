@@ -176,8 +176,11 @@ functions anyway. */
 #define INCLUDE_xTimerPendFunctionCall			0
 #define INCLUDE_xTaskAbortDelay					1
 
+#define configNUM_THREAD_LOCAL_STORAGE_POINTERS 1
+#define configTHREAD_LOCAL_STORAGE_DELETE_CALLBACKS 1
 /* It is a good idea to define configASSERT() while developing.  configASSERT()
 uses the same semantics as the standard C assert() macro. */
+#ifndef configASSERT
 #include "generic/printf.h"
 static inline  void vAssertCalled(const char *str, unsigned int ulLine)
 {
@@ -195,6 +198,8 @@ static inline  void vAssertCalled(const char *str, unsigned int ulLine)
     /*while (1);*/
 
 }
+#endif
+
 #define configASSERT( x ) if( ( x ) == 0 ) vAssertCalled(__func__, __LINE__)
 
 /* Include the FreeRTOS+Trace FreeRTOS trace macro definitions. */

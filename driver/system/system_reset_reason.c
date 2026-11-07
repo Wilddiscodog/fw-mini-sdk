@@ -10,6 +10,7 @@ static int system_reset_reason_check(void)
     u8 r3_wkup = p33_rx_1byte(R3_WKUP_SRC);
     u8 port_wkup = p33_rx_1byte(P3_WKUP_PND);
     u8 p3_pmu = p33_rx_1byte(P3_PMU_CON1);
+    u8 lptmr_con = p33_rx_1byte(P3_LP_TMR0_CON);
     int rst_src = 0;
     char rsn[16];
 
@@ -31,6 +32,9 @@ static int system_reset_reason_check(void)
     } else if ((reset_flag & BIT(5)) || (p3_rst & BIT(6))) {
         rst_src |= SYS_RST_SOFT;
         strcpy(rsn, SYS_SOFT);
+    } else if (lptmr_con & (BIT(5) | BIT(7))) {
+        rst_src |= SYS_RST_LPTMR_WKUP;
+        strcpy(rsn, SYS_LPTMR_WAKUP);
     } else {
         if (p3_rst & BIT(0)) {
             rst_src |= SYS_RST_VDDIO_PWR_ON;
@@ -95,4 +99,8 @@ int system_wakeup_port_get(void)
     return -EINVAL;
 }
 
+void system_alarm_wakeup_clear(void)
+{
+    sys_rst_rs &= ~(SYS_RST_ALM_WKUP);
+}
 

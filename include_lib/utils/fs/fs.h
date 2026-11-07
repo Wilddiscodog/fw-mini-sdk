@@ -27,11 +27,13 @@
  * \name File attributes bits for fset_attr and fget_attr funciton
  * \{
  */
+#define F_ATTR_RW       0x00   /*!< 读写 */
 #define F_ATTR_RO       0x01   /*!< 只读 */
-#define F_ATTR_ARC      0x02   /*!< 文件 */
-#define F_ATTR_DIR      0x04   /*!< 目录 */
+#define F_ATTR_HID      0x02   /*!< 隐藏 */
+#define F_ATTR_SYS      0x04   /*!< 系统 */
 #define F_ATTR_VOL      0x08   /*!< 卷标 */
-#define F_ATTR_HID      0x10   /*!< 隐藏 */
+#define F_ATTR_DIR      0x10   /*!< 目录 */
+#define F_ATTR_ARC      0x20   /*!< 文件 */
 /* \} name */
 
 #ifndef FSELECT_MODE
@@ -111,9 +113,9 @@ struct vfs_operations;
 struct vfs_devinfo {
     void *fd;
     u32 sector_size;
+    u32 fatbase;
+    u32 database;
     void *private_data;
-    u32 block_start;
-    u32 block_end;
 };
 /// \endcond
 
@@ -199,6 +201,9 @@ struct vfscan {
     struct vfs_devinfo *dev;		/*!< 设备信息 */
     struct vfs_partition *part;		/*!< 分区信息 */
     char filt_dir[12];				/*!< 设置文件夹过滤 */
+    char fasten_num[8];
+    char *fasten_buf;
+    char *d_save;
 };
 
 /// \cond DO_NOT_DOCUMENT
@@ -213,11 +218,10 @@ struct vfs_operations {
     int (*fread)(FILE *, void *buf, u32 len);
     int (*fread_fast)(FILE *, void *buf, u32 len);
     int (*fwrite)(FILE *, void *buf, u32 len);
-    int (*fseek)(FILE *, int offset, int);
-    int (*fseek_fast)(FILE *, int offset, int);
-    int (*flen)(FILE *);
-    int (*fpos)(FILE *);
-    int (*fcopy)(FILE *, FILE *);
+    int (*fseek)(FILE *, u32 offset, int);
+    int (*fseek_fast)(FILE *, u32 offset, int);
+    u32(*flen)(FILE *);
+    u32(*fpos)(FILE *);
     int (*fget_name)(FILE *, u8 *name, int len);
     int (*fget_path)(FILE *, struct vfscan *, u8 *name, int len, u8 is_relative_path);
     int (*frename)(FILE *, const char *path);
@@ -230,6 +234,7 @@ struct vfs_operations {
     int (*fget_attr)(FILE *, int *attr);
     int (*fset_attr)(FILE *, int attr);
     int (*fget_attrs)(FILE *, struct vfs_attr *);
+    int (*ftruncate)(FILE *, u32 size);
     int (*fmove)(FILE *file, const char *path_dst, FILE *, int clr_attr, int path_len);
     int (*ioctl)(void *, int cmd, int arg);
     int (*fget_total_space)(struct imount *mt, u32 *space);
@@ -278,22 +283,6 @@ struct imount *mount(const char *dev_name, const char *path, const char *fs_type
                      int cache_num, void *dev_arg);
 
 /**
- * @brief 支持自定义偏移量的挂载设备虚拟文件系统
- *
- * @param dev_name 设备名称
- * @param path 挂载点路径
- * @param fs_type 文件系统类型(支持"fat" "devfs" "ramfs" "sdfile")
- * @param cache_num  文件系统缓存
- * @param dev_arg 设备参数指针
- * @param block_offset 自定义引导扇区的起始block块偏移量(低32位),结束block块偏移量(高32位,取0默认设置为介质的最后block)
- *
- * @return 指向挂载点结构体的指针
- * @return NULL 挂载失败
- */
-struct imount *mount_ext(const char *dev_name, const char *path, const char *fs_type,
-                         int cache_num, void *dev_arg, u64 block_offset);
-
-/**
  * @brief 卸载设备虚拟文件系统
  *
  * @param path 挂载点路径
@@ -304,7 +293,7 @@ struct imount *mount_ext(const char *dev_name, const char *path, const char *fs_
 int unmount(const char *path);
 
 /**
- * @brief 支持自定义偏移量的格式化驱动器
+ * @brief 格式化驱动器
  *
  * @param path 需要格式化的根目录
  * @param fs_type 文件系统类型
@@ -314,19 +303,6 @@ int unmount(const char *path);
  * @return other: 格式化失败
  */
 int f_format(const char *path, const char *fs_type, u32 clust_size);
-
-/**
- * @brief 格式化驱动器
- *
- * @param path 需要格式化的根目录
- * @param fs_type 文件系统类型
- * @param clust_size 簇大小,簇为0时默认为卡本身簇大小
- * @param block_offset 自定义引导扇区的起始block块偏移量(低32位),结束block块偏移量(高32位,取0默认设置为介质的最后block)
- *
- * @return 0: 格式化成功
- * @return other: 格式化失败
- */
-int f_format_ext(const char *path, const char *fs_type, u32 clust_size, u64 block_offset);
 
 /**
  * @brief 刷新文件缓存数据（一般使用在fclose后某些数据还没有及时写进SD卡，需要主动刷新一下缓存区）
@@ -347,8 +323,22 @@ int f_free_cache(const char *path);
  * @return 指向文件流的文件指针
  * @return NULL: 打开失败
  * @note fopen自动打开、创建文件夹和文件，打开模式只支持"r" "w" "w+"，如需要追加写请使用"w"，文件名长度超过8个字节的需要用长文件名打开
+ * @note  现在fopen 支持，1、外面自己传入Unicode的长文件进来创建，2、utf8或者内码的形式进来创建，3、带* 号的长短文件名创建。注意事项：不允许1、2两点混合形式
  */
 FILE *fopen(const char *path, const char *mode);
+
+/**
+ * @brief 通过utf8编码打开文件，不需要进行额外的转码，获取指向文件流的文件指针
+ *
+ * @param path 文件路径（utf8编码）
+ * @param mode 打开模式
+ *
+ * @return 指向文件流的文件指针
+ * @return NULL: 打开失败
+ * @note fopen自动打开、创建文件夹和文件，打开模式只支持"r" "w" "w+"，如需要追加写请使用"w"
+ * @note 小于9个字节的中文名目录和中文文件名需要额外加上\U
+ */
+FILE *fopen_by_utf8(const char *path, const char *mode);
 
 /**
  * @brief 从文件中读取数据
@@ -382,7 +372,7 @@ int fwrite(void *buf, u32 size, u32 count, FILE *file);
  *
  * @return 成功返回0
  */
-int fseek(FILE *file, int offset, int orig);
+int fseek(FILE *file, u32 offset, int orig);
 
 /**
  * @brief 快速设置文件指针的位置
@@ -393,7 +383,7 @@ int fseek(FILE *file, int offset, int orig);
  * @note 一般手表case使用,去除互斥,设置ram里面跑
  * @return 成功返回0
  */
-int fseek_fast(FILE *file, int offset, int orig);
+int fseek_fast(FILE *file, u32 offset, int orig);
 
 /**
  * @brief 从文件中快速读取数据
@@ -414,7 +404,7 @@ int fread_fast(void *buf, u32 size, u32 count, FILE *file);
  *
  * @return 文件大小(负值表示获取失败)
  */
-int flen(FILE *file);
+u32 flen(FILE *file);
 
 /**
  * @brief 获取文件指针的当前位置
@@ -423,7 +413,7 @@ int flen(FILE *file);
  *
  * @return 文件指针的位置
  */
-int ftell(FILE *file);
+u32 ftell(FILE *file);
 
 /**
  * @brief 获取文件名(不包含目录)
@@ -616,6 +606,17 @@ FILE *fselect(struct vfscan *fs, int selt_mode, int arg);
  *
  * @return 1: 存在
  * @return 0: 不存在
+ */
+int fmount_exist(const char *mount_path);
+
+/**
+ * @brief 检查目录是否存在
+ *
+ * @param dir 目录路径
+ *
+ * @return 1: 存在
+ * @return 0: 不存在
+ * @note 小于9个字节的中文名目录需要额外加上\U
  */
 int fdir_exist(const char *dir);
 
@@ -1077,6 +1078,40 @@ int finsert_file(FILE *file, FILE *i_file, u32 fptr);
  */
 /* ----------------------------------------------------------------------------*/
 int fdicvision_file(FILE *file, char *file_name, u32 fptr);
+
+/* --------------------------------------------------------------------------*/
+/**
+ * @brief 判断当前指针是否为文件结束位置
+ *
+ * @param file : 文件句柄
+ *
+ * @return 0不是文件结束，非0是文件结束位置
+ */
+/* ----------------------------------------------------------------------------*/
+int foef(FILE *file);
+
+/* --------------------------------------------------------------------------*/
+/**
+ * @brief 文件截断功能
+ *
+ * @param file : 文件句柄
+ * @param size : 截断长度
+ *
+ * @return 0 成功，非0 失败（只读不起作用）
+ */
+/* ----------------------------------------------------------------------------*/
+int ftruncate(FILE *file, u32 size);
+
+/* --------------------------------------------------------------------------*/
+/**
+ * @brief 获取字符
+ *
+ * @param file :文件句柄
+ *
+ * @return 字符
+ */
+/* ----------------------------------------------------------------------------*/
+char fgetc(FILE *file);
 
 #endif  /* __FS_H__ */
 

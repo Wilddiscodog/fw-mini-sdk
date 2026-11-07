@@ -7,11 +7,17 @@
  */
 #include "system/includes.h"
 #include "asm/debug.h"
+#include "asm/p33.h"
+#include "asm/clock.h"
+#include "asm/crc16.h"
+#include "asm/power_interface.h"
 #include "asm/sfc_norflash_api.h"
+#include "asm/system_reset_reason.h"
+#include "system/boot.h"
 #include "app_config.h"
 #include "fs/fs.h"
 
-#define EXPCPTION_IN_SRAM 		0			//打开异常函数才sram，防止flash异常进入异常函数失败
+#define EXPCPTION_IN_SRAM 		0			//如果出现死机不复位的情况务必需要打开，防止flash挂了,进入异常函数失败复位不了
 #define DEBUG_UART				JL_UART2  	//debug串口
 
 extern const char *os_current_task_rom();
@@ -108,7 +114,7 @@ static const char *const emu_msg[32] = {
 static u32 exception_log_flash_addr sec(.volatile_ram);
 static char exception_log_buf[640];
 
-#define LOG_PATH "mnt/sdfile/app/log"
+#define LOG_PATH "mnt/sdfile/EXT_RESERVED/log"
 
 static int get_exception_log_flash_addr(void)
 {
@@ -120,12 +126,12 @@ static int get_exception_log_flash_addr(void)
     }
     fget_attrs(fp, &file_attr);
     fclose(fp);
-    exception_log_flash_addr = sdfile_cpu_addr2flash_addr(file_attr.sclust);
+    exception_log_flash_addr = file_attr.sclust;
     exception_log_buf[0] = -1;
-    norflash_read(NULL, exception_log_buf, sizeof(exception_log_buf), exception_log_flash_addr);
+    sdfile_reserve_zone_read(exception_log_buf, exception_log_flash_addr, sizeof(exception_log_buf), 0);
     if (exception_log_buf[0] != -1) {
         printf("last exception log : \n%s\n", exception_log_buf);
-        norflash_ioctl(NULL, IOCTL_ERASE_SECTOR, exception_log_flash_addr);
+        sdfile_reserve_zone_erase(exception_log_flash_addr, SDFILE_SECTOR_SIZE, 0);
     }
     memset(exception_log_buf, 0, sizeof(exception_log_buf));
     return 0;
@@ -138,8 +144,188 @@ static void write_exception_log_to_flash(void *data, u32 len)
     set_os_init_flag(0);
     extern void norflash_set_write_cpu_hold(u8 hold_en);
     norflash_set_write_cpu_hold(0);
-    norflash_ioctl(NULL, IOCTL_ERASE_SECTOR, exception_log_flash_addr);
-    norflash_write(NULL, data, len, exception_log_flash_addr);
+    /* sdfile_reserve_zone_erase(exception_log_flash_addr, SDFILE_SECTOR_SIZE, 0); */
+    sdfile_reserve_zone_write(data, exception_log_flash_addr, len, 0);
+}
+#endif
+
+//使用此功能必须确保软件上没有出现异常的可能性，电源供电必须足够稳定
+#ifdef CONFIG_EXCEPTION_AUTO_FIX_ENABLE
+
+#define FIX_PATH "mnt/sdfile/EXT_RESERVED/fix"
+#define EXCEPTION_FIX_MAGIC    				0x3CE8A924
+#define EXCEPTION_FIX_INFO_OFFSET			1024
+#define EXCEPTION_FIX_CRC_OFFSET			512
+#define EXCEPTION_FIX_MAX_STEP 				2	//取以下MAX STEP的最大值
+#define EXCEPTION_FIX_VDDIOM_MAX_STEP 		2
+#define EXCEPTION_FIX_VDDIOW_MAX_STEP 		0
+#define EXCEPTION_FIX_VDC14_MAX_STEP  		0
+#define EXCEPTION_FIX_SYSVDD_MAX_STEP 		1
+#define EXCEPTION_FIX_SDRAM_CLK_MAX_STEP	1
+
+struct exception_fix_info_t {
+    u32 sdram_clock;
+    u32 sys_clock;
+    u8 sdram_clock_fix_step;
+    u8 sys_clock_fix_step;
+    u8 vddiom;
+    u8 vddiom_fix_step;
+    u8 vddiow;
+    u8 vddiow_fix_step;
+    u8 vdc14;
+    u8 vdc14_fix_step;
+    u8 sysvdd;
+    u8 sysvdd_fix_step;
+};
+
+static u32 exception_fix_flash_addr sec(.volatile_ram);
+
+int exception_auto_fix_config(void)
+{
+    struct vfs_attr file_attr;
+    struct exception_fix_info_t *info;
+    u16 crc;
+
+    FILE *fp = fopen(FIX_PATH, "r");
+    if (fp == NULL) {
+        return -1;
+    }
+    fget_attrs(fp, &file_attr);
+    fclose(fp);
+
+    exception_fix_flash_addr = file_attr.sclust;
+
+    u32 *buf = zalloc(1024 * 4);
+    if (!buf) {
+        return -1;
+    }
+
+    if (sdfile_reserve_zone_read(buf, exception_fix_flash_addr, 1024 * 4, 0) != 1024 * 4) {
+        goto __exit;
+    }
+
+    info = (struct exception_fix_info_t *)&buf[EXCEPTION_FIX_INFO_OFFSET / sizeof(u32)];
+
+    crc = CRC16(info, sizeof(struct exception_fix_info_t));
+    if (crc != (buf[EXCEPTION_FIX_CRC_OFFSET / sizeof(u32)] & 0xffff) ||
+        info->sdram_clock > clk_get("sdram") || info->sdram_clock < 120 * 1000000 ||
+        info->vddiom < TCFG_LOWPOWER_VDDIOM_LEVEL || info->vddiom > VDDIOM_VOL_MAX ||
+        info->vddiow < TCFG_LOWPOWER_VDDIOW_LEVEL || info->vddiow > VDDIOW_VOL_MAX ||
+        info->vdc14 < VDC14_VOL_SEL_LEVEL || info->vdc14 > VDC14_VOL_SEL_MAX ||
+        info->sysvdd < SYSVDD_VOL_SEL_LEVEL || info->sysvdd > SYSVDD_VOL_SEL_MAX) {
+        memset(info, 0, sizeof(struct exception_fix_info_t));
+        info->sdram_clock = clk_get("sdram");
+        info->vddiom = TCFG_LOWPOWER_VDDIOM_LEVEL;
+        info->vddiow = TCFG_LOWPOWER_VDDIOW_LEVEL;
+        info->vdc14 = VDC14_VOL_SEL_LEVEL;
+        info->sysvdd = SYSVDD_VOL_SEL_LEVEL;
+    }
+
+    if (buf[0] != 0xffffffff) {
+        printf("find exception fix flag");
+
+        sdfile_reserve_zone_erase(exception_fix_flash_addr, SDFILE_SECTOR_SIZE, 0);
+
+#if 0	//此等待延时是为了避免插拔上电不稳定导致的异常从而误触发
+        if (crc == (buf[EXCEPTION_FIX_CRC_OFFSET / sizeof(u32)] & 0xffff)) {
+            sdfile_reserve_zone_write(&crc, exception_fix_flash_addr + EXCEPTION_FIX_CRC_OFFSET, sizeof(crc), 0);
+            sdfile_reserve_zone_write(info, exception_fix_flash_addr + EXCEPTION_FIX_INFO_OFFSET, sizeof(struct exception_fix_info_t), 0);
+            os_time_dly(100);
+            sdfile_reserve_zone_erase(exception_fix_flash_addr, SDFILE_SECTOR_SIZE, 0);
+        }
+#endif
+
+        if (buf[0] == EXCEPTION_FIX_MAGIC && system_reset_reason_get() == SYS_RST_SOFT) {
+            for (int i = 0; i <= EXCEPTION_FIX_MAX_STEP; ++i) {
+                if (info->vddiom_fix_step < i && info->vddiom_fix_step < EXCEPTION_FIX_VDDIOM_MAX_STEP) {
+                    info->vddiom_fix_step++;
+                    info->vddiom++;
+                    break;
+                }
+                if (info->sysvdd_fix_step < i && info->sysvdd_fix_step < EXCEPTION_FIX_SYSVDD_MAX_STEP) {
+                    info->sysvdd_fix_step++;
+                    info->sysvdd++;
+                    break;
+                }
+                if (info->vddiow_fix_step < i && info->vddiow_fix_step < EXCEPTION_FIX_VDDIOW_MAX_STEP) {
+                    info->vddiow_fix_step++;
+                    info->vddiow++;
+                    break;
+                }
+                if (info->vdc14_fix_step < i && info->vdc14_fix_step < EXCEPTION_FIX_VDC14_MAX_STEP) {
+                    info->vdc14_fix_step++;
+                    info->vdc14++;
+                    break;
+                }
+                //最后才降sdram时钟
+                if (i == EXCEPTION_FIX_MAX_STEP) {
+                    if (info->sdram_clock_fix_step < i && info->sdram_clock_fix_step < EXCEPTION_FIX_SDRAM_CLK_MAX_STEP) {
+                        u32 sdram_clk_tab[4] = {120 * 1000000, 160 * 1000000, 192 * 1000000, 240 * 1000000};
+                        for (int k = ARRAY_SIZE(sdram_clk_tab) - 1; k >= 0; --k) {
+                            if (sdram_clk_tab[k] == clk_get("sdram") && info->sdram_clock_fix_step < k) {
+                                info->sdram_clock_fix_step++;
+                                info->sdram_clock = sdram_clk_tab[k - info->sdram_clock_fix_step];
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            crc = CRC16(info, sizeof(struct exception_fix_info_t));
+            buf[EXCEPTION_FIX_CRC_OFFSET / sizeof(u32)] = crc;
+        }
+
+        if (crc == (buf[EXCEPTION_FIX_CRC_OFFSET / sizeof(u32)] & 0xffff)) {
+            sdfile_reserve_zone_write(&crc, exception_fix_flash_addr + EXCEPTION_FIX_CRC_OFFSET, sizeof(crc), 0);
+            sdfile_reserve_zone_write(info, exception_fix_flash_addr + EXCEPTION_FIX_INFO_OFFSET, sizeof(struct exception_fix_info_t), 0);
+        }
+    }
+
+    if (info->vddiom > TCFG_LOWPOWER_VDDIOM_LEVEL && info->vddiom < VDDIOM_VOL_MAX) {
+        printf("exception fix vddiom : %d", info->vddiom);
+        VDDIOM_VOL_SEL(info->vddiom);
+    }
+    if (info->vddiow > TCFG_LOWPOWER_VDDIOW_LEVEL && info->vddiow < VDDIOW_VOL_MAX) {
+        printf("exception fix vddiow : %d", info->vddiow);
+        VDDIOW_VOL_SEL(info->vddiow);
+    }
+    if (info->vdc14 > VDC14_VOL_SEL_LEVEL && info->vdc14 < VDC14_VOL_SEL_MAX) {
+        printf("exception fix vdc14 : %d", info->vdc14);
+        VDC14_VOL_SEL(info->vdc14);
+    }
+    if (info->sysvdd > SYSVDD_VOL_SEL_LEVEL && info->vdc14 < SYSVDD_VOL_SEL_MAX) {
+        printf("exception fix sysvdd : %d", info->sysvdd);
+        SYSVDD_VOL_SEL(info->sysvdd);
+    }
+    if (info->sdram_clock < clk_get("sdram")) {
+        printf("exception fix sdram clock : %d", info->sdram_clock);
+        sdram_clock_set(info->sdram_clock);
+    }
+
+__exit:
+    free(buf);
+
+    return 0;
+}
+
+static void write_exception_fix_to_flash(void)
+{
+    extern void set_os_init_flag(u8 value);
+    set_os_init_flag(0);
+
+    struct vm_info vm = {0};
+    norflash_ioctl(NULL, IOCTL_GET_VM_INFO, (u32)&vm);
+
+    if (!exception_fix_flash_addr || exception_fix_flash_addr < vm.vm_saddr + vm.vm_size) {
+        return;
+    }
+
+    u32 magic = EXCEPTION_FIX_MAGIC;
+    extern void norflash_set_write_cpu_hold(u8 hold_en);
+    norflash_set_write_cpu_hold(0);
+    sdfile_reserve_zone_write(&magic, exception_fix_flash_addr, sizeof(magic), 0);
 }
 #endif
 
@@ -351,6 +537,7 @@ AT(.volatile_ram_code)
 ___interrupt
 static void exception_analyze_sram(void)
 {
+#if 0
     u32 rets, reti, cpu_id;
     __asm__ volatile("%0 = rets ;" : "=r"(rets));
     __asm__ volatile("%0 = reti ;" : "=r"(reti));
@@ -359,10 +546,12 @@ static void exception_analyze_sram(void)
     putretis(reti, rets);
     putpchex(cpu_id);
     putdebugreg();
+#endif
     __wdt_clear();
     __cpu_reset();
 }
 #endif
+
 void exception_analyze(int *sp)
 {
     int len = 0;
@@ -552,6 +741,10 @@ void exception_analyze(int *sp)
 #endif
         }
     }
+
+#ifdef CONFIG_EXCEPTION_AUTO_FIX_ENABLE
+    write_exception_fix_to_flash();
+#endif
 #ifdef CONFIG_SAVE_EXCEPTION_LOG_IN_FLASH
     printf("exception log buf len : %d\n", len);
     write_exception_log_to_flash(exception_log_buf, len + 1);
@@ -971,9 +1164,9 @@ void debug_init(void)
         q32DSP(0)->EMU_CON &= ~ BIT(3);
         q32DSP(0)->EMU_SSP_L = (int)cpu0_sstack_begin;
         q32DSP(0)->EMU_SSP_H = (int)cpu0_sstack_end;
+        q32DSP(0)->EMU_USP_L = 0;
+        q32DSP(0)->EMU_USP_H = -1;
         q32DSP(0)->EMU_CON |= BIT(3);
-        /* q32DSP(0)->EMU_USP_L = 0;//(int)cpu0_sstack_begin; */
-        /* q32DSP(0)->EMU_USP_H = -1;//(int)cpu0_sstack_end;  */
 
         printf("cpu 0 usp limit %x  %x\r\n", q32DSP(0)->EMU_USP_L, q32DSP(0)->EMU_USP_H);
         printf("cpu 0 ssp limit %x  %x\r\n", q32DSP(0)->EMU_SSP_L, q32DSP(0)->EMU_SSP_H);
@@ -986,10 +1179,9 @@ void debug_init(void)
         q32DSP(1)->EMU_CON &= ~BIT(3);
         q32DSP(1)->EMU_SSP_L = (int)cpu1_sstack_begin;
         q32DSP(1)->EMU_SSP_H = (int)cpu1_sstack_end;
+        q32DSP(1)->EMU_USP_L = 0;
+        q32DSP(1)->EMU_USP_H = -1;
         q32DSP(1)->EMU_CON |= BIT(3);
-
-        /* q32DSP(1)->EMU_USP_L = 0;//(int)cpu0_sstack_begin; */
-        /* q32DSP(1)->EMU_USP_H = -1;//(int)cpu0_sstack_end; */
 
         printf("cpu 1 usp limit %x  %x\r\n", q32DSP(1)->EMU_USP_L, q32DSP(1)->EMU_USP_H);
         printf("cpu 1 ssp limit %x  %x\r\n", q32DSP(1)->EMU_SSP_L, q32DSP(1)->EMU_SSP_H);

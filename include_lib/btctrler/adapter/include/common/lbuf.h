@@ -6,6 +6,7 @@
 //
 #include "generic/typedef.h"
 #include "generic/list.h"
+#include "spinlock.h"
 
 // #define LBUF_SANITY_CHECK
 
@@ -13,6 +14,7 @@ struct lbuff_head_btctrler {
     struct list_head head;
     struct list_head free;
     /*u16 index;*/
+    spinlock_t lock;  /*!<  混合自旋锁,单核是为开关临界区,多核是自旋锁.*/
 };
 
 struct hentry {
@@ -40,6 +42,11 @@ struct hfree {
 #endif
 };
 
+typedef struct {
+    struct list_head        head; // 必须放首位
+    spinlock_t              lock; /*!<  混合自旋锁,单核是为开关临界区,多核是自旋锁.*/
+} lbuf_queue_t;
+
 #define LBUF_INIT_SIZE      (sizeof(struct lbuff_head_btctrler) + sizeof(struct hfree) + 3)
 
 int lbuf_get_chunk_num_btctrler(u32 total_size, u32 chunk_size);
@@ -53,6 +60,8 @@ void *lbuf_realloc_btctrler(void *lbuf, int size);
 void lbuf_push_btctrler(void *lbuf);
 
 void *lbuf_pop_btctrler(struct lbuff_head_btctrler *head);
+
+void *lbuf_pop_independent_btctrler(struct lbuff_head_btctrler *head);
 
 void *lbuf_query_used_btctrler(struct lbuff_head_btctrler *head);
 
@@ -73,13 +82,13 @@ void lbuf_info_btctrler(struct lbuff_head_btctrler *head);	//获取lbuf的alloc�
 
 void *lbuf_peek_btctrler(struct lbuff_head_btctrler *head);
 
-void lbuf_push_queue_btctrler(struct list_head *head, void *lbuf);
+void lbuf_push_queue_btctrler(lbuf_queue_t *queue_head, void *lbuf);
 
-void *lbuf_pop_queue_btctrler(struct list_head *head);
+void *lbuf_pop_queue_btctrler(lbuf_queue_t *queue_head);
 
-void *lbuf_peek_queue_btctrler(struct list_head *head);
+void *lbuf_peek_queue_btctrler(lbuf_queue_t *queue_head);
 
-void lbuf_clear_queue_btctrler(struct list_head *head);
+void lbuf_clear_queue_btctrler(lbuf_queue_t *queue_head);
 
 #endif
 

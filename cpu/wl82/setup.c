@@ -39,6 +39,7 @@ void setup_arch()
     printf("\nHEAP_SIZE = %d", (u32)&HEAP_END - (u32)&HEAP_BEGIN);
     puts("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
 
+    extern void code_movable_init(void);
     code_movable_init();
 
     debug_init();

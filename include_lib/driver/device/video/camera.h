@@ -83,6 +83,7 @@ struct camera_device_info {
 #define CAMERA_SET_SENSOR_REVSER   	(CAMERA_CMD_BASE + 8)//图片翻转
 #define CAMERA_SET_SENSOR_RESET   	(CAMERA_CMD_BASE + 9)//镜头复位重新检测
 #define CAMERA_GET_SENSOR_TYPE   	(CAMERA_CMD_BASE + 10)//获取摄像头型号
+#define CAMERA_POWER_CTRL   		(CAMERA_CMD_BASE + 11)//控制摄像头reset_pin
 
 #define  CAMERA_WITE_BIT BIT(31)
 #define  CAMERA_READ_BIT BIT(30)

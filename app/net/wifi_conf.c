@@ -84,7 +84,23 @@ const u8 CONFIG_SDIO_SLAVE_MODE = 0; //wifi模块作为sdio从机
 
 const u8 WIFI_TX_FULL_WAIT_MODE = 1; // 可以设置为0,1,2, 数值越大一定程度上会提高wifi的吞吐率，但同时会加大wifi线程占据cpu的比重
 
-const u8 WIFI_RECV_POLL; //wifi接收数据方式：0为中断方式接收，1为轮询方式接收
+/* V1.2.14 wl_wifi / lwip_2_2_0 新增配置项 */
+const char WIFI_PA_ENABLE = 0;
+const u32 rtc_update_interval = 0;
+const u8 WIFI_COLD_START_FAST_CONNECTION = 1;
+#if defined CONFIG_NO_SDRAM_ENABLE
+const u8 MAX_LEN_OF_BSS_TABLE = 2;
+#else
+const u8 MAX_LEN_OF_BSS_TABLE = 4;
+#endif
+const u8 CONFIG_WIFI_USE_TLSF_MEM = 0;
+const u8 wifi_recv_poll = 0; // 0=中断接收, 1=轮询接收 (取代旧 WIFI_RECV_POLL)
+u8 wifi_psmode_transfer_statistics_enable = 1;
+u8 wl_active_wait_interval_count = 0;
+u16 wl_custom_listen_interval = 10;
+u16 wl_default_listen_interval = 3;
+u8 wl_transmit_keep_awake_time = 12;
+const u8 wifi_ampdu_disable = 0;
 
 #if CONFIG_BLE_MESH_ENABLE
 u8 wifi_lowpower_mode = 1;

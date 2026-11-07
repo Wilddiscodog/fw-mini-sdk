@@ -3,10 +3,27 @@
 #include "os/os_api.h"
 #include "device/uart.h"
 
-const int audio_src_temp_buf_size  = 160 * 4 * 3;
-const int audio_sync_temp_buf_size = 160 * 4 * 3;
-const int audio_ps_temp_buf_size   = 160 * 4 * 10;
+#ifdef CONFIG_AEC_USE_PLAY_MUSIC_ENABLE
+const int audio_irq_sr_points      = 320;
+const int audio_src_temp_buf_size  = audio_irq_sr_points * 4 * 3 * 2;
+const int audio_sync_temp_buf_size = audio_irq_sr_points * 4 * 3 * 2;
+const int audio_ps_temp_buf_size   = audio_irq_sr_points * 4 * 10 * 2;
+#else
+const int audio_irq_sr_points      = 160;
+const int audio_src_temp_buf_size  = audio_irq_sr_points * 4 * 3;
+const int audio_sync_temp_buf_size = audio_irq_sr_points * 4 * 3;
+const int audio_ps_temp_buf_size   = audio_irq_sr_points * 4 * 10;
+#endif
 const int audio_src_flt_in_sram    = 1;
+
+/* V1.2.14 audio_server 上行 EQ 钩子；未编入 audio_eff 时返回空 */
+struct audio_eq;
+struct audio_eq *enc_ul_eq_open(u32 sample_rate, u8 ch_num)
+{
+	(void)sample_rate;
+	(void)ch_num;
+	return NULL;
+}
 
 #if defined CONFIG_AUDIO_MIX_ENABLE
 const u8 audio_mix_en = 1;

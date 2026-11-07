@@ -30,7 +30,7 @@ enum pc0_clock_out_index {
     SFC_CLK_OUT,
     HCO_CLK_OUT,
 };
-enum pa0_clock_out_index {
+enum pa4_clock_out_index {
     RC_CLK_OUT = 1,//16M 250K
     LRC_CLK_OUT,//32K或200K
     WL_RCCL_CLK_OUT,
@@ -79,7 +79,7 @@ int clk_get(const char *name);
 int clk_set(const char *name, int clk);
 
 void clk_out_pc0(enum pc0_clock_out_index index);
-void clk_out_pa0(enum pa0_clock_out_index index);
+void clk_out_pa4(enum pa4_clock_out_index index);
 
 int sys_clk_source_set(char index);//0:BT_OSC,1:RTC_SOC,2:PLL_OSC
 void sys_clk_source_resume(int value);

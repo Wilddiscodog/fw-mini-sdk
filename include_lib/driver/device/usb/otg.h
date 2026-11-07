@@ -64,6 +64,8 @@ struct otg_dev_data {
     u8 host_offline_cnt; ///<主机下线阈值
     u8 detect_mode; ///<otg可用模式配置
     u8 detect_time_interval; ///<检测时间间隔，单位 ms
+    u8 usb0_detect_mode; ///<usb0 otg可用模式配置，当usb0_detect_mode和usb1_detect_mode都不为0时，detect_mode参数失效被替代
+    u8 usb1_detect_mode; ///<usb1 otg可用模式配置，当usb0_detect_mode和usb1_detect_mode都不为0时，detect_mode参数失效被替代
 };
 
 

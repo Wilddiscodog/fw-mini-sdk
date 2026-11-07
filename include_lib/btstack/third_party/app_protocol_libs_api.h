@@ -129,6 +129,17 @@ extern int gfps_ble_adv_enable(int enable);
 extern void gfps_set_model_id(uint8_t *model_id);
 extern void gfps_set_anti_spoofing_public_key(char *public_key);
 extern void gfps_set_anti_spoofing_private_key(char *private_key);
+extern void gfps_get_battery_callback_register(bool (*handler)(u8 battery_type, u8 *value));
+extern void gfps_message_callback_register(int (*handler)(int id, int opcode, u8 *data, u32 len));
+extern void gfps_set_pair_mode(void);
+extern void gfps_battery_update(void);
+extern void gfps_personalized_name_set(u8 *data, u8 len);
+extern void gfps_is_tws_master_callback_register(bool (*handler)(void));
+extern void gfps_tws_data_deal(u8 *data, int len);
+extern int gfps_update_tws_state_to_lib(int state);
+extern void gfps_factory_reset(void);
+extern void gfps_set_battery_ui_enable(uint8_t enable);
+extern void update_channel_map_do_in_irq_flag_set(uint8_t en);
 //GFPS API END
 #endif /* __APP_PRO_LIBS_API_H__ */
 

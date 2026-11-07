@@ -17,7 +17,6 @@
 // #include "media/audio_surround.h"
 // #include "media/audio_ch_swap.h"
 
-
 struct effect_adj {
     u8 eq_type;
     uint8_t password_ok;
@@ -112,6 +111,8 @@ enum {
     EFF_MUSIC_EXT_EQ2             = 0x2045,//2.1声道低音音箱通路的后级eq
     EFF_MUSIC_FR_EXT_EQ           = 0x2046,
     EFF_ADC_PGA                   = 0x2047,
+
+    EFF_MUSIC_LAST_WHOLE_DRC      = 0x2050,
 
     EFF_MUSIC_FR_LOW_DRC         = 0x2060,
     EFF_MUSIC_FR_MID_DRC         = 0x2061,
@@ -215,6 +216,7 @@ typedef enum {
     AEID_MUSIC_DYNAMIC_EQ,
 
     AEID_MUSIC_CH_SWAP,
+    AEID_LAST_WHOLE_DRC,
 
 //aux eff
     AEID_AUX_VBASS,
@@ -370,7 +372,7 @@ typedef struct _DynamicEQParam_TOOL_SET {
     int detect_mode;			//检测模式
 } DynamicEQParam_TOOL_SET; //实际发送这个结构体
 
-#define OTHER_SECTION_MAX (5)
+#define OTHER_SECTION_MAX (10)//(5)
 struct eq_tool {
     float global_gain;
     int seg_num;          //eq效果文件存储的段数
@@ -410,7 +412,7 @@ struct music_parm_tool_set {
     struct nband_drc drc_parm;
 };
 
-struct music_parm_tool_set *get_audio_eff_music_mode(void);
+
 int ext_eff_file_analyze(u32 mode_id, u16 group_id, u8 tar_snap, void *data_buf, u32 buf_len);
 int eff_file_analyze(u32 mode_id, u16 group_id, void *data_buf, u32 buf_len);
 void get_eff_mode(u16 mode_id, u16 group_id, u8 *mode_index, u8 *drc_index);//获取混响模式的index

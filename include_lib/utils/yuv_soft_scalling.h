@@ -2,6 +2,7 @@
 #define _YUV_SOFT_SCALING_
 
 //dhx-jieli-2020-12-24
+#include "generic/typedef.h"
 
 typedef struct _image {
     int w;
@@ -15,6 +16,9 @@ typedef struct _image {
 
 //yuyv:YUYV源, yuv422p:YUV422P输出, width/height:源宽/源高
 int YUYV422ToYUV422p(unsigned char *yuyv, unsigned char *yuv422p, int width, int height);
+
+//yvyu:YVYU源, yuv422p:YUV422P输出, width/height:源宽/源高
+int YVYU422ToYUV422p(unsigned char *yvyu, unsigned char *yuv422p, int width, int height);
 
 //YUV444P转YUV422p:dhx-jieli-2020-12-24
 //yuv444p:YUV444P源, yuv422p:YUV422P输出, width/height:源宽/源高
@@ -39,6 +43,12 @@ int YUV420p_ALIGN(unsigned char *src, int src_w, int src_h, int *out_w, int *out
 //缩小可以不使用out作为缓存，out写NULL即可，直接在src覆盖
 //src:YUV源,out:YUV输出,src_w/src_h/out_w/out_h:源宽/源高/输出宽/输出高
 int YUV420p_Zoom_Out(unsigned char *src, unsigned char *out, int src_w, int src_h, int out_w, int out_h);
+
+//YUV缩小任意尺寸
+//AC79(WL80) sys_clk=320M , 26ms:720P->VGA, 8ms:720P->320*240, 6ms:VGA->320*240;
+//缩小可以不使用out作为缓存，out写NULL即可，直接在src覆盖
+//src:YUV源,out:YUV输出,src_w/src_h/out_w/out_h:源宽/源高/输出宽/输出高
+int YUV422p_Zoom_Out(unsigned char *src, unsigned char *out, int src_w, int src_h, int out_w, int out_h);
 
 //YUV放大任意尺寸
 //AC79(WL80) sys_clk=320M , 80ms:VGA->720P, 130ms:VGA->1080P, 260ms:720P->1080P;
@@ -66,6 +76,17 @@ int YUV420p_Cut(unsigned char *yuv420p, int src_w, int src_h, unsigned char *out
 
 /**********rgb旋转函数*************/
 //in_buf:RGB源,out_buf:RGB输出
-void RGB_Soft_90(unsigned char mode, char *out_buf, char *in_buf, int width, int height);
+void RGB565_Soft_90(unsigned char mode, u16 *out_buf, u16 *in_buf, int width, int height);
+
+//等比缩放函数
+//int line_8每次最少处理8行 需要是8的整数倍
+//int time_16处理的第多少行
+//int src_w图像输入宽
+//int src_h图像输入高
+//int dst_w图像输出行宽
+//int dst_h图像输出入行高
+//u8 *src 图像buf输入地址
+//u8 *dst 图像输出buf
+void jl_nearest_inter_line(int line_8, int time_16, int src_w, int src_h, int dst_w, int dst_h, unsigned char *src, unsigned char *dst);
 
 #endif

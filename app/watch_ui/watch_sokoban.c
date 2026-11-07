@@ -14,14 +14,19 @@
 #include <string.h>
 #include <stdio.h>
 
-#define TOP_H   28
-#define GW      LCD_W
-#define GH      (LCD_H - TOP_H)
-#define COLS    8
-#define ROWS    8
-#define CELL    22
-#define OX      ((GW - COLS * CELL) / 2)
-#define OY      4
+#define TOP_H    28
+#define GW       LCD_W
+#define GH       (LCD_H - TOP_H)
+#define COLS     8
+#define ROWS     8
+/* 先最大化棋盘(受高度限制), 再在两侧剩余宽度里做最大正方形键 */
+#define CELL     (GH / ROWS)                      /* 26 */
+#define BOARD    (COLS * CELL)                    /* 208 */
+#define SIDE_W   ((GW - BOARD) / 2)               /* 44 */
+#define SIDE_PAD 2
+#define BTN_S    (SIDE_W - SIDE_PAD * 2)          /* 40 */
+#define OX       SIDE_W
+#define OY       ((GH - BOARD) / 2)
 
 enum { ST_HELP = 0, ST_PLAY, ST_WIN };
 
@@ -187,22 +192,29 @@ static void render(void)
                 fill_rect(fb, x, y, CELL - 1, CELL - 1, C(0x8D6E63));
                 fill_rect(fb, (s16)(x + 1), (s16)(y + 1), CELL - 3, 2, C(0xBCAAA4));
             } else {
+                s16 m = (s16)(CELL / 5);
+                s16 g = (s16)(CELL / 3);
                 fill_rect(fb, x, y, CELL - 1, CELL - 1, C(0xFFE0B2));
                 if (G.goal[r][c]) {
-                    fill_rect(fb, (s16)(x + 6), (s16)(y + 6), CELL - 13, CELL - 13, C(0x81C784));
+                    fill_rect(fb, (s16)(x + g), (s16)(y + g),
+                              (s16)(CELL - 1 - 2 * g), (s16)(CELL - 1 - 2 * g), C(0x81C784));
                 }
                 if (G.box[r][c]) {
-                    fill_rect(fb, (s16)(x + 3), (s16)(y + 3), CELL - 7, CELL - 7,
+                    fill_rect(fb, (s16)(x + m), (s16)(y + m),
+                              (s16)(CELL - 1 - 2 * m), (s16)(CELL - 1 - 2 * m),
                               G.goal[r][c] ? C(0x66BB6A) : C(0xFFB74D));
-                    fill_rect(fb, (s16)(x + 5), (s16)(y + 5), 4, 3, C(0xFFFFFF));
+                    fill_rect(fb, (s16)(x + m + 2), (s16)(y + m + 2), 4, 3, C(0xFFFFFF));
                 }
             }
         }
     }
-    x = (s16)(OX + G.px * CELL + 5);
-    y = (s16)(OY + G.py * CELL + 5);
-    fill_rect(fb, x, y, CELL - 11, CELL - 11, C(0x42A5F5));
-    fill_rect(fb, (s16)(x + 2), (s16)(y + 2), 3, 3, C(0xFFFFFF));
+    {
+        s16 m = (s16)(CELL / 5);
+        x = (s16)(OX + G.px * CELL + m);
+        y = (s16)(OY + G.py * CELL + m);
+        fill_rect(fb, x, y, (s16)(CELL - 1 - 2 * m), (s16)(CELL - 1 - 2 * m), C(0x42A5F5));
+        fill_rect(fb, (s16)(x + 2), (s16)(y + 2), 3, 3, C(0xFFFFFF));
+    }
     lv_obj_invalidate(G.canvas);
 }
 
@@ -319,16 +331,18 @@ static void back_cb(lv_event_t *e)
     watch_ui_close_app();
 }
 
-static void make_btn(lv_obj_t *p, const char *t, u32 col, lv_coord_t x, lv_coord_t y,
-                     lv_coord_t w, lv_coord_t h, lv_event_cb_t cb, void *ud)
+static void make_sq_btn(lv_obj_t *p, const char *t, u32 col, lv_coord_t x, lv_coord_t y,
+                        lv_event_cb_t cb, void *ud)
 {
     lv_obj_t *b = lv_btn_create(p);
     lv_obj_t *l;
-    lv_obj_set_size(b, w, h);
+    lv_obj_set_size(b, BTN_S, BTN_S);
     lv_obj_set_pos(b, x, y);
     lv_obj_set_style_radius(b, 10, 0);
     lv_obj_set_style_bg_color(b, C(col), 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
+    lv_obj_set_style_border_width(b, 2, 0);
+    lv_obj_set_style_border_color(b, C(0xFFFFFF), 0);
     lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, ud);
     l = lv_label_create(b);
     lv_obj_set_style_text_font(l, &lv_font_watch_16_cn, 0);
@@ -340,7 +354,7 @@ static void make_btn(lv_obj_t *p, const char *t, u32 col, lv_coord_t x, lv_coord
 lv_obj_t *app_sokoban_create(lv_obj_t *parent)
 {
     lv_obj_t *root, *bar, *back, *bl, *card, *lab, *ok, *wcard, *wl, *wn;
-    lv_coord_t by;
+    lv_coord_t lx, rx, y_top, y_mid, y_bot;
 
     memset(&G, 0, sizeof(G));
     root = lv_obj_create(parent);
@@ -394,12 +408,17 @@ lv_obj_t *app_sokoban_create(lv_obj_t *parent)
     lv_obj_add_flag(G.canvas, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(G.canvas, canvas_cb, LV_EVENT_ALL, NULL);
 
-    by = (lv_coord_t)(LCD_H - 40);
-    make_btn(root, "上", 0x42A5F5, 110, (lv_coord_t)(by - 36), 70, 32, btn_dir, (void *)0);
-    make_btn(root, "下", 0x42A5F5, 110, by, 70, 32, btn_dir, (void *)1);
-    make_btn(root, "左", 0x66BB6A, 36, by, 70, 32, btn_dir, (void *)2);
-    make_btn(root, "右", 0x66BB6A, 184, by, 70, 32, btn_dir, (void *)3);
-    make_btn(root, "复位", 0xEF5350, 4, (lv_coord_t)(TOP_H + 4), 52, 28, btn_reset, NULL);
+    /* 左: 复位(上) / 上(中) / 左(下); 右: 下(中) / 右(下) — 全正方形尽量大 */
+    lx = SIDE_PAD;
+    rx = (lv_coord_t)(LCD_W - SIDE_PAD - BTN_S);
+    y_top = (lv_coord_t)(TOP_H + SIDE_PAD);
+    y_mid = (lv_coord_t)(TOP_H + (GH - BTN_S) / 2);
+    y_bot = (lv_coord_t)(LCD_H - SIDE_PAD - BTN_S);
+    make_sq_btn(root, "复位", 0xEF5350, lx, y_top, btn_reset, NULL);
+    make_sq_btn(root, "上", 0x42A5F5, lx, y_mid, btn_dir, (void *)0);
+    make_sq_btn(root, "左", 0x66BB6A, lx, y_bot, btn_dir, (void *)2);
+    make_sq_btn(root, "下", 0x42A5F5, rx, y_mid, btn_dir, (void *)1);
+    make_sq_btn(root, "右", 0x66BB6A, rx, y_bot, btn_dir, (void *)3);
 
     G.help = lv_obj_create(root);
     lv_obj_set_size(G.help, LCD_W, LCD_H);

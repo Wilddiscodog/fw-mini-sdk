@@ -21,16 +21,25 @@
 #include "typedef.h"
 
 // LE CONTROLLER COMMANDS
+#define HCI_LE_READ_ISO_TX_SYNC                             0x61
 #define HCI_LE_SET_CIG_PARAMS                               0x62
 #define HCI_LE_SETUP_ISO_DATA_PATH                          0x6E
 #define HCI_LE_CREATE_BIG                                   0x68
 #define HCI_LE_SET_EXTENDED_ADVERTISING_ENABLE              0x39
+#define HCI_LE_PERIODIC_ADVERTISING_TERMINATE_SYNC          0x46
 
 // LE EVENTS
 #define HCI_LE_CIS_ESTABLISHED_EVENT                        0x19
 #define HCI_LE_CIS_REQUEST_EVENT                            0x1A
 #define HCI_LE_CREATE_BIG_COMPLETE_EVENT                    0x1B
 #define HCI_SUBEVENT_LE_BIG_INFO_ADV_REPORT_EVT             0x22
+#define HCI_SUBEVENT_LE_TERMINATE_BIG_CMPL_EVT              0x1C
+#define HCI_SUBEVENT_LE_BIG_SYNC_EST_EVT                    0x1D
+#define HCI_SUBEVENT_LE_BIG_SYNC_LOST_EVT                   0x1E
+#define HCI_EVENT_NUMBER_OF_COMPLETED_PACKETS               0x13
+
+// Controller Error Codes
+#define  CONNECTION_TERMINATED_BY_LOCAL_HOST                 0x16
 
 enum {
     LL_EVENT_SUPERVISION_TIMEOUT,
@@ -44,6 +53,154 @@ typedef struct {
     u8 Scan_Filter_Policy: 2;
     u8 initiator_filter_policy: 2;
 } hci_ll_param_t;
+
+/*! \brief      LE Extended Advertising report event. */
+typedef union {
+    struct {
+        uint16_t Connectable_advertising    : 1,
+                 Scannable_advertising      : 1,
+                 Directed_advertising       : 1,
+                 Scan_response              : 1,
+                 Legacy_adv_PDUs_used       : 1,
+                 Data_status                : 2,
+                 All_other_bits             : 9;
+    };
+
+    uint16_t event_type;
+} _GNU_PACKED_ le_evt_type_t;
+
+typedef struct {
+    uint8_t         Subevent_Code;
+    uint8_t         Num_Reports;
+    le_evt_type_t   Event_Type;
+    uint8_t         Address_Type;
+    uint8_t         Address[6];
+    uint8_t         Primary_PHY;
+    uint8_t         Secondary_PHY;
+    uint8_t         Advertising_SID;
+    uint8_t         Tx_Power;
+    uint8_t         RSSI;
+    uint16_t        Periodic_Advertising_Interval;
+    uint8_t         Direct_Address_Type;
+    uint8_t         Direct_Address[6];
+    uint8_t         Data_Length;
+    uint8_t         Data[0];
+} _GNU_PACKED_ le_ext_adv_report_evt_t;
+
+struct __periodic_adv_report_event {
+    u8  Subevent_Code;
+    u16 Sync_Handle;
+    u8  Tx_Power;
+    u8  RSSI;
+    u8  Unused;
+    u8  Data_Status;
+    u8  Data_Length;
+    u8  Data[0];
+} _GNU_PACKED_ ;
+
+struct __periodic_creat_sync {
+    u8 Filter_Policy;
+    u8 Advertising_SID;
+    u8 Advertising_Address_Type;
+    u8 Advertiser_Address[6];
+    u8 Skip[2];
+    u8 Sync_Timeout[2];
+    u8 Unused;
+} _GNU_PACKED_;
+
+typedef struct {
+    uint8_t         Own_Address_Type;
+    uint8_t         Scanning_Filter_Policy;
+    uint8_t         Scanning_PHYs;
+    uint8_t         Scan_Type;
+    uint16_t        Scan_Interval;
+    uint16_t        Scan_Window;
+} _GNU_PACKED_ le_ext_scan_param_lite_t;
+
+struct __ext_scan_param {
+    u8 Own_Address_Type;
+    u8 Scanning_Filter_Policy;
+    u8 Scanning_PHYs;
+    struct __scan_phy_param {
+        u8  Scan_Type;
+        u16 Scan_Interval;
+        u16 Scan_Window;
+    } _GNU_PACKED_ scan_phy_param[0];
+} _GNU_PACKED_;
+
+struct __ext_scan_enable {
+    u8  Enable;
+    u8  Filter_Duplicates;
+    u16 Duration;
+    u16 Period;
+} _GNU_PACKED_;
+
+/*! \brief      LE Set Extended Advertising Parameters. */
+typedef struct {
+    uint8_t         Advertising_Handle;
+    uint16_t        Advertising_Event_Properties;
+    uint8_t         Primary_Advertising_Interval_Min[3];
+    uint8_t         Primary_Advertising_Interval_Max[3];
+    uint8_t         Primary_Advertising_Channel_Map;
+    uint8_t         Own_Address_Type;
+    uint8_t         Peer_Address_Type;
+    uint8_t         Peer_Address[6];
+    uint8_t         Advertising_Filter_Policy;
+    uint8_t         Advertising_Tx_Power;
+    uint8_t         Primary_Advertising_PHY;
+    uint8_t         Secondary_Advertising_Max_Skip;
+    uint8_t         Secondary_Advertising_PHY;
+    uint8_t         Advertising_SID;
+    uint8_t         Scan_Request_Notification_Enable;
+} _GNU_PACKED_ le_set_ext_adv_param_t;
+
+/*! \brief      LE Set Extended Advertising Data. */
+typedef struct {
+    uint8_t         Advertising_Handle;
+    uint8_t         Operation;
+    uint8_t         Fragment_Preference;
+    uint8_t         Advertising_Data_Length;
+    uint8_t         Advertising_Data[31];
+} _GNU_PACKED_ le_set_ext_adv_data_t;
+
+/*! \brief      LE Set Extended Advertising Enable. */
+typedef struct {
+    uint8_t         Enable;
+    uint8_t         Number_of_Sets;
+    uint8_t         Advertising_Handle;
+    uint16_t        Duration;
+    uint8_t         Max_Extended_Advertising_Events;
+} _GNU_PACKED_ le_set_ext_adv_en_t;
+
+struct periodic_advertising_param {
+    u8 Advertising_Handle;
+    u16 Periodic_Advertising_Interval_Min;
+    u16 Periodic_Advertising_Interval_Max;
+    u16 Periodic_Advertising_Properties;
+} _GNU_PACKED_;
+
+struct periodic_advertising_data {
+    u8 Advertising_Handle;
+    u8 Operation;
+    u8 Advertising_Data_Length;
+    u8 Advertising_Data[31];
+} _GNU_PACKED_;
+
+typedef struct {
+    uint8_t Advertising_Handle;
+    uint8_t Operation;
+    uint8_t Advertising_Data_Length; // 0 to 252
+    uint8_t Advertising_Data[0];
+} _GNU_PACKED_ le_set_prd_adv_data_t;
+
+struct periodic_advertising_enable {
+    u8  Enable;
+    u8  Advertising_Handle;
+} _GNU_PACKED_;
+
+typedef struct {
+    uint16_t Sync_Handle;
+} _GNU_PACKED_ periodic_adv_terminate_sync;
 
 /*! \brief      LE Set CIG Parameters */
 typedef struct {
@@ -107,6 +264,12 @@ typedef struct {
     uint8_t         Broadcast_Code[16];
 } _GNU_PACKED_ le_create_big_t;
 
+/*! \brief      LE Terminate BIG */
+typedef struct {
+    uint8_t         BIG_Handle;
+    uint8_t         Reason;
+} _GNU_PACKED_ le_terminate_big_t;
+
 /*! \brief      LE BIG Create Sync */
 typedef struct {
     uint8_t         BIG_Handle;
@@ -118,6 +281,16 @@ typedef struct {
     uint8_t         Num_BIS;
     uint8_t         BIS[0];
 } _GNU_PACKED_ le_big_create_sync_t;
+
+/*! \brief      LE BIG Terminate Sync */
+typedef struct {
+    uint8_t         BIG_Handle;
+} _GNU_PACKED_ le_big_terminate_sync_t;
+
+/*! \brief      LE Read ISO TX Sync */
+typedef struct {
+    uint16_t         Connection_Handle;
+} _GNU_PACKED_ le_read_iso_tx_sync_t;
 
 /*! \brief      HCI ISO Data packets */
 typedef struct {
@@ -164,11 +337,11 @@ typedef struct {
     u32 packet_status_flag  : 2;
 
     uint8_t *iso_sdu;
-} hci_iso_hdr_t ;
+} hci_iso_hdr_t;
 
 /*! \brief      LE BIGInfo Advertising report event */
 typedef struct {
-    uint8_t         Subevent_Code;
+    // uint8_t         Subevent_Code;
     uint16_t        Sync_Handle;
     uint8_t         Num_BIS;
     uint8_t         NSE;
@@ -183,6 +356,55 @@ typedef struct {
     uint8_t         Framing;
     uint8_t         Encryption;
 } _GNU_PACKED_ le_biginfo_adv_report_evt_t;
+
+/*! \brief      LE Create BIG Complete event */
+typedef struct {
+    // uint8_t         Subevent_Code;
+    uint8_t         Status;
+    uint32_t        BIG_Handle     : 8,
+                    BIG_Sync_Delay : 24;
+    uint32_t        Transport_Latency_BIG : 24,
+                    PHY                   : 8;
+    uint8_t         NSE;
+    uint8_t         BN;
+    uint8_t         PTO;
+    uint8_t         IRC;
+    uint16_t        Max_PDU;
+    uint16_t        ISO_Interval;
+    uint8_t         Num_BIS;
+    uint16_t        Connection_Handle[0];
+} _GNU_PACKED_ le_create_big_complete_evt_t;
+
+/*! \brief      LE BIG Sync Established event */
+typedef struct {
+    // uint8_t         Subevent_Code;
+    uint8_t         Status;
+    uint8_t         BIG_Handle;
+    uint32_t        Transport_Latency_BIG : 24,
+                    NSE                   : 8;
+    uint8_t         BN;
+    uint8_t         PTO;
+    uint8_t         IRC;
+    uint16_t        Max_PDU;
+    uint16_t        ISO_Interval;
+    uint8_t         Num_BIS;
+    uint16_t        Connection_Handle[0];
+} _GNU_PACKED_ le_big_sync_established_evt_t;
+
+/*! \brief      LE Read ISO TX Sync Return Parameters */
+typedef struct {
+    uint8_t         Status;
+    uint16_t        Connection_Handle;
+    uint16_t        Paket_Sequence_Number;
+    uint32_t        TX_Time_Stamp;
+    uint32_t        Time_Offset : 24;
+} _GNU_PACKED_ le_read_iso_tx_sync_ret_t;
+
+/*! \brief      LE BIG Sync Lost event */
+typedef struct {
+    uint8_t         BIG_Handle;
+    uint8_t         Reason;
+} _GNU_PACKED_ le_big_sync_lost_evt_t;
 
 //Adjust Host part API
 void ll_hci_init(void);
@@ -272,7 +494,21 @@ void ll_hci_set_periodic_adv_enable(u8 *data, u32 size);
 void ll_hci_periodic_adv_creat_sync(u8 *data, u32 size);
 void ll_hci_periodic_adv_terminate_sync(u8 *data, u32 size);
 void ll_hci_periodic_adv_create_sync_cancel(void);
+void ll_hci_set_cig_params(uint8_t *data, size_t size);
+void ll_hci_create_cis(uint8_t *data, size_t size);
+void ll_hci_accept_cis_req(uint8_t *data, size_t size);
+void ll_hci_create_big(uint8_t *data, size_t size);
+void ll_hci_big_create_sync(uint8_t *data, size_t size);
+void ll_hci_big_terminate_sync(uint8_t *data, size_t size);
+void ll_hci_read_iso_tx_sync(uint8_t *data, size_t size);
 
 int le_controller_set_mac(void *addr);
+
+/* vendor */
+void hci_iso_receive_callback_register(void *callback);
+void ll_big_tx_align_callback_register(uint8_t big_handle, const void *callback);
+void ll_config_ctrler_clk(uint16_t handle, uint8_t sel);
+void ll_get_ctrler_clk(uint16_t hdl, uint16_t *us_1per12, uint32_t *ref_clk_us, uint32_t *evt);
+void ll_set_vendor_param(uint8_t *vendor_param, size_t size);
 
 #endif

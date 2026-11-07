@@ -9,19 +9,20 @@
 
 #define MAX_AUDIO_ADC_CHANNEL_NUM	4
 
-#define AUDIOC_QUERYCAP         _IOR('A', 0, sizeof(struct audio_capability))
-#define AUDIOC_GET_FMT          _IOR('A', 1, sizeof(struct audio_format))
-#define AUDIOC_SET_FMT          _IOW('A', 1, sizeof(struct audio_format))
-#define AUDIOC_REQBUFS          _IOR('A', 2, sizeof(int))
-#define AUDIOC_DQBUF            _IOR('A', 3, sizeof(int))
-#define AUDIOC_QBUF             _IOR('A', 4, sizeof(int))
-#define AUDIOC_STREAM_ON        _IOR('A', 5, sizeof(int))
-#define AUDIOC_STREAM_OFF       _IOR('A', 6, sizeof(int))
-#define AUDIOC_FADE_INOUT_SET   _IOR('A', 7, sizeof(int))
+#define AUDIOC_QUERYCAP         _IOR('A', 0, struct audio_capability)
+#define AUDIOC_GET_FMT          _IOR('A', 1, struct audio_format)
+#define AUDIOC_SET_FMT          _IOW('A', 1, struct audio_format)
+#define AUDIOC_REQBUFS          _IOW('A', 2, struct video_reqbufs)
+#define AUDIOC_DQBUF            _IOR('A', 3, struct video_buffer)
+#define AUDIOC_QBUF             _IOW('A', 4, struct video_buffer)
+#define AUDIOC_STREAM_ON        _IOW('A', 5, u8)
+#define AUDIOC_STREAM_OFF       _IOW('A', 6, u8)
+#define AUDIOC_FADE_INOUT_SET   _IOW('A', 7, bool)
 
 
 #define AUD_SUBDEV_REQ_PUT_PCM_DATA      0
 #define AUD_SUBDEV_REQ_GET_PCM_DATA      1
+#define AUD_SUBDEV_VIRTUAL_END_POST_SEM  2
 
 
 #define AUDIO_TYPE_DEC                  0x01
@@ -72,7 +73,7 @@ struct audio_capability {
 #define AUDIO_FMT_SBC          0x09
 #define AUDIO_FMT_MP2          0x0a
 #define AUDIO_FMT_MP3          0x0b
-#define AUDIO_FMT_LC3          0x0c
+#define AUDIO_FMT_JLA          0x0c
 #define AUDIO_FMT_OGG          0x0d
 
 #define AUDIO_FMT_DNS          0xfd
@@ -94,12 +95,17 @@ struct audio_format {
     u8 vir_data_wait : 1;
     u8 ch_detached : 1;
 
-    u8 aec_enable : 1;
+    u8 aec_enable : 2;
     u8 ch_data_exchange : 1;
     u8 no_header : 1;
-    u8 sample_depth : 3;
     u8 dns_enable : 1;
     u8 wait_sem : 1;
+
+    u8 sample_depth;
+    u8 read_end;
+    u8 complexity;
+    u8 frame_ms;
+    u8 format_mode;
 
     u16 vad_start_threshold;
     u16 vad_stop_threshold;
@@ -110,9 +116,12 @@ struct audio_format {
     u32 delay_ms;
     const char *format;
     const char *sample_source;
-    u32(*read_input)(u8 *buf, u32 len);
+    int(*read_input)(u8 *buf, u32 len);
     struct aec_s_attr *aec_attr;
     OS_SEM *sem;
+    u8 enc_eq_enable;
+    void *eq_enc_priv;
+    void (*enc_do_eq_handler)(void *priv, u8 *data, int len);
 };
 
 struct audio_subdevice_ops {
@@ -175,6 +184,7 @@ struct aec_s_attr {
     int SimplexThr;
     u16 hw_delay_offset;            /*dac hardware delay offset*/
     u16 wn_gain;                    /*white_noise gain*/
+    u16 dac_ref_sr;                 //dac参考采样率,要是编码时AEC采样率(8k或16k)的整数倍
 
     float AGC_NDT_fade_in_step; 	//in dB
     float AGC_NDT_fade_out_step; 	//in dB

@@ -1,7 +1,8 @@
 #include "app_config.h"
 
-
 // *INDENT-OFF*
+
+echo "注意！！！量产时不能使能CONFIG_OVERCLOCKING_ENABLE宏使用超频配置，否则后果自负"
 
 /****************************注意！！！量产时不能使能CONFIG_OVERCLOCKING_ENABLE宏使用超频配置，否则后果自负**********************************/
 /****************************注意！！！量产时不能使能CONFIG_OVERCLOCKING_ENABLE宏使用超频配置，否则后果自负**********************************/
@@ -56,7 +57,7 @@
 [EXTRA_CFG_PARAM]
 #if CONFIG_DOUBLE_BANK_ENABLE
 BR22_TWS_DB=YES;
-BR22_TWS_VERSION=1;/*防回滚版本号: 每次出升级包必须+1(note.txt); 板上烧的是0*/
+BR22_TWS_VERSION=0;
 DB_UPDATE_DATA=YES;
 #else
 NEW_FLASH_FS=YES; [单备份模式]//单备份
@@ -102,8 +103,12 @@ LOADER_BAUD_RATE=1000000;
 LOADER_ASK_BAUD_RATE=1000000;
 SERIAL_SEND_KEY=YES;
 BEFORE_LOADER_WAIT_TIME=150;
-
 NEED_RESERVED_4K=YES;//关闭4K保留写NO
+#ifdef CONFIG_RELEASE_ENABLE
+CALC_RES_CFG=NO;
+#else
+CALC_RES_CFG=YES; [量产版本严禁打开]
+#endif
 //#支持EFUSE 烧写到flash最后4K
 //[FW_ADDITIONAL]
 //FILE_LIST=(file=fw.cfg:type=0xEE)
@@ -121,7 +126,6 @@ NEED_RESERVED_4K=YES;//关闭4K保留写NO
 #	  0  优先选A端口  CS:PD3  CLK:PD0  D0:PD1  D1:PD2  D2:PB7  D3:PD5
 #	  1  优先选B端口  CS:PA13 CLK:PD0  D0:PD1  D1:PA14 D2:PA15 D3:PD5
 */
-
 #if defined CONFIG_FLASH_FOUR_WIDTH_ENABLE
 SPI=4_1_0_0;	[width_clk_mode_port]
 #else
@@ -138,7 +142,7 @@ SYS_CLK=396MHz;	       [320M 240M 192M 160M 120M 96M 48M 24M 40M 24M，当SYS_CL
 HSB_DIV=1; [高速总线时钟分频系数 HSB_DIV+1]
 LSB_DIV=1; [低速总线时钟分频系数 LSB_DIV+1]
 #else
-SYS_CLK=240MHz;	       [320M 240M 192M 160M 120M 96M 48M 24M 40M 24M，当SYS_CLK为其他值时sdram时钟跟随系统时钟]
+SYS_CLK=320MHz;	       [320M 240M 192M 160M 120M 96M 48M 24M 40M 24M，当SYS_CLK为其他值时sdram时钟跟随系统时钟]
 #if (defined CONFIG_RTC_ENABLE) && ((defined CONFIG_BOARD_7913A)||(defined CONFIG_BOARD_7915B))//7913 7915需要使用内置RTC电源模块需要P33速度低一些
 HSB_DIV=2; [高速总线时钟分频系数 HSB_DIV+1]
 LSB_DIV=5; [低速总线时钟分频系数 LSB_DIV+1]
@@ -154,7 +158,7 @@ LSB_DIV=2; [低速总线时钟分频系数 LSB_DIV+1]
 //UTTX=PB03; [配置UBOOT调试输出Pin] //uboot串口tx
 UTBD=1000000; [配置UBOOT调试波特率]//uboot串口波特率
 //UTRX=PB05;串口升级[PB00 PB05 PA05]
-RESET=PB01_08_0; [port口_长按时间_有效电平（长按时间有00、01、02、04、08三个值可选，单位为秒，当长按时间为00时，则关闭长按复位功能]
+RESET=PB01_04_0; [port口_长按时间_有效电平（长按时间有00、01、02、04、08三个值可选，单位为秒，当长按时间为00时，则关闭长按复位功能]
 UPDATE_JUMP=0;
 
 /*
@@ -202,6 +206,12 @@ ENABLE_SDRAM=1; [使能SDRAM]
 #endif
 
 //###SDRAM配置====================================================================
+SDRAM_TEST_SIZE=4K; 	[SDRAM校验测试大小，默认4K(2M:2048K, 8M:8192K)]
+#ifdef CONFIG_RELEASE_ENABLE
+SDRAM_CONFIG_VAL=0;	[SDRAM在系统第二次以后启动，配置信息使用flash中的值，默认-1使能，0则不使能]
+#else
+SDRAM_CONFIG_VAL=0;	[SDRAM在系统第二次以后启动，配置信息使用flash中的值，默认-1使能，0则不使能]
+#endif
 SDRAM_REFRESH_TIME=32;  // REFRESH CYCLES
 SDRAM_REFRESH_CYCLES=4K; [4096|8192]
 SDRAM_MODE=0;	[0 sdram  | 1 ddr  | 2 ddr2]
@@ -219,14 +229,14 @@ SDRAM_PLL3_NOUSB_EN = 0;[1:SDRAM时钟时钟PLL3，时钟跟随SDRAM_CL对应，
 SDRAM_CL=3;      [SDRAM时钟：SYS_CLK<=240M或=320M时:[0-120M,1-160M,2-192M,3-240M,4-246M,5-252M,6-258M,7-264M,8-270M,9-276M,10-282M,11-288M]，SYS_CLK>320M并且<384M时:SDRAM时钟为SYS_CLK*1.5/2，SYS_CLK>=384M时:SDRAM时钟为SYS_CLK/2,,, SDRAM时钟极限为288M]
 SDRAM_DQ_DLY_TRM=5; [SDRAM对应时钟的刷新配置：选0 刷新最快（太快影响SDRAM带宽），2-120M，3-160M，4-192M，5-240M，6->240M]
 #else
-SDRAM_PLL3_EN = 1;      [1:SDRAM时钟使用PLL3，SYS_CLK须为240M，SDK可使用USB2.0]
+SDRAM_PLL3_EN = 0;      [1:SDRAM时钟使用PLL3，时钟只能240M，SDK可使用USB2.0]
 SDRAM_PLL3_NOUSB_EN = 0;[1:SDRAM时钟时钟PLL3，时钟跟随SDRAM_CL对应，但SDK不能使用USB2.0]
 #if defined CONFIG_SDRAM_OVERCLOCKING_ENABLE
 SDRAM_CL=3;      [SDRAM时钟：SYS_CLK<=240M或=320M时:[0-120M,1-160M,2-192M,3-240M,4-246M,5-252M,6-258M,7-264M,8-270M,9-276M,10-282M,11-288M]，SYS_CLK>320M并且<384M时:SDRAM时钟为SYS_CLK*1.5/2，SYS_CLK>=384M时:SDRAM时钟为SYS_CLK/2,,, SDRAM时钟极限为288M]
 SDRAM_DQ_DLY_TRM=5; [SDRAM对应时钟的刷新配置：选0 刷新最快（太快影响SDRAM带宽），2-120M，3-160M，4-192M，5-240M，6->240M]
 #else
-SDRAM_CL=3;      [SDRAM时钟：SYS_CLK<=240M或=320M时:[0-120M,1-160M,2-192M,3-240M,4-246M,5-252M,6-258M,7-264M,8-270M,9-276M,10-282M,11-288M]，SYS_CLK>320M并且<384M时:SDRAM时钟为SYS_CLK*1.5/2，SYS_CLK>=384M时:SDRAM时钟为SYS_CLK/2,,, SDRAM时钟极限为288M]
-SDRAM_DQ_DLY_TRM=5; [SDRAM对应时钟的刷新配置：选0 刷新最快（太快影响SDRAM带宽），2-120M，3-160M，4-192M，5-240M，6->240M]
+SDRAM_CL=2;      [SDRAM时钟：SYS_CLK<=240M或=320M时:[0-120M,1-160M,2-192M,3-240M,4-246M,5-252M,6-258M,7-264M,8-270M,9-276M,10-282M,11-288M]，SYS_CLK>320M并且<384M时:SDRAM时钟为SYS_CLK*1.5/2，SYS_CLK>=384M时:SDRAM时钟为SYS_CLK/2,,, SDRAM时钟极限为288M]
+SDRAM_DQ_DLY_TRM=4; [SDRAM对应时钟的刷新配置：选0 刷新最快（太快影响SDRAM带宽），2-120M，3-160M，4-192M，5-240M，6->240M]
 #endif
 #endif
 SDRAM_WLCNT=3;		[PLL启动延时MS]
@@ -250,6 +260,35 @@ SDRAM_DQS_DLY_TRM=0;
 SDRAM_UDQS_DLY_TRM=10;
 SDRAM_LDQS_DLY_TRM=10;
 SDRAM_DQ_DLY_INNER_TRM=0;
+
+
+/*
+[(sdx)_(port)_(width)_(detect mode)_(clk)]
+sdx: (SD0:0 SD1:1)
+port: (A:0 B:1 C:2 D:3)
+width: (1:1线  4:4线)
+detect mode: (0:时钟检测 1:命令检测)
+clk: 时钟，单位为MHz
+*/
+#if defined CONFIG_SDFILE_EXT_ENABLE
+#if TCFG_SD0_ENABLE
+#if TCFG_SD_PORTS == 'A'
+EX_SDCARD=SD_0_0_1_1_24;
+#elif TCFG_SD_PORTS == 'B'
+EX_SDCARD=SD_0_1_1_1_24;
+#elif TCFG_SD_PORTS == 'C'
+EX_SDCARD=SD_0_2_1_1_24;
+#else
+EX_SDCARD=SD_0_3_1_1_24;
+#endif
+#else
+#if TCFG_SD_PORTS == 'A'
+EX_SDCARD=SD_1_0_1_1_24;
+#else
+EX_SDCARD=SD_1_0_2_1_24;
+#endif
+#endif
+#endif
 
 /*
 ###########################################
@@ -281,9 +320,10 @@ BTBOX_MIN_VER=1.2.4.f;
 ############################################################################
 */
 [RESERVED_CONFIG]
-/* 升级保留 VM(WiFi SSID/密码、部分 BT 配对等落在此区)。
- * VM_OPT=0: 整包烧录/OTA 会擦 VM → 升级后 wifi_get_mode_stored_info 变 never stored;
- * VM_OPT=1: 生成升级文件时标记保留, dual_bank burn_boot_info 不碰 0xff5000 区。 */
+/* OPT: 0=下载/OTA 擦除该区; 1=不操作(保留); 2=加保护
+ * WiFi SSID/密码在 VM(0xff5000/32K)。网页/U盘 OTA 必须 VM_OPT=1,
+ * 否则 burn_boot_info 会整片擦掉 → 重启后 "never stored wifi_info"。
+ * (同步官方 V1.2.14 时曾被改回 0, 已改回 1) */
 VM_ADR=0; [设置VM]
 VM_LEN=32K;
 VM_OPT=1;
@@ -291,6 +331,14 @@ VM_OPT=1;
 BTIF_ADR=AUTO; [设置资源]
 BTIF_LEN=0x1000;
 BTIF_OPT=1;
+
+/* 对讲录音区: 名字必须为 REC (phone_rec_fs head_addr_get("REC"))
+ * 必须放在 [RESERVED_CONFIG](app/ 目录头可扫到).
+ * 放 [RESERVED_EXPAND_CONFIG] 时打包会划 REC_RESERVED 空间,
+ * 但运行时扫不到名为 REC 的头 → "REC zone missing". */
+REC_ADR=AUTO;
+REC_LEN=4M;
+REC_OPT=1;
 
 //#第三方云平台profile
 #if defined CONFIG_SERVER_ASSIGN_PROFILE
@@ -306,33 +354,17 @@ AISP_LEN=0x1000;
 AISP_OPT=1;
 #endif
 
-#if defined CONFIG_SAVE_EXCEPTION_LOG_IN_FLASH
-LOG_ADR=AUTO; [异常打印信息]
-LOG_LEN=0x1000;
-LOG_OPT=0;
-#endif
-
-//#保留客户使用
-EXIF_ADR=AUTO;[保留客户使用 也可自定义名字 参考example文档使用]
-EXIF_LEN=0x1000;
-EXIF_OPT=1;
-
-/* 内置 Flash 录音区(phone_rec_fs / walkie): 名字必须为 REC, head_addr_get("REC") */
-REC_ADR=AUTO;
-REC_LEN=4M;
-REC_OPT=1;
-
 #if defined CONFIG_AUDIO_ENABLE && defined CONFIG_VOICE_PROMPT_FILE_SAVE_IN_RESERVED_ZONE
 AUPACKRES_FILE=packres/AUPACKRES;
 AUPACKRES_ADR=AUTO; [请根据编译后FLASH INFO打印的实际地址填写,比如0x59a000]
-AUPACKRES_LEN=0; [更新提示音资源打包后必须更新此实际长度,比如0x141000,建议根据后续资源升级的需求预留好空间]
+AUPACKRES_LEN=AUTO; [更新提示音资源打包后必须更新此实际长度,比如0x141000,建议根据后续资源升级的需求预留好空间]
 AUPACKRES_OPT=1;
 #endif
 
 #if defined CONFIG_UI_ENABLE && defined CONFIG_UI_FILE_SAVE_IN_RESERVED_ZONE
 UIPACKRES_FILE=packres/UIPACKRES;
 UIPACKRES_ADR=AUTO; [请根据编译后FLASH INFO打印的实际地址填写,比如0x6db000]
-UIPACKRES_LEN=0; [更新UI资源打包后必须更新此实际长度,比如0x123000, 建议根据后续资源升级的需求预留好空间]
+UIPACKRES_LEN=AUTO; [更新UI资源打包后必须更新此实际长度,比如0x123000, 建议根据后续资源升级的需求预留好空间]
 UIPACKRES_OPT=1;
 #endif
 
@@ -340,38 +372,73 @@ PRCT_ADR=0;
 PRCT_LEN=CODE_LEN;
 PRCT_OPT=2;
 
-/***************资源文件打包 请阅读以下信息******************************/
-//packers文件夹下会生成AUPACKRES,UIPACKRES这两个包是资源文件打包好的包需要
-//根据实际大小填写AUPACKRES_ADR,AUPACKRES_LEN,
-//AUPACKRES_ADR 配置 AUTO 第一次下载后会下载不进 需要根据FLASH INFO打印的实际地址填写
-//例如AUPACKRES 378KB = 0x5e800 实际填大小可以填大一些 AUPACKRES_LEN = 0x5f000
-//AUPACKRES_OPT为下载是否需要擦除
-//#升级后不可更变的资源
+#if defined CONFIG_NET_UPGRADE_INFO_USE_RESERVED
+HttpUpdate_ADR=AUTO;
+HttpUpdate_LEN=0x1000;
+HttpUpdate_OPT=1;
+#endif
+
+//#烧录后不可升级的资源
 [RESERVED_EXPAND_CONFIG]
-#if defined CONFIG_AUDIO_ENABLE && defined CONFIG_VOICE_PROMPT_FILE_SAVE_IN_RESERVED_EXPAND_ZONE
-AUPACKRES_FILE=packres/AUPACKRES; [烧录后不可升级的资源]
-AUPACKRES_ADR=AUTO; [请根据编译后FLASH INFO打印的实际地址填写,比如0x59b000]
-AUPACKRES_LEN=0; [更新提示音资源打包后必须更新此实际长度,比如0x141000]
-AUPACKRES_OPT=1;
+USER_ADR=AUTO; [固定预留给客户，避免客户量产后，想通过升级新增重要信息的保存却没有预先预留空间]
+USER_LEN=0x1000;
+USER_OPT=1;
+
+#if defined CONFIG_EXCEPTION_AUTO_FIX_ENABLE
+FIX_ADR=AUTO; [异常后自动降低系统配置]
+FIX_LEN=0x1000;
+FIX_OPT=0;
 #endif
 
-#if defined CONFIG_UI_ENABLE && defined CONFIG_UI_FILE_SAVE_IN_RESERVED_EXPAND_ZONE
-UIPACKRES_FILE=packres/UIPACKRES; [烧录后不可升级的资源]
-UIPACKRES_ADR=AUTO; [请根据编译后FLASH INFO打印的实际地址填写,比如0x6dc000]
-UIPACKRES_LEN=0; [更新UI资源打包后必须更新此实际长度,比如0x123000]
-UIPACKRES_OPT=1;
+#if defined CONFIG_SAVE_EXCEPTION_LOG_IN_FLASH
+LOG_ADR=AUTO; [异常打印信息]
+LOG_LEN=0x1000;
+LOG_OPT=0;
 #endif
 
-/* fixed.mp3_FILE=fixed_res/fixed.mp3; [烧录后不可升级的资源] */
-/* fixed.mp3_ADR=AUTO; */
-/* fixed.mp3_LEN=0x4000; */
-/* fixed.mp3_OPT=1; */
+#if defined CONFIG_TVS_SDK_ENABLE
+TENCENT_ADR=AUTO; [腾讯云profile]
+TENCENT_LEN=0x3000;
+TENCENT_OPT=1;
+#endif
+
+#if defined CONFIG_TELECOM_SDK_ENABLE
+TELECOM_ADR=AUTO; [电信云profile]
+TELECOM_LEN=0x1000;
+TELECOM_OPT=1;
+#endif
+
+#if defined CONFIG_TUYA_SDK_ENABLE
+TUYA_ADR=AUTO; [涂鸦profile]
+TUYA_LEN=0x1000;
+TUYA_OPT=1;
+#endif
 
 #if defined TCFG_EXTFLASH_ENABLE
 //截取flash的一段空间作为extflash设备
 EXTFLASH_ADR=AUTO;
 EXTFLASH_LEN=0x400000;
 EXTFLASH_OPT=1;
+#endif
+
+/***************资源文件打包 请阅读以下信息******************************/
+//packers文件夹下会生成AUPACKRES,UIPACKRES这两个包是资源文件打包好的包需要
+//根据实际大小填写AUPACKRES_ADR,AUPACKRES_LEN,
+//工程中默认根据flash大小,在app_config.h中配置了资源的地址和长度，
+//资源起始地址和大小, 根据产品生命周期最大情况定义,
+//audio和ui资源需要放到最后, 新增的预留区配置请在前面添加
+#if defined CONFIG_AUDIO_ENABLE && defined CONFIG_VOICE_PROMPT_FILE_SAVE_IN_RESERVED_EXPAND_ZONE
+AUPACKRES_FILE=packres/AUPACKRES;
+AUPACKRES_ADR=CONFIG_AUDIO_PACKRES_ADR;
+AUPACKRES_LEN=CONFIG_AUDIO_PACKRES_LEN;
+AUPACKRES_OPT=1;
+#endif
+
+#if defined CONFIG_UI_ENABLE && defined CONFIG_UI_FILE_SAVE_IN_RESERVED_EXPAND_ZONE
+UIPACKRES_FILE=packres/UIPACKRES;
+UIPACKRES_ADR=CONFIG_UI_PACKRES_ADR;
+UIPACKRES_LEN=CONFIG_UI_PACKRES_LEN;
+UIPACKRES_OPT=1;
 #endif
 
 [BURNER_CONFIG]

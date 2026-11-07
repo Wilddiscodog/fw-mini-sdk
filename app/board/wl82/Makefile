@@ -75,6 +75,7 @@ ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
 AUDIO_LIB := \
 	../../../cpu/wl82/liba/audio_server.a \
 	../../../cpu/wl82/liba/media_app.a \
+	../../../cpu/wl82/liba/lib_esco_repair.a \
 	../../../cpu/wl82/liba/libaec.a \
 	../../../cpu/wl82/liba/libdns.a \
 	../../../cpu/wl82/liba/libvad.a \
@@ -240,6 +241,7 @@ endif
 
 # 头文件搜索路径
 INCLUDES := \
+	-I../../../apps \
 	-I../../../app/include \
 	-I../../../app/walkie \
 	-I../../../app/common_ble/include \
@@ -260,10 +262,10 @@ INCLUDES := \
 	-I../../../include_lib/btstack/third_party/rcsp \
 	-I../../../include_lib/net \
 	-I../../../include_lib/net/wifi \
-	-I../../../include_lib/net/lwip_2_1_3/lwip/src/include \
-	-I../../../include_lib/net/lwip_2_1_3/lwip/src/include/lwip \
-	-I../../../include_lib/net/lwip_2_1_3/lwip/port \
-	-I../../../include_lib/net/lwip_2_1_3/lwip/app \
+	-I../../../include_lib/net/lwip_2_2_0/lwip/src/include \
+	-I../../../include_lib/net/lwip_2_2_0/lwip/src/include/lwip \
+	-I../../../include_lib/net/lwip_2_2_0/lwip/port \
+	-I../../../include_lib/net/lwip_2_2_0/lwip/app \
 	-I../../../include_lib/media \
 	-I../../../include_lib/media/cpu/wl82 \
 	-I../../../include_lib/server \
@@ -370,9 +372,9 @@ LFLAGS := \
 	--plugin-opt=-movable-region-prefix=.movable.region. \
 	--plugin-opt=-movable-region-stub-prefix=__movable_stub_ \
 	--plugin-opt=-movable-region-stub-swi-number=-2 \
-	--plugin-opt=-movable-region-map-file-list=../../../driver/movable/funcname.txt \
-	--plugin-opt=-movable-region-section-map-file-list=../../../driver/movable/section.txt \
-	--plugin-opt=-movable-region-exclude-func-file-list=../../../driver/movable/exclude.txt \
+	--plugin-opt=-movable-region-map-file-list=../../../apps/common/movable/funcname.txt \
+	--plugin-opt=-movable-region-section-map-file-list=../../../apps/common/movable/section.txt \
+	--plugin-opt=-movable-region-exclude-func-file-list=../../../apps/common/movable/exclude.txt \
 	--plugin-opt=-pi32v2-large-program=true \
 	--start-group \
 	../../../cpu/wl82/liba/cpu.a \
@@ -395,7 +397,7 @@ LFLAGS := \
 	../../../cpu/wl82/liba/http_cli.a \
 	../../../cpu/wl82/liba/json.a \
 	../../../cpu/wl82/liba/iperf.a \
-	../../../cpu/wl82/liba/lwip_2_1_3.a \
+	../../../cpu/wl82/liba/lwip_2_2_0.a \
 	../../../cpu/wl82/liba/wl_wifi.a \
 	../../../cpu/wl82/liba/net_server.a \
 	--end-group \
@@ -516,7 +518,6 @@ c_SRC_FILES += ../../../app/watch_ui/watch_maze.c
 c_SRC_FILES += ../../../app/watch_ui/watch_match3.c
 c_SRC_FILES += ../../../app/watch_ui/watch_sokoban.c
 c_SRC_FILES += ../../../app/watch_ui/watch_2048.c
-c_SRC_FILES += ../../../app/watch_ui/watch_pong.c
 c_SRC_FILES += ../../../app/watch_ui/watch_game_bgm.c
 c_SRC_FILES += ../../../app/watch_ui/assets/watch_icons.c
 c_SRC_FILES += ../../../app/watch_ui/assets/watch_icon_tetris.c
@@ -574,7 +575,7 @@ all: pre_build $(OUT_ELF)
 pre_build:
 	$(info +PRE-BUILD)
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../cpu/wl82/sdk_used_list.c -o ../../../cpu/wl82/sdk_used_list.used
-	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../driver/movable/section.c -o ../../../driver/movable/section.txt
+	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../apps/common/movable/section.c -o ../../../apps/common/movable/section.txt
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../cpu/wl82/sdk_ld.c -o ../../../cpu/wl82/sdk.ld
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../cpu/wl82/tools/download.c -o $(POST_SCRIPT)
 	$(QUITE) $(FIXBAT) $(POST_SCRIPT)

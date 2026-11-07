@@ -14,6 +14,18 @@ typedef void (*btstack_packet_handler_t)(u8 packet_type, u16 channel, u8 *packet
 
 typedef void (*ble_cbk_handler_t)(void);
 
+#define SYNC_TIMEOUT_MS(x)              {(x / 10) & 0xff, (x / 10) >> 8}
+
+#define ALIGN_2BYTE(size)                   (((size)+1)&0xfffffffe)
+#define BYTE_LEN(x...)                      sizeof((u8 []) {x})
+#define MS_TO_SLOT(x)                       (x * 8 / 5)
+#define UINT24_TO_BYTE(x) \
+{ \
+    (x),      \
+    (x) >> 8, \
+    (x) >> 16 \
+}
+
 void reverse_bd_addr(const bd_addr_t src, bd_addr_t dest);
 
 void reverse_bytes(const u8 *src, u8 *dst, u32 len);

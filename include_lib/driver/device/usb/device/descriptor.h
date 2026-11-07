@@ -3,7 +3,7 @@
 
 #include "asm/usb.h"
 
-void get_device_descriptor(u8 *ptr);
+void get_device_descriptor(u8 *ptr, const usb_dev usb_id);
 void get_language_str(u8 *ptr);
 void get_manufacture_str(u8 *ptr);
 void get_product_str(u8 *ptr);

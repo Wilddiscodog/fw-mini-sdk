@@ -45,5 +45,17 @@ if ($text -notmatch '(?m)^set KEY_FILE=-key 0x7DF1\.key\r?$') {
     Write-Host "[ensure_download_key] KEY_FILE present"
 }
 
-[System.IO.File]::WriteAllText($BatPath, $text, [System.Text.UTF8Encoding]::new($false))
+if ($text -eq $raw) {
+    exit 0
+}
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+for ($i = 0; $i -lt 8; $i++) {
+    try {
+        [System.IO.File]::WriteAllText($BatPath, $text, $utf8)
+        exit 0
+    } catch {
+        Start-Sleep -Milliseconds (100 * ($i + 1))
+    }
+}
+Write-Warning "ensure_download_key: could not rewrite $BatPath (file locked); KEY already present, continuing"
 exit 0

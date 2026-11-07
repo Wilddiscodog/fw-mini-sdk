@@ -1,7 +1,7 @@
 #ifndef ARCH_SDMMC_H
 #define ARCH_SDMMC_H
 
-
+#include "device/device.h"
 #include "sdio/sdmmc.h"
 
 struct sdmmc_platform_data {
@@ -59,11 +59,17 @@ extern void sdmmc_1_port_init(const struct sdmmc_platform_data *, int mode);
 extern int sdmmc_1_clk_detect(const struct sdmmc_platform_data *);
 extern int sdmmc_1_io_detect(const struct sdmmc_platform_data *);
 
-
+struct dmsdx_platform_data {
+    const char *dmsdx_name;
+    u32 block_offset_start;
+    u32 block_offset_end;
+    struct device *dmsdx_device;
+    struct device dev;
+    struct list_head entry;
+};
 
 extern const struct device_operations sd_dev_ops;
-
-
+extern const struct device_operations dmsd_dev_ops;
 
 #endif
 

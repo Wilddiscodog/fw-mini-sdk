@@ -2,13 +2,20 @@
 
 
 sdfile_vfs_ops
+#ifdef CONFIG_SDFILE_EXT_ENABLE
+sdfile_ext_vfs_ops
+#endif
 nor_sdfile_vfs_ops
 clock_timer1
 clock_port
 
 #if TCFG_UDISK_ENABLE || TCFG_SD0_ENABLE || TCFG_SD1_ENABLE
 clock_sdx
+#ifdef CONFIG_JLFAT_ENABLE
+jl_fat_vfs_ops
+#else
 fat_vfs_ops
+#endif
 #endif
 
 #if CONFIG_RAMFS_ENABLE
@@ -53,11 +60,11 @@ led_ui_server_info
 audio_server_info
 #endif
 
-#ifdef CONFIG_LC3_DEC_ENABLE
-lc3_decoder
+#ifdef CONFIG_JLA_DEC_ENABLE
+jla_decoder
 #endif
-#ifdef CONFIG_LC3_ENC_ENABLE
-subdev_lc3_enc
+#ifdef CONFIG_JLA_ENC_ENABLE
+subdev_jla_enc
 #endif
 
 #ifdef CONFIG_PCM_DEC_ENABLE
@@ -105,6 +112,9 @@ subdev_cvsd_enc
 cvsd_package_ops
 #endif
 
+#ifdef CONFIG_MIDI_CTRL_DEC_ENABLE
+midi_ctrl_decoder
+#endif
 #ifdef CONFIG_MP3_DEC_ENABLE
 mp3_decoder
 #endif
@@ -161,8 +171,8 @@ flac_decoder
 dts_decoder
 #endif
 
-#ifdef CONFIG_OGG_VORBIS_DEC_ENABLE
-ogg_vorbis_decoder
+#ifdef CONFIG_OGG_DEC_ENABLE
+ogg_decoder
 #endif
 
 #ifdef CONFIG_OPUS_DEC_ENABLE
@@ -183,21 +193,18 @@ vir_dev_sub
 #ifdef CONFIG_VAD_ENC_ENABLE
 subdev_vad_enc
 subdev_jlvad_enc
-/* LTO 仅拉 subdev_* 时会把算法 .text 收成 0, 导致 audio_set_fmt 失败 */
-vad_init
-fvad_new
-JLSP_vad_init
 #endif
 
 #ifdef CONFIG_DNS_ENC_ENABLE
 subdev_dns_enc
 subdev_dns_dual_enc
-dns_enc_enable
-JLSP_ns_init
 #endif
 
-#if defined CONFIG_AEC_ENC_ENABLE || defined CONFIG_ANS_ENC_ENABLE
+#ifdef CONFIG_AEC_ENC_ENABLE
 subdev_aec_enc
+#ifdef CONFIG_AEC_USE_SMS_TDE
+subdev_aec_enc_tde
+#endif
 #endif
 
 #ifdef CONFIG_SPECTRUM_FFT_EFFECT_ENABLE
@@ -206,6 +213,10 @@ spectrum_fft_effect
 
 #ifdef CONFIG_DEC_DIGITAL_VOLUME_ENABLE
 digital_vol_effect
+#endif
+
+#ifdef CONFIG_VIRTUAL_BASS_ENABLE
+virtual_bass_effect
 #endif
 
 #ifdef CONFIG_TURING_SDK_ENABLE

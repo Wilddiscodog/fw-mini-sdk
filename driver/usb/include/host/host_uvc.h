@@ -67,11 +67,14 @@ struct usb_uvc {
     u32 error_frame: 1;
     u32 cur_frame: 8;
     u32 mjpeg_format_index: 8;
+    u32 h264_format_index: 8;
     u32 reso_num: 8;
     u32 camera_open: 1;
     u32 xfer_type: 2;
     u32 ep_buf_ch: 1;
     u32 unused: 2;
+    u32 format: 8;
+    u32 yuyv_format_index: 8;
     void *priv;
     struct uvc_int_endponit int_ep;
     UVC_STREAM_OUT stream_out;
@@ -205,7 +208,9 @@ extern int uvc_host_camera_out(const usb_dev usb_id);
 extern int uvc2usb_ioctl(void *fd, u32 cmd, void *arg);
 extern int uvc_host_get_fps(void *fd);
 //extern int uvc_get_device_id(void *fd, struct usb_device_id *id);
-extern int usb_host_video_init(const usb_dev usb_id);
+int usb_host_video_init(const usb_dev usb_id, const u8 sub_id);
+extern u32 uvc_host_get_fmt(void);
+extern u8 uvc_host_is_support_h264_fmt(void);
 #ifdef __cplusplus
 }
 #endif

@@ -55,7 +55,7 @@ struct thread_parm {
 #include "FreeRTOS/FreeRTOS.h"
 #include "FreeRTOS/semphr.h"
 #include "FreeRTOS/task.h"
-
+#include "FreeRTOS/event_groups.h"
 typedef StaticSemaphore_t OS_SEM, OS_MUTEX;
 typedef StaticQueue_t OS_QUEUE;
 typedef StaticEventGroup_t OS_EVENT_GRP;

@@ -6,7 +6,6 @@
 
 enum watch_app_id {
     WATCH_APP_WALKIE = 0,
-    WATCH_APP_GYRO,
     WATCH_APP_NET_MUSIC,
     WATCH_APP_BT_MUSIC,
     WATCH_APP_BALL,
@@ -15,7 +14,6 @@ enum watch_app_id {
     WATCH_APP_MATCH3,
     WATCH_APP_SOKOBAN,
     WATCH_APP_2048,
-    WATCH_APP_PONG,
     WATCH_APP_SETTINGS,
     WATCH_APP_COUNT,
 };

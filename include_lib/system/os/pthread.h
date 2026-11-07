@@ -791,4 +791,20 @@ int sem_trywait(sem_t *sem);
  */
 int sem_wait(sem_t *sem);
 
+/*****************************************************************/
+typedef int pthread_once_t;
+typedef int pthread_key_t;
+
+typedef void (*pthread_destructor_t)(void *);
+typedef int pthread_once_t;
+int pthread_once(pthread_once_t *once_control, void (*init_routine)(void));
+int pthread_detach(pthread_t thread);
+int sched_yield(void);
+int nanosleep(const struct timespec *rqtp,
+              struct timespec *rmtp);
+void *pthread_getspecific(pthread_key_t key);
+int pthread_key_create(pthread_key_t *key, pthread_destructor_t destructor);
+int pthread_setspecific(pthread_key_t key, const void *value);
+/*****************************************************************/
+
 #endif	/** _PTHREAD_H*/

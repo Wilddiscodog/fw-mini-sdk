@@ -53,21 +53,21 @@ REM set KEY_FILE=-key1 JL_791N-XXXX.key1 -mkey JL_791N-XXXX.mkey
 
 set CFG_FILE=cfg
 
-REM О©╫О©╫О©╫О©╫б╡О©╫О©╫О©╫-update_filesк╣О©╫О©╫
-REM 1/normalО©╫О©╫О©╫О©╫О©╫О©╫м╗О©╫О©╫О©╫д╪О©╫д©б╪О©╫А╧╧
-REM 2/embeddedО©╫О©╫О©╫О©╫ц©О©╫О©╫О©╫д╪О©╫О©╫О©╫О©╫О©╫г╟О©╫О©╫О©╫О©╫О©╫О©╫р╩О©╫О©╫м╥
+REM лМ╪спб╡нйЩ-update_filesк╣цВ
+REM 1/normal╬мйгфум╗╣днд╪Чд©б╪╫А╧╧
+REM 2/embedded╬мйгц©╦Жнд╪ЧйЩ╬щг╟╤╪╩Аспр╩╦Жм╥
 
-REM ж╩О©╫О©╫О©╫О©╫code + resО©╫О©╫О©╫О©╫О©╫д╪О©╫
+REM ж╩иЗЁиcode + resиЩ╪╤нд╪Ч
 REM -update_files normal
-REM О©╫О©╫О©╫и╣О©╫О©╫д╪О©╫О©╫О©╫О©╫О©╫н╙О©╫О©╫db_update_files_data.bin
+REM иЗЁи╣днд╪ЧцШвжн╙ё╨db_update_files_data.bin
 
-REM ж╩О©╫О©╫О©╫О©╫т╓О©╫О©╫О©╫О©╫О©╫О©╫т╢О©╫О©╫О©╫О©╫О©╫д╪О©╫
-REM -update_files embedded_only $(files) ,О©╫О©╫О©╫О©╫$(files)н╙О©╫О©╫р╙О©╫О©╫с╣О©╫О©╫О©╫т╢О©╫д╪О©╫
-REM О©╫О©╫О©╫и╣О©╫О©╫д╪О©╫О©╫О©╫О©╫О©╫н╙О©╫О©╫db_update_files_data.bin
+REM ж╩иЗЁит╓аТгЬвйт╢иЩ╪╤нд╪Ч
+REM -update_files embedded_only $(files) ,фДжп$(files)н╙пХр╙лМ╪с╣двйт╢нд╪Ч
+REM иЗЁи╣днд╪ЧцШвжн╙ё╨db_update_files_data.bin
 
-REM О©╫О©╫О©╫О©╫code + res + т╓О©╫О©╫О©╫О©╫О©╫О©╫т╢О©╫О©╫О©╫О©╫О©╫д╪О©╫
-REM -update_files embedded $(files) ,О©╫О©╫О©╫О©╫$(files)н╙О©╫О©╫р╙О©╫О©╫с╣О©╫О©╫О©╫т╢О©╫д╪О©╫
-REM О©╫О©╫О©╫и╣О©╫О©╫д╪О©╫О©╫О©╫О©╫О©╫н╙О©╫О©╫db_update_files_data.bin
+REM иЗЁиcode + res + т╓аТгЬвйт╢иЩ╪╤нд╪Ч
+REM -update_files embedded $(files) ,фДжп$(files)н╙пХр╙лМ╪с╣двйт╢нд╪Ч
+REM иЗЁи╣днд╪ЧцШвжн╙ё╨db_update_files_data.bin
 
 
 set UPDATE_FILES=-update_files normal
@@ -77,14 +77,14 @@ isd_download.exe isd_config.ini -tonorflash -dev wl82 -boot 0x1c02000 -div1 -wai
 
 
 
-@REM О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫к╣О©╫О©╫
+@REM ЁёсццЭаНк╣цВ
 @rem -format vm
 @rem -format all
 @rem -reboot 500
 
 echo %errorlevel%
 
-@REM и╬О©╫О©╫О©╫О©╫й╠О©╫д╪О©╫
+@REM и╬ЁЩаый╠нд╪Ч
 if exist *.mp3 del *.mp3
 if exist *.PIX del *.PIX
 if exist *.TAB del *.TAB
@@ -96,7 +96,7 @@ if exist *.sty del *.sty
 
 
 
-@REM О©╫О©╫О©╫О©╫О©╫О©╫ц╫е╠О©╫О©╫д╟Ф╠╬О©╫О©╫о╒О©╫О©╫ FW О©╫д╪О©╫О©╫О©╫
+@REM лМ╪сеДжц╫е╠╬╣д╟Ф╠╬пео╒╣╫ FW нд╪Чжп
 fw_add.exe -noenc -fw jl_isd.fw -add script.ver -out jl_isd.fw
 
 ufw_maker.exe -fw_to_ufw jl_isd.fw
@@ -110,7 +110,7 @@ if exist db_update_files_data.bin copy /Y db_update_files_data.bin update-ota.uf
 
 
 
-@REM О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫д╪О©╫О©╫О©╫О©╫О©╫О©╫д╪О©╫
+@REM иЗЁиеДжцнд╪ЧиЩ╪╤нд╪Ч
 rem ufw_maker.exe -chip AC630N %ADD_KEY% -output config.ufw -res bt_cfg.cfg
 
 ping /n 2 127.1>null
@@ -123,5 +123,5 @@ del data.bin
 del ram0_data.bin
 del text.bin
 
-::О©╫кЁО©╫О©╫О©╫г╟О©╫О©╫О©╫О©╫О©╫О©╫с╥О©╫О©╫О©╫ж╣(0),О©╫О©╫О©╫э╤О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫г╤О©╫в╣О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫
+::мкЁЖ╣╠г╟еЗ╢╕юМ╪с╥╣╩ьж╣(0),╡едэ╤Ю╦ЖеЗ╢╕юМг╤лв╣ВсцеЗ╢╕юМ
 exit /b 0

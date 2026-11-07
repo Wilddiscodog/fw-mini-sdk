@@ -11,7 +11,6 @@
 struct dev_node;
 struct device;
 
-
 struct device_operations {
     bool (*online)(const struct dev_node *node);
     int (*init)(const struct dev_node *node, void *);
@@ -29,15 +28,13 @@ struct dev_node {
     void *priv_data;
 };
 
-
 struct device {
     atomic_t ref;
     void *private_data;
     const struct device_operations *ops;
-    void *platform_data;
-    void *driver_data;
+    // void *platform_data;
+    // void *driver_data;
 };
-
 
 #define REGISTER_DEVICE(node) \
     const struct dev_node node SEC_USED(.device)

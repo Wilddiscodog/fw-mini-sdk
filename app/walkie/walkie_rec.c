@@ -9,12 +9,14 @@
 
 /*
  * 对讲录音: 原厂 phone_rec_fs (内置 Flash REC 预留区)
- * isd: REC_ADR=AUTO / REC_LEN=4M / REC_OPT=1
+ * isd: REC 必须在 [RESERVED_CONFIG] (REC_ADR=AUTO / REC_LEN=4M / REC_OPT=1)
+ *      放 EXPAND 时打包有空间, 但 head_addr_get("REC") 扫不到
  * 每段 ≤ 约 48KB PCM (~1.5s@16k mono), 最多 WALKIE_REC_MAX 条元数据。
  */
 #define WALKIE_REC_MAX       16
 #define WALKIE_REC_CAPACITY  (4 * 1024 * 1024)
 #define WALKIE_REC_CHUNK     512
+#define WALKIE_RAM_MSG_MAX   ((u32)WALKIE_PCM_RATE * 2 * WALKIE_PCM_CH * 60)
 
 struct walkie_rec_meta {
     u8 used;
@@ -24,6 +26,7 @@ struct walkie_rec_meta {
     u32 ticks;
     u16 fs_index;
     u32 pcm_bytes;
+    u8 *pcm;     /* RAM 回退: Flash REC 缺失时存 PCM */
 };
 
 /* phone_rec_fs.c 公开 API (部分未进 nor_fs.h) */
@@ -51,13 +54,44 @@ struct walkie_priv_blob {
 #define WALKIE_PRIV_MAGIC  0x4B57u  /* 'WK' LE */
 
 static u8 s_ready;
+static u8 s_ram_mode;   /* 1=无 Flash REC, 用 SDRAM 暂存本会话消息 */
 static u8 s_rec_open;
 static u8 s_dir;
 static u32 s_peer_ip;
 static u32 s_start_ms;
 static u32 s_bytes;
+static u8 *s_ram_cur;   /* 正在录的临时缓冲 */
+static u32 s_ram_cap;
 static struct walkie_rec_meta s_list[WALKIE_REC_MAX];
 static int s_list_n;
+
+#define WALKIE_RAM_BUDGET  (2 * 1024 * 1024) /* 会话内总上限 */
+
+static u32 walkie_ram_used(void)
+{
+    int i;
+    u32 n = 0;
+
+    for (i = 0; i < s_list_n; i++) {
+        if (s_list[i].used && s_list[i].pcm) {
+            n += s_list[i].pcm_bytes;
+        }
+    }
+    return n;
+}
+
+static void walkie_ram_drop_oldest(void)
+{
+    if (s_list_n <= 0) {
+        return;
+    }
+    if (s_list[0].pcm) {
+        free(s_list[0].pcm);
+    }
+    memmove(&s_list[0], &s_list[1], sizeof(s_list[0]) * (s_list_n - 1));
+    s_list_n--;
+    memset(&s_list[s_list_n], 0, sizeof(s_list[0]));
+}
 
 static volatile u8 s_play_alive;
 static volatile u8 s_play_cancel;
@@ -159,10 +193,15 @@ int walkie_rec_init(void)
 
     cap = set_rec_capacity(WALKIE_REC_CAPACITY);
     if (cap <= 0) {
-        printf("[walkie] rec: REC zone not ready (need full burn with REC_LEN)\n");
-        return -1;
+        /* Flash 无 REC 分区(常见于同步官方 isd 后 OTA 未整烧):
+         * 仍允许会话内 RAM 落盘, 否则收发成功但聊天气泡永远空白. */
+        s_ram_mode = 1;
+        s_ready = 1;
+        printf("[walkie] rec: no Flash REC → RAM session fallback\n");
+        return 0;
     }
     _sdfile_rec_init();
+    s_ram_mode = 0;
     s_ready = 1;
     list_rebuild();
     printf("[walkie] rec store: nor_fs REC %dKB, files=%d\n",
@@ -177,20 +216,36 @@ int walkie_rec_ensure(void)
 
 int walkie_rec_clear_all(void)
 {
+    int i;
+
     if (walkie_rec_ensure()) {
         return -1;
     }
-    /* 停播放/录音, 再清 nor_fs 文件头索引 */
     s_play_cancel = 1;
     while (s_play_alive) {
         os_time_dly(1);
     }
     if (s_rec_open) {
-        sdfile_rec_close();
+        if (!s_ram_mode) {
+            sdfile_rec_close();
+        }
         s_rec_open = 0;
         s_bytes = 0;
     }
-    rec_clear_norfs_fileindex();
+    if (s_ram_cur) {
+        free(s_ram_cur);
+        s_ram_cur = NULL;
+        s_ram_cap = 0;
+    }
+    for (i = 0; i < s_list_n; i++) {
+        if (s_list[i].pcm) {
+            free(s_list[i].pcm);
+            s_list[i].pcm = NULL;
+        }
+    }
+    if (!s_ram_mode) {
+        rec_clear_norfs_fileindex();
+    }
     memset(s_list, 0, sizeof(s_list));
     s_list_n = 0;
     printf("[walkie] rec cleared all\n");
@@ -210,6 +265,37 @@ void walkie_rec_deinit(void)
     /* 保持 s_ready, 供网页继续导出录音 */
 }
 
+static u16 rec_bytes_to_sec(u32 bytes)
+{
+    u32 bytes_per_sec = (u32)WALKIE_PCM_RATE * 2 * WALKIE_PCM_CH;
+    u32 sec32 = bytes_per_sec ? (bytes + bytes_per_sec / 2) / bytes_per_sec : 0;
+
+    if (sec32 == 0 && bytes > 0) {
+        sec32 = 1;
+    }
+    if (sec32 > 255) {
+        sec32 = 255;
+    }
+    return (u16)sec32;
+}
+
+static void rec_list_push(struct walkie_rec_meta *m)
+{
+    while (s_list_n >= WALKIE_REC_MAX ||
+           (m->pcm && walkie_ram_used() + m->pcm_bytes > WALKIE_RAM_BUDGET)) {
+        if (s_list_n <= 0) {
+            if (m->pcm) {
+                free(m->pcm);
+                m->pcm = NULL;
+                m->pcm_bytes = 0;
+            }
+            return;
+        }
+        walkie_ram_drop_oldest();
+    }
+    s_list[s_list_n++] = *m;
+}
+
 static void rec_begin(u8 dir, u32 peer_ip)
 {
     u8 priv[NORFS_DATA_LEN];
@@ -222,6 +308,17 @@ static void rec_begin(u8 dir, u32 peer_ip)
     s_peer_ip = peer_ip;
     s_start_ms = now_ms();
     s_bytes = 0;
+
+    if (s_ram_mode) {
+        s_ram_cap = 256 * 1024; /* 先 256KB, 可扩 */
+        s_ram_cur = malloc(s_ram_cap);
+        if (!s_ram_cur) {
+            printf("[walkie] rec ram alloc fail\n");
+            return;
+        }
+        s_rec_open = 1;
+        return;
+    }
 
     idx = sdfile_rec_createfile();
     if (idx == 0) {
@@ -240,6 +337,28 @@ static void rec_write(const void *pcm, u16 len)
     u16 n;
 
     if (!s_rec_open || !pcm || !len) {
+        return;
+    }
+    if (s_ram_mode) {
+        if (s_bytes + len > s_ram_cap) {
+            u32 need = s_bytes + len + 64 * 1024;
+            u8 *p;
+
+            if (need > WALKIE_RAM_MSG_MAX) {
+                need = WALKIE_RAM_MSG_MAX;
+            }
+            if (s_bytes + len > need) {
+                return;
+            }
+            p = realloc(s_ram_cur, need);
+            if (!p) {
+                return;
+            }
+            s_ram_cur = p;
+            s_ram_cap = need;
+        }
+        memcpy(s_ram_cur + s_bytes, pcm, len);
+        s_bytes += len;
         return;
     }
     while (off < len) {
@@ -262,18 +381,31 @@ static void rec_end(void)
     if (!s_rec_open) {
         return;
     }
-    /* 整包落盘几乎瞬间完成, 不能用墙钟; 按 PCM 字节算时长 */
-    {
-        u32 bytes_per_sec = (u32)WALKIE_PCM_RATE * 2 * WALKIE_PCM_CH;
-        u32 sec32 = bytes_per_sec ? (s_bytes + bytes_per_sec / 2) / bytes_per_sec : 0;
-        if (sec32 == 0 && s_bytes > 0) {
-            sec32 = 1;
+    sec = rec_bytes_to_sec(s_bytes);
+
+    if (s_ram_mode) {
+        s_rec_open = 0;
+        if (s_bytes == 0) {
+            free(s_ram_cur);
+            s_ram_cur = NULL;
+            s_ram_cap = 0;
+            return;
         }
-        if (sec32 > 255) {
-            sec32 = 255; /* priv 里 sec 为 u8 */
-        }
-        sec = (u16)sec32;
+        memset(&m, 0, sizeof(m));
+        m.used = 1;
+        m.dir = s_dir;
+        m.sec = sec;
+        m.peer_ip = s_peer_ip;
+        m.ticks = s_start_ms;
+        m.pcm_bytes = s_bytes;
+        m.pcm = s_ram_cur; /* 移交所有权 */
+        s_ram_cur = NULL;
+        s_ram_cap = 0;
+        s_bytes = 0;
+        rec_list_push(&m);
+        return;
     }
+
     priv_pack(priv, s_dir, sec, s_peer_ip, s_start_ms);
     sdfile_rec_set_priv_info(priv);
     idx = phone_recfile.index.index;
@@ -291,13 +423,8 @@ static void rec_end(void)
     m.ticks = s_start_ms;
     m.fs_index = (u16)idx;
     m.pcm_bytes = s_bytes;
-    if (s_list_n >= WALKIE_REC_MAX) {
-        memmove(&s_list[0], &s_list[1], sizeof(s_list[0]) * (WALKIE_REC_MAX - 1));
-        s_list_n = WALKIE_REC_MAX - 1;
-        memset(&s_list[s_list_n], 0, sizeof(s_list[0]));
-    }
-    s_list[s_list_n++] = m;
     s_bytes = 0;
+    rec_list_push(&m);
 }
 
 void walkie_rec_tx_start(void)
@@ -393,13 +520,14 @@ int walkie_rec_meta(int idx, u8 *dir, u16 *sec, u32 *peer_ip)
 static void walkie_rec_play_task(void *arg)
 {
     u8 buf[WALKIE_REC_CHUNK];
-    u32 got, nread;
+    u32 got, nread, off;
     u16 fs_index;
+    struct walkie_rec_meta *m;
     (void)arg;
 
-    fs_index = s_list[s_play_idx].fs_index;
+    m = &s_list[s_play_idx];
+    fs_index = m->fs_index;
     walkie_ptt_stop();
-    /* 蓝牙音乐正在播: 先静音/暂停, 播完对讲后再还 */
     bt_music_ui_duck_begin();
     if (walkie_av_start()) {
         printf("[walkie] play av start fail\n");
@@ -407,31 +535,44 @@ static void walkie_rec_play_task(void *arg)
     }
     walkie_av_local_play_begin();
 
-    got = sdfile_rec_open(fs_index);
-    if (got != fs_index) {
-        printf("[walkie] play open fail idx=%d fs=%u\n", s_play_idx, fs_index);
-        goto out;
-    }
-    /* SEEK_SET 0 → 跳过文件头, 落在 PCM 起点 */
-    sdfile_rec_seek(0, NOR_FS_SEEK_SET);
-
-    while (!s_play_cancel && s_ready) {
-        nread = sdfile_rec_read(buf, WALKIE_REC_CHUNK);
-        if (nread == 0 || nread > WALKIE_REC_CHUNK) {
-            break;
+    if (m->pcm && m->pcm_bytes) {
+        off = 0;
+        while (!s_play_cancel && off < m->pcm_bytes) {
+            nread = m->pcm_bytes - off;
+            if (nread > WALKIE_REC_CHUNK) {
+                nread = WALKIE_REC_CHUNK;
+            }
+            if (walkie_av_local_play_write(m->pcm + off, (u16)nread)) {
+                break;
+            }
+            off += nread;
         }
-        if (walkie_av_local_play_write(buf, (u16)nread)) {
-            break;
+    } else if (!s_ram_mode) {
+        got = sdfile_rec_open(fs_index);
+        if (got != fs_index) {
+            printf("[walkie] play open fail idx=%d fs=%u\n", s_play_idx, fs_index);
+            goto out;
         }
+        sdfile_rec_seek(0, NOR_FS_SEEK_SET);
+        while (!s_play_cancel && s_ready) {
+            nread = sdfile_rec_read(buf, WALKIE_REC_CHUNK);
+            if (nread == 0 || nread > WALKIE_REC_CHUNK) {
+                break;
+            }
+            if (walkie_av_local_play_write(buf, (u16)nread)) {
+                break;
+            }
+        }
+        sdfile_rec_close();
+    } else {
+        printf("[walkie] play: no pcm data\n");
     }
-    sdfile_rec_close();
     if (!s_play_cancel) {
         walkie_av_local_play_drain();
     }
 
 out:
     walkie_av_local_play_end();
-    /* 释放 DAC, 等 0.5s 再恢复蓝牙音乐 */
     if (!walkie_ptt_is_on()) {
         walkie_av_stop();
     }
@@ -526,6 +667,28 @@ int walkie_rec_export_wav(int idx,
     }
     if (s_rec_open || s_play_alive) {
         return -2; /* busy */
+    }
+
+    if (s_list[idx].pcm && s_list[idx].pcm_bytes) {
+        pcm_bytes = s_list[idx].pcm_bytes;
+        wav_make_hdr(hdr, pcm_bytes, WALKIE_PCM_RATE);
+        if (write_cb(ctx, hdr, 44) < 0) {
+            return -1;
+        }
+        left = pcm_bytes;
+        while (left) {
+            u32 want = left > WALKIE_REC_CHUNK ? WALKIE_REC_CHUNK : left;
+            if (write_cb(ctx, s_list[idx].pcm + (pcm_bytes - left), want) < 0) {
+                return -1;
+            }
+            left -= want;
+            wdt_clear();
+        }
+        return 0;
+    }
+
+    if (s_ram_mode) {
+        return -1;
     }
 
     fs_index = s_list[idx].fs_index;

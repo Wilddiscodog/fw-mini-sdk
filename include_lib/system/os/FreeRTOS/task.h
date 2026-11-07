@@ -172,7 +172,7 @@ typedef struct xTASK_STATUS {
     UBaseType_t uxBasePriority;		/* The priority to which the task will return if the task's current priority has been inherited to avoid unbounded priority inversion when obtaining a mutex.  Only valid if configUSE_MUTEXES is defined as 1 in FreeRTOSConfig.h. */
     uint32_t ulRunTimeCounter;		/* The total run time allocated to the task so far, as defined by the run time stats clock.  See http://www.freertos.org/rtos-run-time-stats.html.  Only valid when configGENERATE_RUN_TIME_STATS is defined as 1 in FreeRTOSConfig.h. */
     StackType_t *pxStackBase;		/* Points to the lowest address of the task's stack area. */
-    uint16_t usStackHighWaterMark;	/* The minimum amount of stack space that has remained for the task since the task was created.  The closer this value is to zero the closer the task has come to overflowing its stack. */
+    uint32_t usStackHighWaterMark;	/* The minimum amount of stack space that has remained for the task since the task was created.  The closer this value is to zero the closer the task has come to overflowing its stack. */
 } TaskStatus_t;
 
 /* Possible return values for eTaskConfirmSleepModeStatus(). */
@@ -1404,6 +1404,10 @@ used to set and query a pointer respectively. */
 void vTaskSetThreadLocalStoragePointer(TaskHandle_t xTaskToSet, BaseType_t xIndex, void *pvValue) PRIVILEGED_FUNCTION;
 void *pvTaskGetThreadLocalStoragePointer(TaskHandle_t xTaskToQuery, BaseType_t xIndex) PRIVILEGED_FUNCTION;
 
+#if ( configTHREAD_LOCAL_STORAGE_DELETE_CALLBACKS )
+typedef void (*TlsDeleteCallbackFunction_t)(int, void *);
+void vTaskSetThreadLocalStoragePointerAndDelCallback(TaskHandle_t xTaskToSet, BaseType_t xIndex, void *pvValue, TlsDeleteCallbackFunction_t pvDelCallback);
+#endif
 #endif
 
 /**
@@ -2179,6 +2183,7 @@ TickType_t uxTaskResetEventItemValue(void) PRIVILEGED_FUNCTION;
  */
 TaskHandle_t xTaskGetCurrentTaskHandle(void) PRIVILEGED_FUNCTION;
 
+TaskHandle_t xTaskGetCurrentTaskHandleNoProtect(void) PRIVILEGED_FUNCTION;
 /*
  * Capture the current time status for future reference.
  */

@@ -7,10 +7,14 @@
 
 #include "WL82.h"
 
-typedef unsigned char   		u8, bool, BOOL, uint8_t;
+
+#if ((!defined __cplusplus) && (!defined BOOL_DEFINE_CONFLICT))
+typedef unsigned char   		bool;
+#endif
+typedef unsigned char   		u8, BOOL, uint8_t;
 typedef char            		s8;
 typedef signed char            	int8_t;
-typedef unsigned short  		u16, uint16_t;
+typedef unsigned short  		u16, uint16_t, u_int16_t;
 typedef signed short    		s16, int16_t;
 typedef unsigned int    		u32, uint32_t;
 typedef signed int      		s32;
@@ -232,7 +236,7 @@ extern const int config_asser;
             if(config_asser){\
                 if(!(a)){ \
                     printf("file:%s, line:%d, task:%s", __FILE__, __LINE__,os_current_task_rom()); \
-                    printf("ASSERT-FAILD: "#a" "__VA_ARGS__); \
+                    printf("ASSERT-FAILD: " #a " " __VA_ARGS__); \
                     cpu_assert_debug(); \
                 } \
             }else {\

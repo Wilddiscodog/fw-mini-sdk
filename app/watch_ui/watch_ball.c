@@ -1,10 +1,10 @@
 /*
  * 平衡球游戏 —— 陀螺仪控制小球撞水果(六轴 SC7U22)
  *
- * 玩法: 进入 app 以当前姿态为零点, 倾斜设备控制小球; 撞水果得分
- * (苹果+1/橙子+2/西瓜+5), 撞炸弹 -3; 静态障碍柱反弹挡路。单局 60s,
- * 得分升难度(Lv1~Lv4), 5s 内连吃 3 个触发双倍连击。TOP5 成绩入 VM。
- * 界面: LVGL canvas 整帧绘制(33ms 步进), 无图片资源, 全矢量。
+ * 玩法: 绝对水平为零点(ax/ay≈0g), 相对水平倾斜控制小球; 撞水果得分
+ * (苹果+1 / 香蕉+2+5s / 西瓜+5), 撞炸弹 -3 且 -10s; 静态障碍柱反弹。
+ * 单局初始 30s, 得分升难度(Lv1~Lv4), 5s 内连吃 3 个双倍连击。
+ * 炸弹闪烁仅为预警, 全程可撞(不可穿模)。TOP5 入 VM。
  */
 #include "app_config.h"
 #include "system/includes.h"
@@ -21,8 +21,11 @@
 #if (defined TCFG_IMU_ENABLE) && TCFG_IMU_ENABLE
 
 #define BALL_MS          33      /* 物理步进/重绘周期 */
-#define BALL_COUNTDOWN_S 60      /* 单局时长 */
+#define BALL_COUNTDOWN_S 30      /* 单局初始时长 */
+#define BALL_TIME_CAP_S  99      /* 加时上限, 避免无限拖 */
 #define BALL_COMBO_MS    5000    /* 连击窗口 */
+#define BALL_BANANA_BONUS_S 5
+#define BALL_BOMB_PENALTY_S 10
 
 #define BALL_TOP_H       36      /* 顶栏高度, canvas 在其下 */
 #define GW               LCD_W
@@ -45,10 +48,10 @@
 
 /* ---- 物体 ---- */
 enum fruit_kind {
-    FRUIT_APPLE = 0,             /* +1 */
-    FRUIT_ORANGE,                /* +2 */
-    FRUIT_MELON,                 /* +5 */
-    FRUIT_BOMB,                  /* -3 */
+    FRUIT_APPLE = 0,             /* +1 分 */
+    FRUIT_BANANA,                /* +2 分, +5s */
+    FRUIT_MELON,                 /* +5 分 */
+    FRUIT_BOMB,                  /* -3 分, -10s */
     FRUIT_KIND_NUM
 };
 
@@ -57,7 +60,7 @@ struct fruit {
     u8 kind;
     s16 x, y;                    /* 圆心 */
     u16 r;
-    u16 arm_ms;                  /* 炸弹激活倒计时(0=已激活) */
+    u16 arm_ms;                  /* 炸弹预警闪烁剩余 ms(仅视觉, 可撞) */
 };
 
 struct obstacle {
@@ -87,6 +90,7 @@ static struct {
     u8 playing;                  /* 1=局中 */
     u16 score;
     u16 remain_s;
+    u16 elapsed_s;               /* 已玩秒数(加时后仍正确记排行) */
     u8 lv;                       /* 1..4 */
     u8 combo_n;
     u32 combo_last_ms;
@@ -94,9 +98,6 @@ static struct {
     float bx, by;                /* 球心 */
     float vx, vy;
     u8 ball_r;
-
-    float zero_ax, zero_ay;      /* 进入 app 时的加速度零点 */
-    u8 zeroed;
 
     struct fruit fr;             /* 场上活动目标(单目标制) */
     struct obstacle obs[3];
@@ -216,10 +217,15 @@ static void draw_fruit(lv_color_t *fb, const struct fruit *f)
         draw_circle(fb, f->x, f->y, f->r, col_hex(0xE53935));
         draw_rect(fb, f->x - 1, f->y - f->r - 4, 3, 5, col_hex(0x6D4C41));
         break;
-    case FRUIT_ORANGE:
-        draw_circle(fb, f->x, f->y, f->r, col_hex(0xFB8C00));
-        draw_circle(fb, f->x - f->r / 3, f->y - f->r / 3, f->r / 4,
-                    col_hex(0xFFD180));
+    case FRUIT_BANANA:
+        /* 香蕉: 黄椭圆体 + 两端深色 */
+        draw_circle(fb, f->x, f->y, f->r, col_hex(0xFDD835));
+        draw_circle(fb, f->x - f->r / 2, f->y + f->r / 4, f->r / 3,
+                    col_hex(0xF9A825));
+        draw_circle(fb, f->x + f->r / 2, f->y - f->r / 4, f->r / 4,
+                    col_hex(0xF9A825));
+        draw_rect(fb, f->x + f->r / 2, f->y - f->r - 2, 3, 4,
+                  col_hex(0x6D4C41));
         break;
     case FRUIT_MELON:
         draw_circle(fb, f->x, f->y, f->r, col_hex(0x43A047));
@@ -230,7 +236,7 @@ static void draw_fruit(lv_color_t *fb, const struct fruit *f)
         break;
     case FRUIT_BOMB:
         if (f->arm_ms) {
-            /* 未激活: 灰色闪烁提示 */
+            /* 预警闪烁(仍可碰撞) */
             lv_color_t c = ((lv_tick_get() / 200) & 1) ? col_hex(0x616161)
                            : col_hex(0xFF5252);
             draw_circle(fb, f->x, f->y, f->r, c);
@@ -318,13 +324,13 @@ static void fruit_spawn(void)
     if (roll < (G.lv - 1) * 10u + (G.lv >= 2 ? 2 : 0)) {
         G.fr.kind = FRUIT_BOMB;
         G.fr.r = 12;
-        G.fr.arm_ms = 1500;              /* 1.5s 后才可撞 */
+        G.fr.arm_ms = 1500;              /* 1.5s 预警闪烁, 全程可撞 */
     } else {
-        G.fr.kind = FRUIT_APPLE;         /* 60/30/10 加权 */
+        G.fr.kind = FRUIT_APPLE;         /* 苹果55 / 香蕉30 / 西瓜15 */
         roll = rand() % 100;
         if (roll < 30) {
-            G.fr.kind = FRUIT_ORANGE;
-        } else if (roll < 40) {
+            G.fr.kind = FRUIT_BANANA;
+        } else if (roll < 45) {
             G.fr.kind = FRUIT_MELON;
         }
         G.fr.r = (G.fr.kind == FRUIT_MELON) ? 16 : 12;
@@ -361,14 +367,38 @@ static void ball_set_level(u8 lv)
     lv_label_set_text_fmt(G.s_lbl_lv, "LV%d", G.lv);
 }
 
+static void fruit_add_time(u16 sec)
+{
+    u32 t = (u32)G.remain_s + sec;
+
+    if (t > BALL_TIME_CAP_S) {
+        t = BALL_TIME_CAP_S;
+    }
+    G.remain_s = (u16)t;
+    lv_label_set_text_fmt(G.s_lbl_time, "%ds", G.remain_s);
+}
+
+static void fruit_sub_time(u16 sec)
+{
+    if (G.remain_s > sec) {
+        G.remain_s = (u16)(G.remain_s - sec);
+    } else {
+        G.remain_s = 0;
+    }
+    lv_label_set_text_fmt(G.s_lbl_time, "%ds", G.remain_s);
+}
+
 static void fruit_eat(u8 hit_bomb)
 {
     s16 pts;
     u8 combo = 0;
+    u16 bonus_s = 0;
 
     if (hit_bomb) {
         pts = -3;
         G.combo_n = 0;
+        fruit_sub_time(BALL_BOMB_PENALTY_S);
+        watch_ui_toast("-10s");
     } else {
         u32 now = lv_tick_get();
         if (G.combo_n && now - G.combo_last_ms < BALL_COMBO_MS &&
@@ -382,8 +412,9 @@ static void fruit_eat(u8 hit_bomb)
         case FRUIT_APPLE:
             pts = 1;
             break;
-        case FRUIT_ORANGE:
+        case FRUIT_BANANA:
             pts = 2;
+            bonus_s = BALL_BANANA_BONUS_S;
             break;
         default:
             pts = 5;
@@ -392,6 +423,8 @@ static void fruit_eat(u8 hit_bomb)
         if (combo) {
             pts *= 2;
             watch_ui_toast("COMBO x2!");
+        } else if (bonus_s) {
+            watch_ui_toast("+5s");
         }
     }
 
@@ -402,11 +435,14 @@ static void fruit_eat(u8 hit_bomb)
     }
     lv_label_set_text_fmt(G.s_lbl_score, "%d", G.score);
 
-    /* 难度推进 + 续命 */
-    u8 old = G.lv;
+    if (bonus_s) {
+        fruit_add_time(bonus_s);
+    }
+
+    /* 难度推进 */
     if (G.score >= 24 && G.lv < 4) {
         ball_set_level(4);
-        G.remain_s += 8;
+        fruit_add_time(8);
         watch_ui_toast("LV4! +8s");
     } else if (G.score >= 16 && G.lv < 3) {
         ball_set_level(3);
@@ -414,9 +450,6 @@ static void fruit_eat(u8 hit_bomb)
     } else if (G.score >= 8 && G.lv < 2) {
         ball_set_level(2);
         watch_ui_toast("LV2!");
-    }
-    if (!old || G.lv != old) {
-        /* noop, set_level 已刷 LV 标签 */
     }
     fruit_spawn();
 }
@@ -432,14 +465,10 @@ static void ball_step(void)
     u8 i;
 
     if (imu_read_si(&si) == 0) {
-        if (!G.zeroed) {
-            G.zero_ax = si.ax;
-            G.zero_ay = si.ay;
-            G.zeroed = 1;
-        }
-        /* 轴对调后左右仍反, 再取反 X; 上下已正确保持 */
-        ax = -(si.ay - G.zero_ay) * BALL_ACC;
-        ay = -(si.ax - G.zero_ax) * BALL_ACC;
+        /* 绝对水平: 平放时 ax/ay≈0g 即为零点, 不再采样进场姿态.
+         * 轴对调后左右仍反, 再取反 X; 上下已正确保持 */
+        ax = -si.ay * BALL_ACC;
+        ay = -si.ax * BALL_ACC;
         G.vx = G.vx * fric + ax * BALL_MS / 1000.0f;
         G.vy = G.vy * fric + ay * BALL_MS / 1000.0f;
         if (G.vx > maxv) {
@@ -519,19 +548,18 @@ static void ball_step(void)
         }
     }
 
-    /* 目标碰撞 */
+    /* 目标碰撞: 炸弹预警闪烁期也可撞, 不可穿模 */
     if (G.fr.used) {
         if (G.fr.arm_ms) {
             G.fr.arm_ms = (u16)((G.fr.arm_ms > BALL_MS) ?
                                 (G.fr.arm_ms - BALL_MS) : 0);
-        } else {
-            dx = (float)G.bx - G.fr.x;
-            dy = (float)G.by - G.fr.y;
-            dist = sqrtf(dx * dx + dy * dy);
-            minv = G.ball_r + G.fr.r;
-            if (dist < minv) {
-                fruit_eat(G.fr.kind == FRUIT_BOMB);
-            }
+        }
+        dx = (float)G.bx - G.fr.x;
+        dy = (float)G.by - G.fr.y;
+        dist = sqrtf(dx * dx + dy * dy);
+        minv = G.ball_r + G.fr.r;
+        if (dist < minv) {
+            fruit_eat(G.fr.kind == FRUIT_BOMB);
         }
     }
 
@@ -564,6 +592,9 @@ static void ball_tick(lv_timer_t *t)
         sub = 0;
         if (G.remain_s > 0) {
             G.remain_s--;
+        }
+        if (G.elapsed_s < 0xFFFFu) {
+            G.elapsed_s++;
         }
         lv_snprintf(buf, sizeof(buf), "%ds", G.remain_s);
         lv_label_set_text(G.s_lbl_time, buf);
@@ -614,7 +645,7 @@ static void show_result(void)
                           LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(box, 4, 0);
 
-    rank = ball_rank_push(G.score, BALL_COUNTDOWN_S - G.remain_s);
+    rank = ball_rank_push(G.score, G.elapsed_s);
 
     tt = lv_label_create(box);
     lv_obj_set_style_text_font(tt, &lv_font_watch_16_cn, 0);
@@ -659,8 +690,8 @@ static void ball_reset(lv_obj_t *canvas)
 {
     G.score = 0;
     G.remain_s = BALL_COUNTDOWN_S;
+    G.elapsed_s = 0;
     G.combo_n = 0;
-    G.zeroed = 0;
     memset(G.trail_x, 0, sizeof(G.trail_x));
     memset(G.trail_y, 0, sizeof(G.trail_y));
     G.bx = GW / 2.0f;
@@ -758,7 +789,7 @@ lv_obj_t *app_ball_create(lv_obj_t *parent)
     G.s_lbl_time = lv_label_create(bar);
     lv_obj_set_style_text_font(G.s_lbl_time, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(G.s_lbl_time, lv_color_hex(BALL_COL_TIME), 0);
-    lv_label_set_text(G.s_lbl_time, "60s");
+    lv_label_set_text(G.s_lbl_time, "30s");
     lv_obj_align(G.s_lbl_time, LV_ALIGN_CENTER, 0, 0);
 
     G.s_lbl_lv = lv_label_create(bar);

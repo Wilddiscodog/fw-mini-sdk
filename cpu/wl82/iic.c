@@ -175,6 +175,10 @@ static int iic_open(struct iic_device *iic)
     value |= port->value;
     writel(hw->occupy_reg, value);
 
+    if (port->clk_pin == IO_PORT_USB_DPA && port->dat_pin == IO_PORT_USB_DMA) {
+        usb_iomode(0, 1);
+    }
+
     gpio_direction_output(port->clk_pin, 1);
     gpio_direction_output(port->dat_pin, 1);
     gpio_set_pull_up(port->clk_pin, 1);

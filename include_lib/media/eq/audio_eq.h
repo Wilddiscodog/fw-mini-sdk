@@ -3,7 +3,7 @@
 
 #include "generic/typedef.h"
 #include "generic/list.h"
-#include "asm/hw_eq.h"
+#include "asm/eq.h"
 
 #define EQ_CHANNEL_MAX      2
 #define EQ_SR_IDX_MAX       9
@@ -168,7 +168,7 @@ void audio_eq_set_output_handle(struct audio_eq *eq, int (*output)(void *priv, v
    @note
 */
 /*----------------------------------------------------------------------------*/
-void audio_eq_set_output_buf(struct audio_eq *eq, s16 *buf, u32 len);
+void audio_eq_set_output_buf(struct audio_eq *eq, s16 *buf);
 
 /*----------------------------------------------------------------------------*/
 /**@brief    eq设置采样率

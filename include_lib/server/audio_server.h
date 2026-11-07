@@ -32,6 +32,12 @@ enum {
     AUDIO_ATTR_DEC_MUTE_EN = BIT(10),    /*!< 当前解码输出mute使能 */
     AUDIO_ATTR_UNLIMITED_REPEAT = BIT(11), /*!< 当前解码无限循环播放使能 */
     AUDIO_ATTR_DEC_SOLO    = BIT(12),    /*!< 当前解码强制不走叠音流程 */
+    AUDIO_ATTR_DIGITAL_FADE_INOUT = BIT(13), /*!< 数字音量淡入淡出，解码开始时使用 */
+    AUDIO_ATTR_SDRAM_PROMPT = BIT(14),   /*!< 播放存储在sdram的提示音 */
+    AUDIO_ATTR_NO_WAIT_READY = BIT(15),  /*!< 当前解码开始时不需等待解码数据缓存 */
+    AUDIO_ATTR_OPUS_OGG_TYPE = BIT(16),  /*!< ogg封装的opus数据 */
+    AUDIO_ATTR_OPUS_RAWDTF_TYPE = BIT(17),  /*!< opus为raw数据，带8字节packet头(4字节大端包长+4字节range校验值) */
+    AUDIO_ATTR_OPUS_CBR_PKTLEN_TYPE = BIT(18),  /*!< opus为百度无头封装格式，需要设置cbr包长,数据为raw数据+CBR_OPUS包长 */
 };
 
 /**
@@ -40,6 +46,7 @@ enum {
 enum {
     AUDIO_EFFECT_SPECTRUM_FFT = BIT(0),   /*!< 对音频解码数据进行频谱运算 */
     AUDIO_EFFECT_DIGITAL_VOL  = BIT(1),   /*!< 对音频解码数据进行数字音量调整 */
+    AUDIO_EFFECT_VIRTUAL_BASS = BIT(2),   /*!< 对音频解码数据进行虚拟低音 */
 };
 
 /**
@@ -121,6 +128,8 @@ struct audio_finfo {
     int sample_rate;  /*!< 采样率 */
     int bit_rate;     /*!< 比特率 */
     int total_time;   /*!< 总时间 */
+    u8 opus_dec_type;
+    int opus_pkt_len;
 };
 
 /**
@@ -162,6 +171,7 @@ struct audio_dec_output_ops {
     void *(*get_buf)(void *priv, u32 *len);          /*!< 获取buf空间 */
     void (*put_buf)(void *priv, void *buf, u32 len); /*!< 推送buf空间 */
     const struct audio_vfs_ops *vfs_ops;             /*!< 音频虚拟文件操作句柄指针 */
+    int (*set_audio_info)(void *, struct audio_finfo *info);    /*!< 设置解码器的音频信息 */
 };
 
 /**
@@ -248,12 +258,14 @@ struct audio_dec_req {
     u8 cmd;                                                                       /*!< 请求操作类型 */
     u8 status;																	  /*!< 请求后返回的解码状态 */
     u8 channel;                                                                   /*!< 解码通道数 */
-    u8 volume;                                                                    /*!< 解码音量(0-100) */
+    u8 volume;                                                                    /*!< 模拟音量(0-100) */
+    u8 digital_volume;                                                            /*!< 数字音量初始值(0-100) */
     u8 priority;                                                                  /*!< 解码优先级，暂时没用到 */
     u8 speedV;                                                                    /*!< >80是变快，<80是变慢，建议范围：30到130 */
     u16 repeat_num;                                                               /*!< 循环播放次数 */
     u16 pitchV;															          /*!< >32768是音调变高，<32768音调变低，建议范围20000到50000 */
-    u16 attr;                                                                     /*!< 解码附加属性 */
+    u32 attr;                                                                     /*!< 解码附加属性 */
+    u32 opus_cbr_pktlen;                                                          /*!< opus cbr 帧长 */
     u16 effect;                                                                   /*!< 音效附加属性 */
     u32 output_buf_len;                                                           /*!< 解码buffer大小 */
     u32 orig_sr;                                                                  /*!< 强制变采样前的原始采样率，当混响使能强制变采样时才使用 */
@@ -274,6 +286,7 @@ struct audio_dec_req {
     int (*dec_callback)(u8 *buf, u32 len, u32 sample_rate, u8 ch_num);            /*!< 解码后的PCM数据回调 */
     int (*dec_sync)(void *priv, u32 data_size, u16 *in_rate, u16 *out_rate);      /*!< 解码对端采样率同步，常用于蓝牙解码 */
     void *get_hdl;                                                                /*!< 获取私有句柄  */
+    void *sync_priv;                                                              /*!< 解码对端采样率同步私有指针 */
 };
 
 /**
@@ -290,16 +303,19 @@ struct audio_enc_req {
     u8 vad_auto_refresh : 1;                  /*!< 是否自动刷新VAD状态，赋值1表示SPEAK_START->SPEAK_STOP- >SPEAK_START->SPEAK_STOP->....循环 */
     u8 direct2dac : 1;                        /*!< AUDIO_AD直通DAC功能 */
     u8 high_gain : 1;                         /*!< 直通DAC时是否打开模拟增益调整 */
-    u8 amr_src : 1;                           /*!< amr编码时的强制16k变采样为8kpcm数据，因为amr编码器暂时只支持8k编码 */
-    u8 aec_enable : 1;                        /*!< AEC回声消除功能开关，常用于蓝牙通话 */
+    u8 aec_enable : 2;                        /*!< AEC回声消除功能开关，常用于蓝牙通话 */
     u8 ch_data_exchange : 1;                  /*!< 用于AEC差分回采时和MIC的通道数据交换  */
 
     u8 no_header : 1;                         /*!< 用于opus编码时是否需要添加头部格式 */
     u8 vir_data_wait : 1;                     /*!< 虚拟编码时是否允许丢失数据 */
     u8 no_auto_start : 1;                     /*!< 请求AUDIO_ENC_OPEN时不自动运行编码器，需要主动调用AUDIO_ENC_START */
-    u8 sample_depth : 3;                      /*!< 采样深度16bit或者24bit */
+    u8 amr_src : 1;                           /*!< amr编码时的强制16k变采样为8kpcm数据，因为amr编码器暂时只支持8k编码 */
     u8 dns_enable : 1;                        /*!< dns降噪算法 0:不使用 1:使用 */
     u8 wait_sem : 1;                          /*!< 编码器数据输出时如果缓存已满即等待信号量 */
+    u8 sample_depth;                          /*!< 采样深度16bit或者24bit */
+    u8 format_mode;                           /*!< 编码模式设置 opus: 0:百度无头. 1:酷狗_eng+range. 2:ogg封装,pc软件可播放. 3:size+rangeFinal. 源码可兼容版本. */
+    u8 complexity;                            /*!< 编码复杂度 opus-ogg  0.1.2.3. 3质量最好.速度要求最高*/
+    u8 frame_ms;                              /*!< opus-ogg编码帧时 20|40|60|80|100ms*/
     u16 vad_start_threshold;                  /*!< VAD连续检测到声音的阈值，表示开始说话，回调AUDIO_SERVER_EVENT_SPEAK_START，单位ms，填0使用库内默认值 */
     u16 vad_stop_threshold;                   /*!< VAD连续检测到静音的阈值, 表示停止说话，回调AUDIO_SERVER_EVENT_SPEAK_STOP，单位ms,填0使用库内默认值 */
     u16 frame_size;                           /*!< 编码器输出的每一帧帧长大小，只有pcm格式编码时才有效 */
@@ -309,12 +325,13 @@ struct audio_enc_req {
     u32 output_buf_len;                       /*!< 编码buffer大小 */
     u32 sample_rate;                          /*!< 编码采样率 */
     u32 msec;                                 /*!< 编码时长，填0表示一直编码，单位ms，编码结束会回调AUDIO_SERVER_EVENT_END消息 */
+    u32 attr;                                 /*!< 编码附加属性,用于使能eq */
     FILE *file;                               /*!< 编码输出文件句柄 */
     u8 *output_buf;                           /*!< 编码buffer，默认填NULL，由编码器自动分配和释放资源 */
     const char *format;                       /*!< 编码格式 */
     const char *sample_source;                /*!< 采样源，支持"mic","linein","plnk0","plnk1"，"virtual"，"iis0"，"iis1"，"spdif" */
     const struct audio_vfs_ops *vfs_ops;      /*!< 虚拟文件操作句柄 */
-    u32(*read_input)(u8 *buf, u32 len);       /*!< 用于虚拟采样源"virtual"编码时的数据读取操作读输入buf及其长度 */
+    int(*read_input)(u8 *buf, u32 len);       /*!< 用于虚拟采样源"virtual"编码时的数据读取操作读输入buf及其长度，返回负值自动停止编码并回调编码结束的事件 */
     void *aec_attr;                           /*!< AEC回声消除算法配置参数 */
 };
 
@@ -339,7 +356,8 @@ struct audio_package_ops {
 };
 
 struct audio_effect_ops {
-    int effect;
+    u16 effect;
+    u8 pretreatment;
     void *(*open)(void *priv, void *param);
     int (*run)(void *priv, s16 *data, int len, int sample_rate);
     int (*close)(void *priv);

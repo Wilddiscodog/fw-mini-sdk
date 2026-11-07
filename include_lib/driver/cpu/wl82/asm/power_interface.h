@@ -5,7 +5,7 @@
 
 #define NEW_BASEBAND_COMPENSATION       0
 
-#define AT_VOLATILE_RAM             //AT(.volatile_ram)
+#define AT_VOLATILE_RAM             AT(.volatile_ram)
 #define AT_VOLATILE_RAM_CODE        AT(.volatile_ram_code)
 #define AT_NON_VOLATILE_RAM         //AT(.non_volatile_ram)
 #define AT_NON_VOLATILE_RAM_CODE    //AT(.non_volatile_ram_code)
@@ -60,6 +60,7 @@ enum {
 };
 
 //Macro for VDDIOM_VOL_SEL
+//如果使用内封sdram封装的芯片，并且VDDIO由芯片内部供电, 需要保证大于等于3.3V
 enum {
     VDDIOM_VOL_28V = 0,
     VDDIOM_VOL_29V,
@@ -69,6 +70,7 @@ enum {
     VDDIOM_VOL_33V,
     VDDIOM_VOL_34V,
     VDDIOM_VOL_35V,
+    VDDIOM_VOL_MAX,
 };
 
 //Macro for VDDIOW_VOL_SEL
@@ -77,6 +79,7 @@ enum {
     VDDIOW_VOL_24V,
     VDDIOW_VOL_28V,
     VDDIOW_VOL_32V,
+    VDDIOW_VOL_MAX,
 };
 
 struct low_power_param {

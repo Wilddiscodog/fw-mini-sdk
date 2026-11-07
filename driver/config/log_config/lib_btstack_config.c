@@ -25,3 +25,10 @@ const int CONFIG_BTSTACK_SUPPORT_AAC = 1;
 const int CONFIG_BTSTACK_SUPPORT_AAC = 0;
 #endif
 
+#if RCSP_MODE
+const int config_rcsp_stack_enable = 1;
+#else
+const int config_rcsp_stack_enable = 0;
+#endif
+
+

@@ -19,6 +19,7 @@
 #define     CDC_CLASS           0x00000010
 #define     UVC_CLASS           0x00000020
 #define     CUSTOM_HID_CLASS    0x00000040
+#define     PRINTER_CLASS       0x00000080
 
 #define     AUDIO_CLASS         (SPEAKER_CLASS|MIC_CLASS)
 
@@ -46,6 +47,9 @@
 #endif
 #ifndef TCFG_HOST_AUDIO_ENABLE
 #define TCFG_HOST_AUDIO_ENABLE  0
+#endif
+#ifndef TCFG_HOST_CDC_ENABLE
+#define TCFG_HOST_CDC_ENABLE 0
 #endif
 #ifndef TCFG_CHARGE_ENABLE
 #define TCFG_CHARGE_ENABLE     0
@@ -78,7 +82,7 @@
 #endif/*AUDIO_PCM_DEBUG*/
 
 #if TCFG_UDISK_ENABLE || TCFG_HID_HOST_ENABLE || TCFG_AOA_ENABLE || TCFG_ADB_ENABLE || TCFG_HOST_AUDIO_ENABLE || \
-	TCFG_HOST_UVC_ENABLE || TCFG_HOST_WIRELESS_ENABLE
+	TCFG_HOST_UVC_ENABLE || TCFG_HOST_WIRELESS_ENABLE || TCFG_HOST_CDC_ENABLE
 #define MOUNT_RETRY                         3
 #define MOUNT_RESET                         40
 #define MOUNT_TIMEOUT                       50
@@ -137,6 +141,12 @@
 #define TCFG_USB_SLAVE_UVC_ENABLE           1
 #else
 #define TCFG_USB_SLAVE_UVC_ENABLE           0
+#endif
+
+#if (USB_DEVICE_CLASS_CONFIG & PRINTER_CLASS) || (USB_DEVICE_CLASS_CONFIG_2_0 & PRINTER_CLASS)
+#define TCFG_USB_SLAVE_PRINTER_ENABLE       1
+#else
+#define TCFG_USB_SLAVE_PRINTER_ENABLE       0
 #endif
 
 #else  /* TCFG_PC_ENABLE == 0*/

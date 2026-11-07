@@ -65,4 +65,9 @@ void wdt_enable(void);
  */
 void wdt_disable(void);
 
+/**
+ * @brief wdt_reset_enable：看门狗溢出直接系统复位
+ */
+void wdt_reset_enable(void);
+
 #endif

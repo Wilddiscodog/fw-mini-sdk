@@ -65,7 +65,7 @@ struct adc_platform_data {
  *
  * @param source 采样源 "mic" "linein"
  * @param channel_bit_map 通道选择
- * @param gain 模拟增益  mic:0-31 linein:0-15
+ * @param gain 模拟增益  0-100
  */
 void adc_multiplex_set_gain(const char *source, u8 channel_bit_map, u8 gain);
 
@@ -126,7 +126,7 @@ void adc_set_data_handler(void *priv, void (*handler)(void *, u8 *data, int len)
  * @brief ADC增益设置
  *
  * @param source 采样源 "mic" "linein"
- * @param gain 模拟增益  mic:0-31 linein:0-15
+ * @param gain 模拟增益  0-100
  */
 int adc_set_gain(const char *source, u8 gain);
 

@@ -33,6 +33,15 @@ typedef struct _boot_info {
     struct bt_mac_addr mac;
 } BOOT_INFO;
 
+typedef struct sdram_config_info {//uboot相关结构体
+    u32 sdram_config_addr;
+    u32 sdram_config_val;
+} SDRAM_CFG_INFO;
+
+typedef struct ex_app_info {
+    u32 base_addr;
+} EX_APP_INFO;
+
 //=====================================
 struct flash_head {
     u16 crc;

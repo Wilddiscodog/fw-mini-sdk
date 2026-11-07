@@ -164,8 +164,10 @@ int walkie_av_start(void)
         walkie_av_stop();
         return -1;
     }
-    server_register_event_handler(s_av.enc, NULL, av_event);
-    server_register_event_handler(s_av.dec, NULL, av_event);
+    /* 切勿把事件注册到 lcd_test: PTT 在 UI 任务里 server_request(ENC_CLOSE)
+     * 时 wait_enc_stop 会等事件, 事件又等 lcd_test → 死锁卡死. */
+    server_register_event_handler_to_task(s_av.enc, NULL, av_event, "app_core");
+    server_register_event_handler_to_task(s_av.dec, NULL, av_event, "app_core");
 
     memset(&req, 0, sizeof(req));
     req.dec.cmd = AUDIO_DEC_OPEN;

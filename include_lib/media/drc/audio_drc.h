@@ -24,8 +24,8 @@ struct audio_drc_param {
     u8 channels;                //通道数 (channels|(L_wdrc))或(channels|(R_wdrc))
     u8 start_point;             //
     u8 spilt;                   //声道效果独立使能
-    CrossOverParam_TOOL_SET *crossover;
-    wdrc_struct_TOOL_SET *wdrc; //[0]low  [1]mid  [2]high  [3]whole
+    CrossOverParam_TOOL_SET *crossover;	//分频器
+    wdrc_struct_TOOL_SET *wdrc; //drc: [0]low  [1]mid  [2]high  [3]whole
 };
 
 struct audio_drc {

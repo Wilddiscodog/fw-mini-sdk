@@ -94,9 +94,11 @@ static u32 setup_endpoint(struct usb_device_t *usb_device, struct usb_ctrlreques
     u8 *tx_payload = usb_get_setup_buffer(usb_device);
 
 #if TCFG_USB_SLAVE_AUDIO_ENABLE
+#if (USB_AUDIO_VERSION == USB_AUDIO_VERSION_1_0)
     if (uac_setup_endpoint(usb_device, req)) {
         return 1;
     }
+#endif
 #endif
     u32 ep = LOBYTE(req->wIndex) & 0x0f;
     if (check_ep_vaild(ep) == 0) {
@@ -122,7 +124,10 @@ static u32 setup_device(struct usb_device_t *usb_device, struct usb_ctrlrequest 
                 if (usb_device->bDeviceStates == USB_DEFAULT) {
                     ret = 0;
                 } else {
-                    usb_set_data_payload(usb_device, req, user_stirng, sizeof(user_stirng));
+                    u8 *ptr = usb_set_data_payload(usb_device, req, user_stirng, sizeof(user_stirng));
+                    if (usb_id == 1) {
+                        ptr[18] = '2';
+                    }
                     ret = 1;
                 }
                 break;

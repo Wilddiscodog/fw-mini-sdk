@@ -932,6 +932,9 @@ typedef struct xSTATIC_TCB {
 #endif
 #if( configNUM_THREAD_LOCAL_STORAGE_POINTERS > 0 )
     void			*pvDummy15[ configNUM_THREAD_LOCAL_STORAGE_POINTERS ];
+#if ( configTHREAD_LOCAL_STORAGE_DELETE_CALLBACKS )
+    void            *pvDummyLocalStorageCallBack[ configNUM_THREAD_LOCAL_STORAGE_POINTERS ];
+#endif
 #endif
 #if ( configGENERATE_RUN_TIME_STATS == 1 )
     uint16_t		ulDummy16_0; //U16 是由于历史原因为了向上兼容结构体大小,因此65秒内打印cpu使用率才正确

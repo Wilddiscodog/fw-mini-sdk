@@ -12,6 +12,11 @@
 #define SYS_NET_EVENT 		    0x0008
 #define SYS_BT_EVENT 		    0x0010
 
+struct rcsp_event {
+    u8 event;
+    u8 args[6];
+    u8 size;
+};
 
 struct sys_event {
     u16 type;

@@ -45,6 +45,7 @@ struct usb_device_t {
     u8 wDeviceClass;    // 设备类
     u8 bRemoteWakup: 1;
     u8 baddr_config: 1;
+    u8 bSpeed;          //速率：如USB_SPEED_FULL
 #if USB_MAX_HW_NUM == 2
     u8 usb_id: 1;
     u8 res: 5;
@@ -56,6 +57,7 @@ struct usb_device_t {
 typedef u32(*itf_hander)(struct usb_device_t *usb_device, struct usb_ctrlrequest *);
 typedef void(*itf_reset_hander)(struct usb_device_t *, u32 itf);
 typedef void(*usb_interrupt)(struct usb_device_t *, u32 ep);
+typedef void(*usb_sof_ep_hander)(struct usb_device_t *, u32 ep, u32 frame);
 typedef u32(*desc_config)(const usb_dev usb_id, u8 *ptr, u32 *cur_itf_num);
 
 struct usb_setup_t {

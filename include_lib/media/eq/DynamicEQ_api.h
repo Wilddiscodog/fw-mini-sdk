@@ -1,7 +1,7 @@
 #ifndef DYNAMICEQ_API_H
 #define DYNAMICEQ_API_H
 
-#include "asm/hw_eq.h"
+#include "asm/eq.h"
 
 #ifdef WIN32
 

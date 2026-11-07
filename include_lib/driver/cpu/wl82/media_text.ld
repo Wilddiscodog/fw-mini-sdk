@@ -46,22 +46,31 @@
         *(.specshow_sparse_const)
 #endif
 
-#if defined CONFIG_LC3_ENC_ENABLE || defined CONFIG_LC3_DEC_ENABLE
+#ifdef CONFIG_VIRTUAL_BASS_ENABLE
+		*(.audio_vbass_code)
+		*(.audio_vbass_const)
+		*(.vbss_code)
+		*(.vbss_const)
+		*(.vbss_sparse_code)
+		*(.vbss_sparse_const)
+#endif
+
+#if defined CONFIG_JLA_ENC_ENABLE || defined CONFIG_JLA_DEC_ENABLE
         . = ALIGN(4);
-        *(.lc3_codec_c_const)
-        *(.lc3_codec_ari_c_const)
+        *(.jla_codec_c_const)
+        *(.jla_codec_ari_c_const)
 
-        *(.lc3_codec_c_sparse_code)
-        *(.lc3_codec_ari_c_code)
-        *(.lc3_codec_d_code)
-        *(.lc3_codec_c_code)
-        *(.lc3_codec_e_code)
+        *(.jla_codec_c_sparse_code)
+        *(.jla_codec_ari_c_code)
+        *(.jla_codec_d_code)
+        *(.jla_codec_c_code)
+        *(.jla_codec_e_code)
 
-        *(.lc3_codec_t8k_code)
-        *(.lc3_codec_t16k_code)
-        *(.lc3_codec_t24k_code)
-        *(.lc3_codec_t32k_code)
-        *(.lc3_codec_t441k_code)
+        *(.jla_codec_t8k_code)
+        *(.jla_codec_t16k_code)
+        *(.jla_codec_t24k_code)
+        *(.jla_codec_t32k_code)
+        *(.jla_codec_t441k_code)
 #endif
 
 #if defined CONFIG_ADPCM_ENC_ENABLE
@@ -84,6 +93,24 @@
         *(.wtg_decv2_sparse_code)
         *(.wtgv2dec_const)
         *(.wtgv2dec_str)
+        
+        *(.ogg_opus_dec.text.cache.L2.run)
+        *(.ogg_opus_dec.text)
+        *(.ogg_opus_dec.text.cache.L2.const)
+#endif
+
+#if defined CONFIG_OPUS_ENC_ENABLE
+        *(.opus_silk_enc.data)
+        *(.opus_silk_enc.data.bss)
+        *(.opus_silk_enc.text.cache.L2.const)
+        *(.opus_silk_enc.text.cache.L2.run)
+
+        *(.opus_stenc.data.bss)
+        *(.opus_stenc.data)
+        *(.opus_stenc.text.cache.L2.const)
+        *(.opus_stenc.text.cache.L2.run)
+        *(.opus_stenc.text)
+        *(.opus_stenc.text.const)
 #endif
 
 #if defined CONFIG_MP3_DEC_ENABLE
@@ -105,13 +132,13 @@
         *(.compressor_sparse_const)
         *(.limiter_sparse_code)
         *(.limiter_sparse_const)
-        *(.crossOver_sparse_code)
         *(.crossOver_sparse_const)
         *(.limiter_code)
         *(.limiter_const)
         *(.compressor_code)
         *(.compressor_const)
 #endif
+        *(.crossOver_sparse_code)
 	
 #if defined CONFIG_WAV_DEC_ENABLE
         *(.wav_dec_sparse_code)
@@ -132,4 +159,29 @@
         *(.ape_dec_const)
         *(.ape_dec_sparse_code)
         *(.ape_dec_sparse_const)
+#endif
+
+#ifdef CONFIG_MSBC_DEC_ENABLE
+        *(.bt_audioplc_code)
+        *(.bt_audioplc_sparse_code)
+        *(.bt_audioplc_const)
+        *(.plc_code)
+        *(.plc_const)
+#endif
+
+#if defined CONFIG_BT_ENABLE
+        *(.sbc_eng_code)
+#endif
+
+#if defined CONFIG_ASR_ALGORITHM && defined CONFIG_NO_SDRAM_ENABLE
+        . = ALIGN(4);
+        *(.libaisp.rodata)
+        *(.libaisp.text)
+#endif
+
+#if defined CONFIG_MIDI_CTRL_DEC_ENABLE
+    *(.midi.text.cache.L2.code)
+    *(.midi.text.cache.L2.const)
+    *(.midi.text)
+    *(.midi.text.const)
 #endif

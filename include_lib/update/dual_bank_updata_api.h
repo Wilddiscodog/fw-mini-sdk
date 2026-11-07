@@ -1,6 +1,21 @@
 #ifndef _DUAL_BANK_API_H_
 #define _DUAL_BANK_API_H_
 
+typedef struct BootInfo {
+    u32 codeLength;  //code总长度
+    u32 baseAddress; //code基地址
+    u16 version;     //当前版本
+};
+
+typedef void (*update_process_notify)(void *priv);
+
+typedef struct _update_file_info {
+    char FileName[16];
+    u32 file_size;
+    u32 finish_len;
+} update_file_info;
+
+
 /* @brief:Api for getting the buffer size for temporary storage
  */
 u32 get_dual_bank_passive_update_max_buf(void);
@@ -68,17 +83,14 @@ int flash_update_clr_boot_info(u8 type);
 u32 dual_bank_update_read_data(u32 offset, u8 *read_buf, u32 read_len);
 
 
-typedef struct BootInfo {
-    u32 codeLength;  //code总长度
-    u32 baseAddress; //code基地址
-    u16 version;     //当前版本
-};
 
 /* @brief:get current startup information
  * @param info: get information
    @returns: if 0, succeed, other value means to fail.
  */
 int get_current_boot_info(struct BootInfo *info);
+
+
 
 #endif
 

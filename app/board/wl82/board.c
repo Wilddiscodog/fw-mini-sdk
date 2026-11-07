@@ -18,6 +18,14 @@
 #if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
 #include "asm/dac.h"
 #endif
+#if (defined MINI_WIFI_SUPPORT) && MINI_WIFI_SUPPORT
+#include "wifi/wifi_connect.h"
+#endif
+#if (defined MINI_BT_SUPPORT) && MINI_BT_SUPPORT
+#include "btstack/avctp_user.h"
+#include "btctrler/btctrler_task.h"
+#include "btstack/btstack_task.h"
+#endif
 
 // *INDENT-OFF*
 
@@ -175,7 +183,7 @@ static const struct low_power_param power_param = {
     .vlvd_value		= VLVD_SEL_25V,
 };
 
-/* 软关机/休眠唤醒: ADKEY 同脚 PB01 (按下拉低 → 下降沿唤醒) */
+/* 软关机/休眠唤醒: ADKEY 同脚 PB01 (板上 22K 外置上拉, 按下拉低 → 下降沿唤醒) */
 #define PORT_WAKEUP_IO			IO_PORTB_01
 #define PORT_WAKEUP_NUM			(PORT_WAKEUP_IO / IO_GROUP_NUM)
 
@@ -186,11 +194,12 @@ static const struct port_wakeup port0 = {
 	.low_power  = POWER_SLEEP_WAKEUP | POWER_OFF_WAKEUP,
 };
 
-/* P33 长按复位: 与 isd RESET=PB01_08_0 一致, 假死时按住电源键 ~8s 可硬件复位 */
-static const struct long_press lpres_port = {
+/* P33 长按复位: 与 isd RESET=PB01_04_0 一致; 假死/软关机后按住电源键约 4s 可硬件复位.
+ * 外置 22K 上拉, 关机后脚不会长期漂低, 勿关 lpres(关掉后短按被误判松手再关机时会彻底无急救). */
+static struct long_press lpres_port = {
 	.enable     = TRUE,
-	.use_sec4   = FALSE,	/* 0→8s, 1→4s */
-	.edge       = FALLING_EDGE,	/* 低电平有效(ADKEY 按下拉低) */
+	.use_sec4   = TRUE,	/* 0→8s, 1→4s */
+	.edge       = FALLING_EDGE,
 	.iomap      = PORT_WAKEUP_IO,
 };
 
@@ -253,16 +262,97 @@ void sys_power_poweroff_wait_powerkey_up(void)
 static volatile u8 s_pwr_off_req;
 static volatile u8 s_pwr_off_task;
 
+/*
+ * 原厂 soft_poweroff 前必须让另一核可响应 another_cpu_irq:
+ *  - 停 USB(插着线时 OUT/枚举会拖 softIRQ)
+ *  - 停 WiFi/BT(射频任务长时间关中断 → "other cpu hold")
+ *  - 再关显示/DAC, 短延时让 CPU1 回到可中断空闲
+ */
+static void poweroff_stop_usb(void)
+{
+#if (defined MINI_USB_ENABLE) && MINI_USB_ENABLE
+#if MINI_USB_STACK_CHERRYUSB
+	{
+		extern int usbd_deinitialize(u8 busid);
+		usbd_deinitialize(0);
+		printf("[power] cherryusb stopped\n");
+	}
+#elif defined(TCFG_PC_ENABLE) && TCFG_PC_ENABLE
+	{
+		extern void usb_stop(const u8 usbfd);
+		usb_stop((u8)MINI_USB_JL_ID);
+		printf("[power] jl usb%d stopped\n", MINI_USB_JL_ID);
+	}
+#endif
+#endif
+}
+
+static void poweroff_stop_rf(void)
+{
+#if (defined MINI_WIFI_SUPPORT) && MINI_WIFI_SUPPORT
+	{
+		int r = wifi_off();
+		printf("[power] wifi_off ret=%d\n", r);
+	}
+#endif
+#if (defined MINI_BT_SUPPORT) && MINI_BT_SUPPORT
+	{
+		/*
+		 * 对齐 demo_edr bt_power_off:
+		 *   USER_CTRL_POWER_OFF → dly → btctrler_task_close_bredr
+		 * 切勿再调 btstack_exit(): V1.2.14 下会与上面路径重复销毁
+		 * LL_SCAN/LL_INIT, 触发 dlmalloc 异常 + WDT 复位, 进不了 SOFF.
+		 */
+		extern void low_power_hw_unsleep_lock(void);
+		extern void low_power_hw_unsleep_unlock(void);
+		extern void bt_ble_exit(void);
+
+		bt_ble_exit(); /* 先停 ADV, 减少 HCI 竞态 */
+		os_time_dly(5);
+		user_send_cmd_prepare(USER_CTRL_POWER_OFF, 0, NULL);
+		os_time_dly(50);
+		low_power_hw_unsleep_lock();
+		btctrler_task_close_bredr();
+		low_power_hw_unsleep_unlock();
+		printf("[power] bt stopped (no btstack_exit)\n");
+	}
+#endif
+}
+
+static void poweroff_prepare(void)
+{
+	poweroff_stop_usb();
+	poweroff_stop_rf();
+#if (defined MINI_LCD_SUPPORT) && MINI_LCD_SUPPORT
+	{
+		extern void user_lcd_poweroff(void);
+		user_lcd_poweroff();
+	}
+#endif
+#if (defined MINI_AUDIO_SUPPORT) && MINI_AUDIO_SUPPORT
+	dac_power_off();
+#endif
+	/* 多让出几拍, 确保 CPU1 离开关中断临界区 */
+	os_time_dly(20);
+}
+
 static void poweroff_task(void *p)
 {
 	(void)p;
 	while (1) {
 		if (s_pwr_off_req) {
 			s_pwr_off_req = 0;
+			printf("[power] do soft_poweroff cpu=%d\n", current_cpu_id());
 			os_time_dly(2);
+			poweroff_prepare();
 			sys_power_poweroff_wait_powerkey_up();
+			printf("[power] key up, soft_poweroff...\n");
 			os_time_dly(2);
+			/* 必须在 soft_poweroff 前旁路 bt_lock, 否则卡 other cpu hold */
+			sys_power_bt_lock_bypass(1);
 			power_set_soft_poweroff(0);
+			/* 若仍卡在 other cpu hold, 不会跑到这里 */
+			printf("[power] soft_poweroff returned? stuck\n");
 			while (1) {
 				os_time_dly(1000);
 			}
@@ -273,11 +363,16 @@ static void poweroff_task(void *p)
 
 void sys_power_poweroff(void)
 {
+	printf("[power] soft poweroff req from cpu=%d\n", current_cpu_id());
 	if (!s_pwr_off_task) {
+		/* 优先级低于 sys_event(29), 钉 CPU0 */
 		if (thread_fork("#C0poweroff", 12, 1024, 0, 0, poweroff_task, NULL) == 0) {
 			s_pwr_off_task = 1;
 		} else {
+			printf("[power] #C0poweroff fork fail, inline\n");
+			poweroff_prepare();
 			sys_power_poweroff_wait_powerkey_up();
+			sys_power_bt_lock_bypass(1);
 			power_set_soft_poweroff(0);
 			return;
 		}
@@ -459,22 +554,41 @@ static void board_power_init(void)
 	power_keep_state(POWER_KEEP_RESET | POWER_KEEP_DACVDD);
 	power_wakeup_init(&wk_param);
 
+	printf("[power] reset_reason=0x%x%s%s\n", rst,
+	       (rst == SYS_RST_PORT_WKUP) ? " PORT_WKUP" : "",
+	       (rst == SYS_RST_LONG_PRESS) ? " LONG_PRESS" : "");
+
 #ifdef CONFIG_PRESS_LONG_KEY_POWERON
-	/* PORT_WKUP 后连续按住约 1.5s(500×3ms); 中途松开则再软关机 */
+	/*
+	 * PORT_WKUP 仅做短消抖: 唤醒后约 150ms 内若从未读到按下, 视为毛刺再关机.
+	 * 不再要求按住 1.5s——那会在 UART 起来前静默 soft_poweroff, 表现为「按键全无反应」.
+	 * LONG_PRESS(4s) 不走此分支, 直接开机.
+	 */
 	if (rst == SYS_RST_PORT_WKUP) {
+		int saw_down = 0;
+
 		JL_ADC->CON = 0;
 		JL_ADC->CON = 0;
 		JL_ADC->CON = 0;
-		for (int i = 0; i < 500; i++) {
-			if (0 == read_power_key(1)) {
-				sys_power_poweroff_wait_powerkey_up();
-				delay_us(5000);
-				power_set_soft_poweroff(0);
-				while (1) {
-					;
-				}
+		printf("[power] PORT_WKUP debounce...\n");
+		for (int i = 0; i < 50; i++) {
+			unsigned int down = read_power_key(1);
+
+			if (down) {
+				saw_down = 1;
+				break;
 			}
 		}
+		if (!saw_down) {
+			printf("[power] no key after wake, re-poweroff\n");
+			sys_power_poweroff_wait_powerkey_up();
+			delay_us(5000);
+			power_set_soft_poweroff(0);
+			while (1) {
+				;
+			}
+		}
+		printf("[power] key ok, boot\n");
 	}
 #endif
 	extern void clean_wakeup_source_port(void);
