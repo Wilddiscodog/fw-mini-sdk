@@ -102,6 +102,55 @@ int imu_read_si(struct sc7u22_si *out)
     return -1;
 }
 
+u8 imu_pedo_supported(void)
+{
+    return (s_chip == IMU_CHIP_ICM42607 || s_chip == IMU_CHIP_SC7U22) ? 1 : 0;
+}
+
+int imu_pedo_enable(void)
+{
+    if (s_chip == IMU_CHIP_ICM42607) {
+        return icm42607_pedo_enable();
+    }
+    if (s_chip == IMU_CHIP_SC7U22) {
+        return sc7u22_pedo_enable();
+    }
+    return -1;
+}
+
+int imu_pedo_disable(void)
+{
+    if (s_chip == IMU_CHIP_ICM42607) {
+        return icm42607_pedo_disable();
+    }
+    if (s_chip == IMU_CHIP_SC7U22) {
+        return sc7u22_pedo_disable();
+    }
+    return -1;
+}
+
+u8 imu_pedo_enabled(void)
+{
+    if (s_chip == IMU_CHIP_ICM42607) {
+        return icm42607_pedo_enabled();
+    }
+    if (s_chip == IMU_CHIP_SC7U22) {
+        return sc7u22_pedo_enabled();
+    }
+    return 0;
+}
+
+int imu_pedo_read(struct imu_pedo *out)
+{
+    if (s_chip == IMU_CHIP_ICM42607) {
+        return icm42607_pedo_read(out);
+    }
+    if (s_chip == IMU_CHIP_SC7U22) {
+        return sc7u22_pedo_read(out);
+    }
+    return -1;
+}
+
 #else
 
 int imu_init(void)
@@ -130,6 +179,27 @@ int imu_read_raw(struct sc7u22_raw *out)
     return -1;
 }
 int imu_read_si(struct sc7u22_si *out)
+{
+    (void)out;
+    return -1;
+}
+u8 imu_pedo_supported(void)
+{
+    return 0;
+}
+int imu_pedo_enable(void)
+{
+    return -1;
+}
+int imu_pedo_disable(void)
+{
+    return -1;
+}
+u8 imu_pedo_enabled(void)
+{
+    return 0;
+}
+int imu_pedo_read(struct imu_pedo *out)
 {
     (void)out;
     return -1;

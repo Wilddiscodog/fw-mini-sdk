@@ -15,6 +15,7 @@ enum watch_app_id {
     WATCH_APP_SOKOBAN,
     WATCH_APP_2048,
     WATCH_APP_ASR_TEST,
+    WATCH_APP_PEDO,
     WATCH_APP_SETTINGS,
     WATCH_APP_COUNT,
 };

@@ -11,13 +11,23 @@
 
 #if (defined TCFG_SC7U22_ENABLE) && TCFG_SC7U22_ENABLE
 
+#define REG_MCLK_RDY            0x00
 #define REG_DEVICE_CONFIG       0x01
 #define REG_SIGNAL_PATH_RESET   0x02
 #define REG_TEMP_DATA1          0x09
 #define REG_PWR_MGMT0           0x1F
 #define REG_GYRO_CONFIG0        0x20
 #define REG_ACCEL_CONFIG0       0x21
+#define REG_APEX_CONFIG0        0x25
+#define REG_APEX_CONFIG1        0x26
+#define REG_APEX_DATA0          0x31
 #define REG_WHO_AM_I            0x75
+#define REG_BLK_SEL_W           0x79
+#define REG_MADDR_W             0x7A
+#define REG_M_W                 0x7B
+#define REG_BLK_SEL_R           0x7C
+#define REG_MADDR_R             0x7D
+#define REG_M_R                 0x7E
 
 #define WHO_AM_I_VAL            0x61
 #define ADDR7_AD0_L             0x68
@@ -30,8 +40,19 @@
 #define GYRO_CFG_2000_100HZ     0x09
 /* ACCEL_CONFIG0: FS=±8g(01) + ODR=100Hz(1001) → 0x29 */
 #define ACCEL_CFG_8G_100HZ      0x29
-/* PWR_MGMT0: GYRO LN(11) + ACCEL LN(11) → 0x0F */
+/* ACCEL_CONFIG0: FS=±8g(01) + ODR=50Hz(1010) → 0x2A */
+#define ACCEL_CFG_8G_50HZ       0x2A
+/* PWR_MGMT0: GYRO LN(11) + ACCEL LN(11) → 0x0F; bit4=IDLE 保 MCLK */
 #define PWR_LN_BOTH             0x0F
+#define PWR_IDLE_BIT            0x10
+
+/* APEX_CONFIG0 */
+#define APEX_DMP_POWER_SAVE_EN  0x08
+#define APEX_DMP_INIT_EN        0x04
+#define APEX_DMP_MEM_RESET_EN   0x01
+/* APEX_CONFIG1: PED_ENABLE bit3; DMP_ODR[1:0] 10=50Hz */
+#define APEX_PED_ENABLE         0x08
+#define APEX_DMP_ODR_50HZ       0x02
 
 /* ±8g → 4096 LSB/g; ±2000dps → 16.4 LSB/dps */
 #define ACC_LSB_PER_G           4096.0f
@@ -42,6 +63,11 @@ static u8 s_addr_w;
 static u8 s_addr_r;
 static u8 s_ready;
 static u8 s_whoami;
+static u8 s_pedo_on;
+static u8 s_dmp_on;
+static u16 s_pedo_base;     /* 开启时 STEP_CNT, UI 显示相对步数 */
+static u16 s_pedo_last;     /* 上次读到的原始值, 用于溢出续计 */
+static u32 s_pedo_hi;       /* 溢出累加的高位 */
 
 static int ic_write_reg(u8 reg, u8 dat)
 {
@@ -181,6 +207,224 @@ int icm42607_read_si(struct sc7u22_si *out)
     return 0;
 }
 
+static void ic_delay_us(u32 us)
+{
+    /* 粗略忙等, 供 MREG/DMP 时序; 无需精确 */
+    volatile u32 n = us * 40u + 1u;
+    while (n--) {
+        ;
+    }
+}
+
+static int wait_mclk_rdy(void)
+{
+    u8 v = 0;
+    int i;
+
+    for (i = 0; i < 50; i++) {
+        if (ic_read_regs(REG_MCLK_RDY, &v, 1) == 0 && (v & 0x01)) {
+            return 0;
+        }
+        ic_delay_us(100);
+    }
+    return -1;
+}
+
+static int dmp_mem_reset(void)
+{
+    u8 v = 0;
+    int i;
+
+    if (ic_read_regs(REG_APEX_CONFIG0, &v, 1)) {
+        return -1;
+    }
+    v = (u8)((v & (u8)~APEX_DMP_POWER_SAVE_EN) | APEX_DMP_MEM_RESET_EN);
+    if (ic_write_reg(REG_APEX_CONFIG0, v)) {
+        return -2;
+    }
+    ic_delay_us(1000);
+    for (i = 0; i < 500; i++) {
+        if (ic_read_regs(REG_APEX_CONFIG0, &v, 1)) {
+            return -3;
+        }
+        if ((v & APEX_DMP_MEM_RESET_EN) == 0) {
+            return 0;
+        }
+        ic_delay_us(100);
+    }
+    return -4;
+}
+
+static int dmp_init_en(void)
+{
+    u8 v = 0;
+    int i;
+
+    if (ic_read_regs(REG_APEX_CONFIG0, &v, 1)) {
+        return -1;
+    }
+    v = (u8)((v & (u8)~APEX_DMP_POWER_SAVE_EN) | APEX_DMP_INIT_EN);
+    if (ic_write_reg(REG_APEX_CONFIG0, v)) {
+        return -2;
+    }
+    for (i = 0; i < 500; i++) {
+        if (ic_read_regs(REG_APEX_CONFIG0, &v, 1)) {
+            return -3;
+        }
+        if ((v & APEX_DMP_INIT_EN) == 0) {
+            return 0;
+        }
+        ic_delay_us(100);
+    }
+    return -4;
+}
+
+static int read_step_raw(u16 *step, u8 *cadence, u8 *activity)
+{
+    u8 b[4];
+
+    if (ic_read_regs(REG_APEX_DATA0, b, 4)) {
+        return -1;
+    }
+    if (step) {
+        *step = (u16)(((u16)b[1] << 8) | b[0]);
+    }
+    if (cadence) {
+        *cadence = b[2];
+    }
+    if (activity) {
+        *activity = (u8)(b[3] & 0x03);
+    }
+    return 0;
+}
+
+int icm42607_pedo_enable(void)
+{
+    u8 v = 0;
+    u16 step = 0;
+
+    if (!s_ready) {
+        return -1;
+    }
+    if (s_pedo_on) {
+        return 0;
+    }
+
+    /* 保 RC/MCLK: IDLE=1 + 双 LN (计步只需 accel, 保持现状兼容其它读数) */
+    ic_write_reg(REG_PWR_MGMT0, (u8)(PWR_LN_BOTH | PWR_IDLE_BIT));
+    ic_delay_us(200);
+    if (wait_mclk_rdy()) {
+        printf("[imu] pedo: MCLK not ready\r\n");
+        return -2;
+    }
+
+    /* Accel/DMP 50Hz (官方 APEX pedometer 要求) */
+    ic_write_reg(REG_ACCEL_CONFIG0, ACCEL_CFG_8G_50HZ);
+
+    if (ic_read_regs(REG_APEX_CONFIG1, &v, 1)) {
+        return -3;
+    }
+    v = (u8)((v & (u8)~0x03) | APEX_DMP_ODR_50HZ);
+    v = (u8)(v & (u8)~APEX_PED_ENABLE); /* 配置前先关 */
+    ic_write_reg(REG_APEX_CONFIG1, v);
+
+    /* 关 DMP power-save */
+    if (ic_read_regs(REG_APEX_CONFIG0, &v, 1)) {
+        return -4;
+    }
+    v = (u8)(v & (u8)~APEX_DMP_POWER_SAVE_EN);
+    ic_write_reg(REG_APEX_CONFIG0, v);
+
+    if (!s_dmp_on) {
+        if (dmp_mem_reset()) {
+            printf("[imu] pedo: DMP mem reset fail\r\n");
+            return -5;
+        }
+        s_dmp_on = 1;
+    }
+    if (dmp_init_en()) {
+        printf("[imu] pedo: DMP init fail\r\n");
+        return -6;
+    }
+
+    if (ic_read_regs(REG_APEX_CONFIG1, &v, 1)) {
+        return -7;
+    }
+    v = (u8)((v & (u8)~0x03) | APEX_DMP_ODR_50HZ | APEX_PED_ENABLE);
+    if (ic_write_reg(REG_APEX_CONFIG1, v)) {
+        return -8;
+    }
+
+    os_time_dly(5);
+    read_step_raw(&step, NULL, NULL);
+    s_pedo_base = step;
+    s_pedo_last = step;
+    s_pedo_hi = 0;
+    s_pedo_on = 1;
+    printf("[imu] pedo ON base=%u\r\n", step);
+    return 0;
+}
+
+int icm42607_pedo_disable(void)
+{
+    u8 v = 0;
+
+    if (!s_ready) {
+        return -1;
+    }
+    if (!s_pedo_on) {
+        return 0;
+    }
+
+    if (ic_read_regs(REG_APEX_CONFIG1, &v, 1) == 0) {
+        v = (u8)(v & (u8)~APEX_PED_ENABLE);
+        ic_write_reg(REG_APEX_CONFIG1, v);
+    }
+
+    /* 恢复默认 Accel 100Hz */
+    ic_write_reg(REG_ACCEL_CONFIG0, ACCEL_CFG_8G_100HZ);
+    ic_write_reg(REG_PWR_MGMT0, PWR_LN_BOTH);
+
+    s_pedo_on = 0;
+    printf("[imu] pedo OFF\r\n");
+    return 0;
+}
+
+u8 icm42607_pedo_enabled(void)
+{
+    return s_pedo_on;
+}
+
+int icm42607_pedo_read(struct imu_pedo *out)
+{
+    u16 step = 0;
+    u8 cadence = 0;
+    u8 activity = 0;
+    u32 total;
+
+    if (!s_ready || !out || !s_pedo_on) {
+        return -1;
+    }
+    if (read_step_raw(&step, &cadence, &activity)) {
+        return -2;
+    }
+    if (step < s_pedo_last) {
+        /* 16bit 溢出 */
+        s_pedo_hi += 65536u;
+    }
+    s_pedo_last = step;
+    total = s_pedo_hi + (u32)step;
+    if (total >= (u32)s_pedo_base) {
+        out->step_count = total - (u32)s_pedo_base;
+    } else {
+        out->step_count = 0;
+    }
+    out->step_raw = step;
+    out->cadence = cadence;
+    out->activity = activity;
+    return 0;
+}
+
 #else
 
 int icm42607_init(void)
@@ -201,6 +445,23 @@ int icm42607_read_raw(struct sc7u22_raw *out)
     return -1;
 }
 int icm42607_read_si(struct sc7u22_si *out)
+{
+    (void)out;
+    return -1;
+}
+int icm42607_pedo_enable(void)
+{
+    return -1;
+}
+int icm42607_pedo_disable(void)
+{
+    return -1;
+}
+u8 icm42607_pedo_enabled(void)
+{
+    return 0;
+}
+int icm42607_pedo_read(struct imu_pedo *out)
 {
     (void)out;
     return -1;

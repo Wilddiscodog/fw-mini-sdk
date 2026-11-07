@@ -48,6 +48,7 @@ static const struct watch_app_desc s_apps[WATCH_APP_COUNT] = {
 #else
     { "语音识别测试", "A", NULL,           0x26C6DA, NULL },
 #endif
+    { "步数检测", "P", NULL,               0x00BCD4, app_pedo_create },
     { "设置",   "S", &watch_icon_settings, 0x00E676, app_settings_create },
 };
 
@@ -230,6 +231,8 @@ void watch_ui_close_app(void)
         walkie_on_exit();
     } else if (s_app_id == WATCH_APP_ASR_TEST) {
         app_asr_test_exit();
+    } else if (s_app_id == WATCH_APP_PEDO) {
+        app_pedo_exit();
     }
     lv_obj_clean(s_app_layer);
     lv_obj_add_flag(s_app_layer, LV_OBJ_FLAG_HIDDEN);

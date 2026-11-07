@@ -17,6 +17,9 @@
 #define REG_DATA_STAT       0x0B
 #define REG_ACC_XH          0x0C
 #define REG_TEMP_H          0x22
+#define REG_STEP_CFG        0x3A
+#define REG_STEP_SRC        0x3B
+#define REG_STEP_CNT_L      0x3C
 #define REG_ACC_CONF        0x40
 #define REG_ACC_RANGE       0x41
 #define REG_GYR_CONF        0x42
@@ -46,6 +49,11 @@
 #define PWR_GYR_EN          (1u << 1)
 #define PWR_ALL_ON          (PWR_TEMP_EN | PWR_ACC_EN | PWR_GYR_EN)
 
+/* STEP_CFG: 默认 0x08=抗马达干扰; STEP_EN=bit0, STEP_CLR=bit2 */
+#define STEP_CFG_MOTOR_REJ  0x08
+#define STEP_CFG_CLR        0x04
+#define STEP_CFG_EN         0x01
+
 /* 灵敏度: ±8g → 0.244 mg/LSB; ±2000dps → 61.035 mdps/LSB */
 #define ACC_MG_PER_LSB      0.244f
 #define GYR_MDPS_PER_LSB    61.035f
@@ -55,6 +63,10 @@ static u8 s_addr_w;
 static u8 s_addr_r;
 static u8 s_ready;
 static u8 s_whoami;
+static u8 s_pedo_on;
+static u16 s_pedo_base;
+static u16 s_pedo_last;
+static u32 s_pedo_hi;
 
 static int sc_write_reg(u8 reg, u8 dat)
 {
@@ -208,6 +220,123 @@ int sc7u22_read_si(struct sc7u22_si *out)
     return 0;
 }
 
+static int read_step_regs(u16 *step, u8 *m_state)
+{
+    u8 b[3];
+
+    /* STEP_SRC(3B) + STEP_COUNTER_L/H(3C/3D); 先读 3C 连读 2 字节更稳 */
+    if (sc_read_regs(REG_STEP_CNT_L, b, 2)) {
+        return -1;
+    }
+    if (step) {
+        *step = (u16)(((u16)b[1] << 8) | b[0]);
+    }
+    if (m_state) {
+        u8 src = 0;
+        if (sc_read_regs(REG_STEP_SRC, &src, 1)) {
+            return -2;
+        }
+        /* M_STATE 在 bit6:5 */
+        *m_state = (u8)((src >> 5) & 0x03);
+    }
+    return 0;
+}
+
+/* SC7U22: 00静坐 01慢走 10快走 11跑步 → 统一 0未知 1走 2跑 */
+static u8 map_activity(u8 m_state)
+{
+    switch (m_state) {
+    case 1: /* 慢走 */
+    case 2: /* 快走 */
+        return 1;
+    case 3: /* 跑步 */
+        return 2;
+    default:
+        return 0;
+    }
+}
+
+int sc7u22_pedo_enable(void)
+{
+    u16 step = 0;
+
+    if (!s_ready) {
+        return -1;
+    }
+    if (s_pedo_on) {
+        return 0;
+    }
+
+    /* 保持 accel 供电; 开计步并清零计数器 (PEDO_COEFF 用出厂默认) */
+    if (sc_write_reg(REG_STEP_CFG,
+                     (u8)(STEP_CFG_MOTOR_REJ | STEP_CFG_CLR | STEP_CFG_EN))) {
+        return -2;
+    }
+    os_time_dly(2);
+
+    /* 再写一次仅使能, 确保 CLR 自复位后仍保持 EN */
+    if (sc_write_reg(REG_STEP_CFG, (u8)(STEP_CFG_MOTOR_REJ | STEP_CFG_EN))) {
+        return -3;
+    }
+    os_time_dly(1);
+
+    read_step_regs(&step, NULL);
+    s_pedo_base = step;
+    s_pedo_last = step;
+    s_pedo_hi = 0;
+    s_pedo_on = 1;
+    printf("[imu] SC7U22 pedo ON base=%u\r\n", step);
+    return 0;
+}
+
+int sc7u22_pedo_disable(void)
+{
+    if (!s_ready) {
+        return -1;
+    }
+    if (!s_pedo_on) {
+        return 0;
+    }
+    /* 关 EN, 保留抗干扰位 */
+    sc_write_reg(REG_STEP_CFG, STEP_CFG_MOTOR_REJ);
+    s_pedo_on = 0;
+    printf("[imu] SC7U22 pedo OFF\r\n");
+    return 0;
+}
+
+u8 sc7u22_pedo_enabled(void)
+{
+    return s_pedo_on;
+}
+
+int sc7u22_pedo_read(struct imu_pedo *out)
+{
+    u16 step = 0;
+    u8 m_state = 0;
+    u32 total;
+
+    if (!s_ready || !out || !s_pedo_on) {
+        return -1;
+    }
+    if (read_step_regs(&step, &m_state)) {
+        return -2;
+    }
+    if (step < s_pedo_last) {
+        s_pedo_hi += 65536u;
+    }
+    s_pedo_last = step;
+    total = s_pedo_hi + (u32)step;
+    if (total >= (u32)s_pedo_base) {
+        out->step_count = total - (u32)s_pedo_base;
+    } else {
+        out->step_count = 0;
+    }
+    out->step_raw = step;
+    out->cadence = 0;
+    out->activity = map_activity(m_state);
+    return 0;
+}
+
 #else
 
 int sc7u22_init(void)
@@ -228,6 +357,23 @@ int sc7u22_read_raw(struct sc7u22_raw *out)
     return -1;
 }
 int sc7u22_read_si(struct sc7u22_si *out)
+{
+    (void)out;
+    return -1;
+}
+int sc7u22_pedo_enable(void)
+{
+    return -1;
+}
+int sc7u22_pedo_disable(void)
+{
+    return -1;
+}
+u8 sc7u22_pedo_enabled(void)
+{
+    return 0;
+}
+int sc7u22_pedo_read(struct imu_pedo *out)
 {
     (void)out;
     return -1;
