@@ -243,6 +243,7 @@ endif
 # 头文件搜索路径
 INCLUDES := \
 	-I../../../apps \
+	-I../../../apps/common \
 	-I../../../app/include \
 	-I../../../app/walkie \
 	-I../../../app/common_ble/include \
@@ -397,6 +398,7 @@ LFLAGS := \
 	../../../cpu/wl82/liba/wpasupplicant.a \
 	../../../cpu/wl82/liba/libmbedtls_2_2_1.a \
 	../../../cpu/wl82/liba/http_cli.a \
+	../../../cpu/wl82/liba/https_cli.a \
 	../../../cpu/wl82/liba/json.a \
 	../../../cpu/wl82/liba/iperf.a \
 	../../../cpu/wl82/liba/lwip_2_2_0.a \

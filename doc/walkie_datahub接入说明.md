@@ -1,7 +1,7 @@
 # walkie 对讲接入 datahub 服务器 (V1.9.3)
 
 > 来源: `fw-mini-sdk-datahub-patch.zip`(补丁包存仓库外备份 `D:\fw-mini-sdk-backup\`)。
-> 本提交只入源码与文档; **构建验证未做**——见文末"构建环境待办"。
+> **构建验证已通过**(V1.9.4): SDK 1.2.14 缺失文件已从官方 gitee 仓库同名 tag 提取入库。
 
 ## 功能
 
@@ -40,20 +40,23 @@
 3. 电脑播放任一条: `http://<hub-ip>/cgi-bin/hub?cmd=get&key=<KEY>&id=<N>`
 (hub 侧 CGI 需配套新版本: list 的 unread 按设备隔离)
 
-## 构建环境待办(重要)
+## 构建环境说明(V1.9.4 已修复)
 
-远程 V1.9.0 提交将 SDK 层同步到官方 **AC79 SDK 1.2.14**(97 个头文件 + 新链接布局),
-但配套文件未入库——**全新克隆当前无法编译**, 在有完整 1.2.14 环境的机器上才行。
-待补齐入库的清单(来自本机构建实测):
+V1.9.0 曾将 SDK 层同步到官方 **AC79 SDK 1.2.14**, 但配套文件未入库导致全新克隆
+无法编译。V1.9.4 已从官方 gitee(Jieli-Tech/fw-AC79_AIoT_SDK)同名 tag
+`AC79NN_SDK_V1.2.14_2026-10-13` 提取缺失文件入库:
 
-| 缺失 | 用途 |
+| 补入 | 用途 |
 |---|---|
 | `include_lib/net/wifi/wifi_def.h` | wifi_connect.h 新版引用 |
-| `include_lib/net/lwip_2_2_0/` 整棵 + `liba/lwip_2_2_0.a` | Makefile 已指向 2.2.0 |
-| `liba/lib_esco_repair.a` | AUDIO_LIB 列表引用 |
-| `include_lib/system/system_lib_text.ld` | sdk_ld_sdram.c 新版引用 |
-| `include_lib/common/movable/movable_text.ld` / `movable_data.ld` | 同上 |
-| `include_lib/c/`(C++ 头, 仅 MINI_CXX_SUPPORT=1 时需要) | 可暂缓 |
+| `include_lib/net/lwip_2_2_0/` 整棵 + `liba/lwip_2_2_0.a` | Makefile 指向 2.2.0 |
+| `liba/lib_esco_repair.a` | AUDIO_LIB 列表 |
+| `liba/https_cli.a` | http_cli.a 的 https socket-ops 依赖 |
+| `include_lib/system/system_lib_text.ld` | sdk_ld_sdram.c 引用 |
+| `apps/common/movable/`(含 movable_text.ld/movable_data.ld) | sdk_ld 引用
+  (`#include "common/movable/..."` 经 `-I../../../apps` 解析) |
+| `apps/common/usb/`(官方应用层 USB 头文件, printer.h 等) | driver/usb 引用
+  (`#include "usb/device/printer.h"` 经 `-I../../../apps/common` 解析) |
+| Makefile: 新增 `-I../../../apps/common` | 上述 usb 头文件解析 |
 
-补齐方式: 从可构建 V1.9.2 的机器把上述文件拷入并提交入库; 或将本仓 SDK 层
-整体回退到 V1.8.75 布局(需同步适配 V1.9.x 应用代码)。
+官方 SDK 本地副本(D:\fw-AC79_AIoT_SDK)亦已 checkout 到同 tag(原本地改动已 stash)。
