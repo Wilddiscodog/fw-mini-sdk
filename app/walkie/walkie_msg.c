@@ -1,6 +1,7 @@
 #include "app_config.h"
 #include "system/includes.h"
 #include "walkie_priv.h"
+#include "walkie_hub.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -251,6 +252,10 @@ static void walkie_msg_send_task(void *arg)
 
     /* 本端始终落盘, 聊天气泡可点播 */
     msg_save_tx_local();
+
+    /* datahub 归档(尽力而为): 无论 UDP 成败都上传 hub 中央存储 */
+    walkie_hub_put_voice(s_tx_buf, s_tx_len, msg_id,
+                         walkie_peer_name_by_ip(dip));
 
     s_tx_len = 0;
     s_st = MSG_ST_IDLE;

@@ -535,6 +535,7 @@ c_SRC_FILES += ../../../app/walkie/walkie_net.c
 c_SRC_FILES += ../../../app/walkie/walkie_av.c
 c_SRC_FILES += ../../../app/walkie/walkie_rec.c
 c_SRC_FILES += ../../../app/walkie/walkie_msg.c
+c_SRC_FILES += ../../../app/walkie/walkie_hub.c
 c_SRC_FILES += ../../../app/walkie/walkie_audio_keep.c
 c_SRC_FILES += ../../../app/common/fat_nor/phone_rec_fs.c
 INCLUDES    += -I../../../third/lvgl -I$(LVGL_DIR) -I$(LVGL_DIR)/src

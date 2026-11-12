@@ -4,6 +4,7 @@
 #include "syscfg/syscfg_id.h"
 #include "bt_music.h"
 #include "walkie_priv.h"
+#include "walkie_hub.h"
 #include "walkie.h"
 
 /* 用户自定义区 1~59; 53=对讲自动播放 */
@@ -180,6 +181,7 @@ void walkie_on_enter(void)
     walkie_bg_start();
     walkie_net_refresh_ip();
     walkie_net_discover_now();
+    walkie_hub_pull();          /* 进聊天页: 拉取 hub 上的漏收消息 */
 }
 
 void walkie_on_wifi_ready(void)
@@ -196,6 +198,7 @@ void walkie_on_wifi_ready(void)
     if (walkie_net_restart() == 0) {
         walkie_net_discover_now();
     }
+    walkie_hub_pull();          /* 联网完成: 补拉漏收消息 */
 }
 
 void walkie_on_exit(void)
