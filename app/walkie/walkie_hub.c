@@ -3,6 +3,7 @@
 #include "walkie_priv.h"
 #include "walkie_hub.h"
 #include "net/http/http_cli.h"
+#include "lwip/sockets.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -25,6 +26,78 @@ struct hub_put_job {
 };
 
 static volatile u8 s_hub_busy;
+
+/* ============ hub 自动发现 (UDP 广播, 零配置) ============
+ * 广播 "DISCOVER" → 3722, hub 应答 "DATAHUB <ip> <key>"
+ * 找不到时回退宏 WALKIE_HUB_IP/WALKIE_HUB_KEY
+ */
+static char s_hub_ip[16];
+static char s_hub_key[24];
+static u32 s_disc_ms;
+
+static int hub_discover(void)
+{
+    struct sockaddr_in dst, from;
+    socklen_t flen;
+    char buf[64];
+    int s, i, n, ok = -1;
+    int bcast = 1;
+    struct timeval tv = { 0, 800000 };
+
+    s = socket(AF_INET, SOCK_DGRAM, 0);
+    if (s < 0) {
+        return -1;
+    }
+    setsockopt(s, SOL_SOCKET, SO_BROADCAST, &bcast, sizeof(bcast));
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    memset(&dst, 0, sizeof(dst));
+    dst.sin_family = AF_INET;
+    dst.sin_port = htons(3722);
+    dst.sin_addr.s_addr = INADDR_BROADCAST;
+    for (i = 0; i < 3 && ok; i++) {
+        if (sendto(s, "DISCOVER", 8, 0, (struct sockaddr *)&dst, sizeof(dst)) < 0) {
+            break;
+        }
+        flen = sizeof(from);
+        n = recvfrom(s, buf, sizeof(buf) - 1, 0, (struct sockaddr *)&from, &flen);
+        if (n > 8 && memcmp(buf, "DATAHUB ", 8) == 0) {
+            char *p1, *p2;
+            buf[n] = '\0';
+            p1 = buf + 8;
+            p2 = strchr(p1, ' ');
+            if (p2) {
+                *p2 = '\0';
+                p2++;
+                snprintf(s_hub_ip, sizeof(s_hub_ip), "%s", p1);
+                snprintf(s_hub_key, sizeof(s_hub_key), "%s", p2);
+                ok = 0;
+            }
+        }
+    }
+    close(s);
+    return ok;
+}
+
+static const char *hub_ip(void)
+{
+    u32 now = timer_get_ms();
+
+    if (s_hub_ip[0]) {
+        return s_hub_ip;
+    }
+    if ((u32)(now - s_disc_ms) > 60000) {   /* 节流: 至多每分钟尝试一次 */
+        s_disc_ms = now;
+        if (hub_discover() == 0) {
+            printf("[walkie] hub found by discovery: %s\n", s_hub_ip);
+        }
+    }
+    return s_hub_ip[0] ? s_hub_ip : WALKIE_HUB_IP;
+}
+
+static const char *hub_key(void)
+{
+    return s_hub_key[0] ? s_hub_key : WALKIE_HUB_KEY;
+}
 
 /* ============ HTTP GET 收集器: 整包 body 收进 RAM ============ */
 
@@ -258,12 +331,12 @@ int walkie_hub_put_voice(const void *pcm, u32 len, u16 msg_id, const char *to_na
     dur_ms = len / (WALKIE_PCM_RATE * 2 * WALKIE_PCM_CH / 1000); /* s16 */
 
     snprintf(job->url, sizeof(job->url),
-             "http://" WALKIE_HUB_IP ":%d/cgi-bin/hub"
-             "?cmd=put&key=" WALKIE_HUB_KEY
-             "&dev=" WALKIE_HUB_DEVID
-             "&ch=audio&dtype=file&fmt=pcm"
+             "http://%s:%d/cgi-bin/hub"
+             "?cmd=put&key=%s"
+             "&dev=%s&ch=audio&dtype=file&fmt=pcm"
              "&rate=%d&dur=%u&uid=%s-%u&txt=%s",
-             WALKIE_HUB_PORT, WALKIE_PCM_RATE,
+             hub_ip(), WALKIE_HUB_PORT, hub_key(),
+             WALKIE_HUB_DEVID, WALKIE_PCM_RATE,
              (unsigned)dur_ms,
              WALKIE_HUB_DEVID, (unsigned)msg_id, enc_to);
 
@@ -289,8 +362,9 @@ static int hub_ack(u32 id)
     struct hub_dl dl;
 
     snprintf(url, sizeof(url),
-             "http://" WALKIE_HUB_IP ":%d/cgi-bin/hub?cmd=ack&key=" WALKIE_HUB_KEY
-             "&id=%u&ackdev=" WALKIE_HUB_DEVID, WALKIE_HUB_PORT, (unsigned)id);
+             "http://%s:%d/cgi-bin/hub?cmd=ack&key=%s"
+             "&id=%u&ackdev=%s", hub_ip(), WALKIE_HUB_PORT, hub_key(),
+             (unsigned)id, WALKIE_HUB_DEVID);
     return hub_get(url, &dl);   /* 应答内容无所谓, 成功即可 */
 }
 
@@ -306,9 +380,9 @@ static void hub_pull_task(void *arg)
     while (got < HUB_PULL_LIMIT) {
         /* 我的未读列表(发送者不限; 定向给别人由 txt 过滤) */
         snprintf(url, sizeof(url),
-                 "http://" WALKIE_HUB_IP ":%d/cgi-bin/hub?cmd=list&key=" WALKIE_HUB_KEY
-                 "&dev=" WALKIE_HUB_DEVID "&ch=audio&unread=1&since=0&limit=4",
-                 WALKIE_HUB_PORT);
+                 "http://%s:%d/cgi-bin/hub?cmd=list&key=%s"
+                 "&dev=%s&ch=audio&unread=1&since=0&limit=4",
+                 hub_ip(), WALKIE_HUB_PORT, hub_key(), WALKIE_HUB_DEVID);
         if (hub_get(url, &ldl)) {
             printf("[walkie] hub pull: list fail\n");
             break;
@@ -340,8 +414,8 @@ static void hub_pull_task(void *arg)
                 hub_ack((u32)id);
             } else {
                 snprintf(url, sizeof(url),
-                         "http://" WALKIE_HUB_IP ":%d/cgi-bin/hub?cmd=get&key=" WALKIE_HUB_KEY
-                         "&id=%ld&raw=1", WALKIE_HUB_PORT, id);
+                         "http://%s:%d/cgi-bin/hub?cmd=get&key=%s"
+                         "&id=%ld&raw=1", hub_ip(), WALKIE_HUB_PORT, hub_key(), id);
                 if (hub_get(url, &gdl) == 0 && gdl.len == (u32)bytes) {
                     /* 整包到手 → 走 REC 落盘, 聊天气泡出现 */
                     u32 off = 0;

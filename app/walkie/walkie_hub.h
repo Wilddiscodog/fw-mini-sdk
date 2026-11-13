@@ -11,9 +11,11 @@
 #include "generic/typedef.h"
 
 /* ===== 每台手表按需修改这里 ===== */
-#define WALKIE_HUB_IP       "192.168.1.214"      /* AR9331 hub 的 IP */
-#define WALKIE_HUB_KEY      "305ae3cae41093f3"   /* uci get datahub.hub.key */
-#define WALKIE_HUB_DEVID    "watch-a1"           /* 本机在 hub 的设备ID(每台唯一) */
+/* IP/KEY 通常无需配置: 手表开机自动 UDP 广播发现 hub(拿到 IP 和 key)。
+ * 下面两个宏仅作"发现失败时的兜底", 填上 hub 的常用地址即可。 */
+#define WALKIE_HUB_IP       "192.168.1.214"      /* 兜底: hub 的常用 IP */
+#define WALKIE_HUB_KEY      "305ae3cae41093f3"   /* 兜底: hub 的 API key */
+#define WALKIE_HUB_DEVID    "watch-a1"           /* 本机在 hub 的设备ID(每台唯一, 必配!) */
 /* ================================ */
 
 #define WALKIE_HUB_PORT     80
