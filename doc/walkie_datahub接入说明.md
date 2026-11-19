@@ -1,62 +1,108 @@
-# walkie 对讲接入 datahub 服务器 (V1.9.3)
+# walkie 对讲接入 AR9331 datahub
 
-> 来源: `fw-mini-sdk-datahub-patch.zip`(补丁包存仓库外备份 `D:\fw-mini-sdk-backup\`)。
-> **构建验证已通过**(V1.9.4): SDK 1.2.14 缺失文件已从官方 gitee 仓库同名 tag 提取入库。
+> 手表对接同一台 AR9331 随身路由上的 `luci-app-datahub`  
+> （patch 见 `tools/ar9331-wmn013n-v23.05.5-patch/`）。
 
 ## 功能
 
-手表对讲(WiFi UDP 实时)之外增加与 AR9331 hub 服务器(datahub)的异步通道:
+手表对讲（WiFi UDP 实时）之外增加与 hub 的异步通道：
 
-- **归档上传**: 松开 PTT 后, 本次语音整包异步上传 hub(uid=`DEVID-msgid`, 重传不重复)
-- **漏收拉取**: 进聊天页 / WiFi 刚连上时, 从 hub 拉取本机未取走的语音 → 落盘成气泡 → ack;
-  单轮最多 8 条, 单条上限 2MB(约 64s), 下载失败不 ack 下轮重拉
-- 设计为"尽力而为": 没 IP / 线程忙 / HTTP 失败只跳过, 不影响 UDP 实时对讲
+- **归档上传**: 松键后截断至最长 15s → **G.711 A-law** 压缩 → 本地队列 → 常驻 worker 上传  
+  （`fmt=alaw&rate=16000`，uid=`DEVID-msgid` 幂等；失败最多重试 3 次）
+- **漏收拉取**: 进聊天页 / WiFi 就绪时异步 pull；兼容旧 `pcm` 与新 `alaw`
+- **状态栏**: 聊天页显示「同步中 / 待同步 / 同步失败」（仅反映本机上传，不含 pull）
+- put / pull 分线程；put 热路径只用缓存/兜底 IP，不阻塞在 UDP DISCOVER
 
-## 文件
+## 本仓库接入状态
 
-| 文件 | 状态 | 内容 |
-|---|---|---|
-| app/walkie/walkie_hub.c | 新增 | datahub 客户端(上传/拉取/ack) |
-| app/walkie/walkie_hub.h | 新增 | 配置宏与接口声明 |
-| app/walkie/walkie_msg.c | +1 行 | 松键发送后异步归档 |
-| app/walkie/walkie_svc.c | +2 行 | 进聊天页/WiFi 就绪触发拉取 |
-| app/board/wl82/Makefile | +1 行 | 编入 walkie_hub.c |
+| 文件 | 状态 |
+|---|---|
+| `app/walkie/walkie_hub.c` / `.h` | 已接入（队列 / A-law / httpcli_post） |
+| `app/walkie/walkie_msg.c` | 松键后 `walkie_hub_put_voice` |
+| `app/walkie/walkie_svc.c` | 进聊天页 / WiFi 就绪 `walkie_hub_pull` |
+| `app/watch_ui/watch_apps.c` | 状态栏显示 hub 同步态 |
+| `app/hub_music.c` | 曲库走 `ch=music`（与对讲 `ch=audio` 分离） |
+| `tools/hub_browser/` | PC 端全量拉取 + 播放 GUI |
 
-## 每台手表必改 — app/walkie/walkie_hub.h 顶部三个宏
+## 配置 — `app/walkie/walkie_hub.h`
 
 ```c
-#define WALKIE_HUB_IP     "192.168.1.214"      /* hub 的 IP(建议主路由绑静态租约) */
-#define WALKIE_HUB_KEY    "305ae3cae41093f3"   /* hub 上: uci get datahub.hub.key */
-#define WALKIE_HUB_DEVID  "watch-a1"           /* 本机唯一 ID(两台各编各的!) */
+#define WALKIE_HUB_IP       "192.168.5.11"       /* 家庭网 STA 兜底 IP */
+#define WALKIE_HUB_KEY      "495f66430e261791"   /* LuCI 数据中枢 key */
+#define WALKIE_HUB_PORT     80
+#define WALKIE_HUB_TIMEOUT  8000                 /* ms */
+#define WALKIE_HUB_MAX_SEC  15
+#define WALKIE_HUB_Q_DEPTH  2
+#define WALKIE_HUB_PUT_RETRY 3
 ```
 
-**重要约定**: 添加联系人时, 名字必须填"对方的 WALKIE_HUB_DEVID"
-(定向消息按 hub 记录 txt 字段过滤, 名字对不上会被当成别人的消息跳过)。
+- **DEVID** = `walkie_self_name()`（如 `WL-FA1302`）
+- UDP `DISCOVER` → `:3722` → `DATAHUB <ip> <key>`（非阻塞轮询；失败保留兜底）
+- 联系人名字必须填**对方对讲名**（上传 `txt=` 收件人）
 
-## 验证方法(环境就绪后)
+## 语音归档格式
 
-1. B 关机 → A PTT 说两句 → B 开机进聊天页: 气泡自动补出
-2. LuCI 状态→Data Hub 页面可见归档记录(可直接播放)
-3. 电脑播放任一条: `http://<hub-ip>/cgi-bin/hub?cmd=get&key=<KEY>&id=<N>`
-(hub 侧 CGI 需配套新版本: list 的 unread 按设备隔离)
+| 项 | 值 |
+|----|-----|
+| 通道 | `ch=audio` |
+| 编码 | **G.711 A-law**（`fmt=alaw`），约 PCM 体积 1/2 |
+| 采样率 | **16000 Hz**（`rate=16000`） |
+| 声道 | 单声道 |
+| 存储 | 无头 raw；HUB `get` 默认自动包 **WAV** 头；`&raw=1` 拿裸流 |
+| 旧数据 | 可能仍是 `fmt=pcm`（s16le / 16000 / mono） |
 
-## 构建环境说明(V1.9.4 已修复)
+### 本机播放（命令行）
 
-V1.9.0 曾将 SDK 层同步到官方 **AC79 SDK 1.2.14**, 但配套文件未入库导致全新克隆
-无法编译。V1.9.4 已从官方 gitee(Jieli-Tech/fw-AC79_AIoT_SDK)同名 tag
-`AC79NN_SDK_V1.2.14_2026-10-13` 提取缺失文件入库:
+```bash
+# HUB 已包 WAV 的下载文件
+ffplay voice.wav
 
-| 补入 | 用途 |
-|---|---|
-| `include_lib/net/wifi/wifi_def.h` | wifi_connect.h 新版引用 |
-| `include_lib/net/lwip_2_2_0/` 整棵 + `liba/lwip_2_2_0.a` | Makefile 指向 2.2.0 |
-| `liba/lib_esco_repair.a` | AUDIO_LIB 列表 |
-| `liba/https_cli.a` | http_cli.a 的 https socket-ops 依赖 |
-| `include_lib/system/system_lib_text.ld` | sdk_ld_sdram.c 引用 |
-| `apps/common/movable/`(含 movable_text.ld/movable_data.ld) | sdk_ld 引用
-  (`#include "common/movable/..."` 经 `-I../../../apps` 解析) |
-| `apps/common/usb/`(官方应用层 USB 头文件, printer.h 等) | driver/usb 引用
-  (`#include "usb/device/printer.h"` 经 `-I../../../apps/common` 解析) |
-| Makefile: 新增 `-I../../../apps/common` | 上述 usb 头文件解析 |
+# 裸 A-law
+ffplay -f alaw -ar 16000 -ac 1 voice.bin
+ffmpeg -f alaw -ar 16000 -ac 1 -i voice.bin voice.wav
 
-官方 SDK 本地副本(D:\fw-AC79_AIoT_SDK)亦已 checkout 到同 tag(原本地改动已 stash)。
+# 裸 PCM s16le
+ffplay -f s16le -ar 16000 -ac 1 voice.bin
+```
+
+### PC 图形工具
+
+```
+tools/hub_browser/HubBrowser.exe
+```
+
+可从 HUB **全量同步**元数据与附件，并在列表中播放（双击即可，无需 Python）。  
+工具会把 A-law WAV **解码为 PCM16** 再播；音乐按 `fmt`/文件头保存为  
+`{id}-{歌名}.mp3|.flac|.ape|…`（不再落成无扩展名的 `.bin`）。  
+源码 / 重打包见 `tools/hub_browser/README.md`（`build_exe.bat`）。
+
+## AR9331 hub API
+
+| 项 | 说明 |
+|----|------|
+| CGI | `http://<ip>/cgi-bin/hub` |
+| 发现 | UDP **3722** |
+| HTTP | uhttpd **:80** |
+| 鉴权 | 除 `stats` / `export` 外需 `key=` |
+
+| cmd | 方法 | 说明 |
+|-----|------|------|
+| `put` | POST | 上传；`dtype=file` 时 body=裸流 |
+| `list` | GET | `since`/`limit`（≤200）增量列表；可加 `ch=` / `unread` / `dev=` |
+| `get` | GET | 取单条；file 默认 WAV（alaw/pcm/ulaw）；`raw=1` 裸流 |
+| `ack` | GET | 标记已读 |
+| `stats` | GET | 总览（免 key，响应含 key） |
+| `export` | GET | `.db` 快照 + 近 N 天附件 tar.gz（免 key，`days`≤90） |
+
+对讲上传示例 query：
+
+```
+cmd=put&key=...&dev=WL-FA1302&ch=audio&dtype=file&fmt=alaw&rate=16000&dur=2000&uid=WL-FA1302-1&txt=WL-78281C
+```
+
+## 验证
+
+1. AR9331 固件 + U 盘就绪（LuCI / `stats` 可见 key）
+2. 手表: `hub put worker up` → 发语音 → `hub put ok` / `httpcli e=0`
+3. PC: 打开 `tools/hub_browser`，填 IP，同步后能列表播放
+4. 对端关机时发的话，对端开机进聊天页应补气泡

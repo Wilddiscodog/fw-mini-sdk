@@ -673,7 +673,8 @@ extern unsigned char __attribute__((aligned(4)))  __attribute__((section(".memp_
  * field.
  */
 #define LWIP_NETIF_HOSTNAME             1 //AP端显示名称 netif->hostname
-#define LWIP_LOCAL_HOSTNAME             "AC79NN_LWIP"
+/* 默认占位; 运行时由 app/bt_wifi_app.c 改为 JL_XXXX(MAC后4位) */
+#define LWIP_LOCAL_HOSTNAME             "JL_XXXX"
 
 extern void dns_set_server(unsigned int *dnsserver);
 #define DNS_SERVER_ADDRESS dns_set_server

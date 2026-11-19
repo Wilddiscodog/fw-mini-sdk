@@ -114,7 +114,7 @@
 #define CONFIG_MSBC_ENC_ENABLE
 #define CONFIG_CVSD_DEC_ENABLE
 #define CONFIG_CVSD_ENC_ENABLE
-/* 解码格式对齐 demo_audio(本地+网络/DLNA); A2DP 仍用 AAC + m4a_dec_seek */
+/* 解码格式: A2DP AAC + HUB/网络曲库常用格式; 已移除 DLNA */
 #define CONFIG_AAC_DEC_ENABLE
 #define CONFIG_MP3_DEC_ENABLE
 #define CONFIG_M4A_DEC_ENABLE
@@ -129,10 +129,7 @@
 #define CONFIG_ADPCM_DEC_ENABLE
 #define CONFIG_VIRTUAL_DEV_ENC_ENABLE
 
-/* 网络播放 + DLNA MediaRenderer(demo_audio 同款, STA 拿到 IP 后启动)
- * 暂时屏蔽: 不启 ai_server/libdlna, 表盘隐藏「网络」入口 */
-/* #define CONFIG_NET_MUSIC_MODE_ENABLE */
-/* #define CONFIG_DLNA_SDK_ENABLE */
+/* DLNA / ai_server 已删除(不链 libdlna/ai_server, 不用 CONFIG_NET_MUSIC_MODE) */
 
 #define AUDIO_ENC_SAMPLE_SOURCE_MIC         0
 #define AUDIO_ENC_SAMPLE_SOURCE_PLNK0       1

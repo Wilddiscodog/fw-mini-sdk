@@ -30,6 +30,8 @@
 #include "net_update.h"                     /* CONFIG_UPGRADE_OTA_FILE_NAME */
 #include "asm/wdt.h"
 #include "walkie.h"
+#include "walkie_hub.h"
+#include "web_log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -184,6 +186,9 @@ static int prov_wait_sta_once(void)
     "HTTP/1.0 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n"
 #define JSON_HDR_200 \
     "HTTP/1.0 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nConnection: close\r\n\r\n"
+#define TEXT_HDR_200 \
+    "HTTP/1.0 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n" \
+    "Cache-Control: no-store\r\nConnection: close\r\n\r\n"
 #define WAV_HDR_FMT \
     "HTTP/1.0 200 OK\r\nContent-Type: audio/wav\r\n" \
     "Content-Disposition: attachment; filename=\"walkie_%d.wav\"\r\n" \
@@ -397,9 +402,11 @@ static int http_render_portal(int fd)
         "<meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>"
         "<title>WL82 设备后台</title><style>%s</style></head><body><div class=wrap>"
         "<div class=brand><div class=logo>W</div><div>"
-        "<h1>WL82 设备后台</h1><div class=sub>配网 · 固件升级 · 对讲录音</div></div></div>"
+        "<h1>WL82 设备后台</h1><div class=sub>配网 · 固件升级 · 对讲录音 · 日志</div></div></div>"
         "<div class=card><span class=pill>%s</span>"
-        "<p class=tip style=margin-top:10px>访问地址 <b>%s</b> · AP 密码 %s</p></div>"
+        "<p class=tip style=margin-top:10px>访问地址 <b>%s</b> · AP 密码 %s</p>"
+        "<div class=row><a class=btn secondary href=/log>设备串口日志</a>"
+        "<a class=btn secondary href=/hub>HUB 同步诊断</a></div></div>"
         "<div class=card><h2>WiFi 连接</h2>"
         "<div class=row><button type=button id=btnScan>搜索附近 WiFi</button>"
         "<span id=scanMsg class=tip></span></div>"
@@ -414,7 +421,7 @@ static int http_render_portal(int fd)
         "<button type=button id=btnRecClr class=danger>删除全部</button>"
         "<span id=recMsg class=tip></span></div>"
         "<ul class=list id=recList></ul>"
-        "<p class=tip>手表对讲机录制后点刷新；下载为 16kHz 单声道 WAV，供分析噪声。调试可用删除全部清空 Flash 录音区。</p></div>"
+        "<p class=tip id=recTip>手表对讲机录制后点刷新；下载为 16kHz 单声道 WAV。调试可用删除全部清空。</p></div>"
         "<div class=card><h2>固件升级</h2>"
         "<form id=fUp method=POST action=/upload enctype='multipart/form-data'>"
         "<label>升级文件 (update-ota.ufw)</label>"
@@ -450,7 +457,12 @@ static int http_render_portal(int fd)
         "var b=document.getElementById('btnRec'),m=document.getElementById('recMsg'),ul=document.getElementById('recList');"
         "b.disabled=true;m.className='tip';m.textContent='读取中…';ul.innerHTML='';"
         "fetch('/api/walkie/recs',{cache:'no-store'}).then(function(t){return t.json()}).then(function(j){"
-        "m.textContent='共 '+(j.n||0)+' 段';m.className=j.n?'tip ok':'tip';ul.innerHTML='';"
+        "var tip=document.getElementById('recTip');"
+        "if(tip){tip.textContent=j.store==='ram'"
+        "?('当前为内存暂存(无 Flash REC 区)：刷新网页不再清空列表，但重启手表仍会丢失。共 '+(j.n||0)+' 段。')"
+        ":('Flash REC 持久化。共 '+(j.n||0)+' 段；下载为 16kHz 单声道 WAV。');}"
+        "m.textContent='共 '+(j.n||0)+' 段'+(j.store==='ram'?' · 内存':' · Flash');"
+        "m.className=j.n?'tip ok':'tip';ul.innerHTML='';"
         "if(!j.n){var e=document.createElement('li');e.style.cursor='default';"
         "e.innerHTML='<span class=n>暂无录音（请先在手表对讲机按住侧键录一段）</span>';ul.appendChild(e);return;}"
         "(j.list||[]).forEach(function(a){var li=document.createElement('li');"
@@ -513,6 +525,134 @@ static int http_handle_walkie_recs_clear(int fd)
     return http_send(fd, JSON_HDR_200, "{\"ok\":1,\"n\":0}");
 }
 
+/* ---- 设备串口日志(网页) ---- */
+static int http_handle_api_log(int fd, const char *req)
+{
+    char *body;
+    const char *p;
+    u32 since = 0;
+    int n;
+    char hdr[160];
+
+    p = strstr(req, "since=");
+    if (p) {
+        since = (u32)strtoul(p + 6, NULL, 10);
+    }
+    body = malloc(8192);
+    if (!body) {
+        return http_send(fd, TEXT_HDR_200, "(oom)\n");
+    }
+    n = web_log_copy(&since, body, 8192);
+    snprintf(hdr, sizeof(hdr),
+             "HTTP/1.0 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n"
+             "X-Log-Seq: %u\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+             (unsigned)since);
+    if (send(fd, hdr, strlen(hdr), 0) < 0) {
+        free(body);
+        return -1;
+    }
+    if (n > 0) {
+        int off = 0;
+        while (off < n) {
+            int r = send(fd, body + off, n - off, 0);
+            if (r <= 0) {
+                break;
+            }
+            off += r;
+        }
+    }
+    free(body);
+    return 0;
+}
+
+static int http_render_log_page(int fd)
+{
+    static const char *page =
+        "<!doctype html><html lang=zh-CN><head><meta charset=utf-8>"
+        "<meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<title>设备日志</title><style>"
+        "body{margin:0;background:#0b1220;color:#e2e8f0;font:13px/1.45 ui-monospace,Consolas,monospace}"
+        "header{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;"
+        "background:#1e293b;border-bottom:1px solid #334155;position:sticky;top:0}"
+        "a,button{appearance:none;border:0;border-radius:8px;padding:8px 12px;font:600 13px system-ui;"
+        "background:#14b8a6;color:#042f2e;text-decoration:none;cursor:pointer}"
+        "button.sec{background:#334155;color:#e2e8f0}"
+        "#meta{color:#94a3b8;font:12px system-ui;margin-left:auto}"
+        "pre{margin:0;padding:12px;white-space:pre-wrap;word-break:break-word;min-height:70vh}"
+        "</style></head><body>"
+        "<header><a href=/>返回后台</a>"
+        "<button class=sec id=btnClr type=button>清空视图</button>"
+        "<button class=sec id=btnPause type=button>暂停</button>"
+        "<span id=meta>连接中…</span></header>"
+        "<pre id=log></pre><script>"
+        "var since=0,paused=0,log=document.getElementById('log'),meta=document.getElementById('meta');"
+        "document.getElementById('btnClr').onclick=function(){log.textContent='';};"
+        "document.getElementById('btnPause').onclick=function(){paused=!paused;"
+        "this.textContent=paused?'继续':'暂停';};"
+        "function tick(){if(paused){setTimeout(tick,800);return;}"
+        "fetch('/api/log?since='+since,{cache:'no-store'}).then(function(r){"
+        "var s=r.headers.get('X-Log-Seq');if(s)since=parseInt(s,10)||since;"
+        "return r.text();}).then(function(t){"
+        "if(t){log.textContent+=t;if(log.textContent.length>120000)"
+        "log.textContent=log.textContent.slice(-90000);"
+        "window.scrollTo(0,document.body.scrollHeight);}"
+        "meta.textContent='seq '+since+' · 每秒刷新';"
+        "}).catch(function(e){meta.textContent='拉取失败, 重试中';})"
+        ".finally(function(){setTimeout(tick,1000);});}"
+        "tick();</script></body></html>";
+    return http_send(fd, HTML_HDR_200, page);
+}
+
+static int http_handle_api_hub(int fd)
+{
+    char body[512];
+    int n = walkie_hub_diag_json(body, sizeof(body));
+    if (n <= 0) {
+        return http_send(fd, JSON_HDR_200, "{\"err\":\"hub\"}");
+    }
+    return http_send(fd, JSON_HDR_200, body);
+}
+
+static int http_handle_api_hub_flush(int fd)
+{
+    char body[64];
+    int n = walkie_hub_flush_pending();
+    snprintf(body, sizeof(body), "{\"ok\":1,\"flushed\":%d}", n);
+    return http_send(fd, JSON_HDR_200, body);
+}
+
+static int http_render_hub_page(int fd)
+{
+    static const char *page =
+        "<!doctype html><html lang=zh-CN><head><meta charset=utf-8>"
+        "<meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<title>HUB 诊断</title><style>"
+        "body{margin:0;background:#0f172a;color:#e2e8f0;font:15px/1.5 system-ui}"
+        ".wrap{max-width:560px;margin:0 auto;padding:16px}"
+        ".card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:14px;margin:0 0 12px}"
+        "a,button{appearance:none;border:0;border-radius:10px;padding:10px 14px;font-weight:600;"
+        "background:#14b8a6;color:#042f2e;text-decoration:none;cursor:pointer;margin:0 8px 8px 0}"
+        "button.danger{background:#f87171;color:#450a0a}"
+        "pre{background:#0b1220;padding:12px;border-radius:10px;overflow:auto;font-size:12px}"
+        ".mut{color:#94a3b8;font-size:.85rem}"
+        "</style></head><body><div class=wrap>"
+        "<div class=card><a href=/>返回</a><a href=/log>串口日志</a>"
+        "<button type=button id=btnFlush class=danger>清除待同步</button>"
+        "<p class=mut>聊天页「待同步」= 本机还有语音未上传到 AR9331 datahub。"
+        "看下方 JSON 的 st_name / last_rc / pending_age_ms；细节在串口日志 [hub] 行。</p></div>"
+        "<div class=card><h3 style=margin:0 0 8px>实时状态</h3><pre id=box>…</pre></div>"
+        "</div><script>"
+        "function load(){fetch('/api/hub',{cache:'no-store'}).then(function(r){return r.json()})."
+        "then(function(j){document.getElementById('box').textContent=JSON.stringify(j,null,2);})."
+        "catch(function(){document.getElementById('box').textContent='读取失败';});}"
+        "document.getElementById('btnFlush').onclick=function(){"
+        "if(!confirm('丢弃队列中未上传语音？'))return;"
+        "fetch('/api/hub/flush',{method:'POST',cache:'no-store'}).then(function(){load();});};"
+        "load();setInterval(load,1500);"
+        "</script></body></html>";
+    return http_send(fd, HTML_HDR_200, page);
+}
+
 static int http_render_walkie_recs_json(int fd)
 {
     char *body;
@@ -530,7 +670,9 @@ static int http_render_walkie_recs_json(int fd)
         return -1;
     }
     room = 2048;
-    off = snprintf(body, room, "{\"n\":%d,\"rate\":16000,\"ch\":1,\"fmt\":\"s16le\",\"list\":[", n);
+    off = snprintf(body, room,
+                   "{\"n\":%d,\"store\":\"%s\",\"rate\":16000,\"ch\":1,\"fmt\":\"s16le\",\"list\":[",
+                   n, walkie_rec_is_ram() ? "ram" : "flash");
     for (i = 0; i < n && off < room - 96; i++) {
         if (walkie_rec_meta(i, &dir, &sec, &pip) != 0) {
             continue;
@@ -1409,6 +1551,8 @@ static void http_server_task(void *arg)
         return;
     }
     prov_log("[prov] http server on :%d\n", PROV_HTTP_PORT);
+    web_log_printf("[web] portal ready :%d — open /log for UART mirror",
+                   PROV_HTTP_PORT);
 
     static char req[4096];
     while (1) {
@@ -1441,6 +1585,16 @@ hdr_done:
 
         if (!strncmp(req, "GET /api/scan", 13)) {
             http_render_scan_json(conn);
+        } else if (!strncmp(req, "GET /api/log", 12)) {
+            http_handle_api_log(conn, req);
+        } else if (!strncmp(req, "POST /api/hub/flush", 19)) {
+            http_handle_api_hub_flush(conn);
+        } else if (!strncmp(req, "GET /api/hub", 12)) {
+            http_handle_api_hub(conn);
+        } else if (!strncmp(req, "GET /log", 8)) {
+            http_render_log_page(conn);
+        } else if (!strncmp(req, "GET /hub", 8)) {
+            http_render_hub_page(conn);
         } else if (!strncmp(req, "POST /api/walkie/recs/clear", 27)) {
             http_handle_walkie_recs_clear(conn);
         } else if (!strncmp(req, "GET /api/walkie/recs", 20)) {

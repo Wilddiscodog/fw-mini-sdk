@@ -4,6 +4,7 @@
 #include "lvgl.h"
 
 lv_obj_t *app_net_music_create(lv_obj_t *parent);
+void app_hub_music_exit(void);
 lv_obj_t *app_bt_music_create(lv_obj_t *parent);
 lv_obj_t *app_walkie_create(lv_obj_t *parent);
 lv_obj_t *app_settings_create(lv_obj_t *parent);

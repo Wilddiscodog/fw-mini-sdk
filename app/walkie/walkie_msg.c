@@ -12,7 +12,10 @@
 #define WALKIE_MSG_CHUNK_PCM   480
 #define WALKIE_MSG_MAX_CHUNKS  ((WALKIE_MSG_MAX_BYTES + WALKIE_MSG_CHUNK_PCM - 1) / WALKIE_MSG_CHUNK_PCM)
 #define WALKIE_MSG_RETRY       3
-#define WALKIE_MSG_ACK_TO_MS   1000
+#define WALKIE_MSG_ACK_TO_MS   3000   /* XR 重组+soft-ok 可能较慢, 原 1s 易误超时 */
+#define WALKIE_MSG_PACE_EVERY  4      /* 每 N 片让出 CPU, 减轻 WiFi 丢包 */
+#define WALKIE_MSG_PACE_DLY    2      /* os_time_dly 单位≈10ms → ~20ms */
+#define WALKIE_RX_ACCEPT_PCT   85     /* 收齐 ≥85% 分片视为可用 */
 
 enum {
     MSG_ST_IDLE = 0,
@@ -198,11 +201,14 @@ static int send_one_attempt(u16 msg_id, u32 dip)
             return -1;
         }
         off += n;
-        /* 让出一点 CPU, 减轻 UDP 丢包 */
-        if ((i & 7) == 7) {
-            os_time_dly(1);
+        /* 让出 CPU / 空口, 减轻 UDP 丢包(长语音分片多时尤其重要) */
+        if ((i % WALKIE_MSG_PACE_EVERY) == (WALKIE_MSG_PACE_EVERY - 1)) {
+            os_time_dly(WALKIE_MSG_PACE_DLY);
         }
     }
+
+    /* 给对端一点重组窗口再发 END */
+    os_time_dly(2);
 
     memset(&e, 0, sizeof(e));
     e.msg_id = msg_id;
@@ -244,7 +250,7 @@ static void walkie_msg_send_task(void *arg)
             ok = 1;
             break;
         }
-        os_time_dly(10);
+        os_time_dly(50); /* ~500ms, 给空口/对端缓冲恢复再重传 */
     }
 
     s_last_send_ok = ok ? 1 : 0;
@@ -290,7 +296,7 @@ void walkie_msg_tx_commit(void)
         return;
     }
     s_send_run = 1;
-    if (thread_fork("wk_msg_tx", 14, 2048, 0, 0, walkie_msg_send_task, (void *)dip)) {
+    if (thread_fork("wk_msg_tx", 14, 4096, 0, 0, walkie_msg_send_task, (void *)dip)) {
         printf("[walkie] msg send task fail\n");
         s_send_run = 0;
         msg_save_tx_local();
@@ -406,13 +412,23 @@ void walkie_msg_on_end(u32 from_ip, const struct walkie_msg_end *e)
     ok = (e->total_bytes == s_rx_expect && e->total_bytes > 0 &&
           e->total_chunks == s_rx_chunks &&
           s_rx_unique == s_rx_chunks && s_rx_len >= e->total_bytes);
+    if (!ok && e->total_chunks > 0 && s_rx_chunks == e->total_chunks &&
+        s_rx_unique * 100u >= (u32)e->total_chunks * WALKIE_RX_ACCEPT_PCT &&
+        s_rx_buf != NULL) {
+        /* 分片略丢但仍可听: begin 时已 memset 填零 */
+        printf("[walkie] msg rx soft-ok id=%u got_chunks=%u/%u\n",
+               e->msg_id, (unsigned)s_rx_unique, (unsigned)s_rx_chunks);
+        s_rx_len = e->total_bytes;
+        ok = 1;
+    }
     a.msg_id = e->msg_id;
     a.ok = ok ? 1 : 0;
     walkie_net_send_msg(from_ip, WALKIE_PKT_MSG_ACK, &a, sizeof(a));
 
     if (!ok) {
-        printf("[walkie] msg rx incomplete id=%u got=%u expect=%u\n",
-               e->msg_id, (unsigned)s_rx_len, (unsigned)e->total_bytes);
+        printf("[walkie] msg rx incomplete id=%u got_chunks=%u/%u bytes=%u/%u\n",
+               e->msg_id, (unsigned)s_rx_unique, (unsigned)s_rx_chunks,
+               (unsigned)s_rx_len, (unsigned)e->total_bytes);
         rx_reset();
         return;
     }

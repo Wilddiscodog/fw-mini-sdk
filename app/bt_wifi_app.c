@@ -316,6 +316,45 @@ int init_net_device_mac_addr(char *macaddr, char ap_mode)
     return 0;
 }
 
+/* DHCP Option 12: JL_XXXX, XXXX = MAC 后 2 字节十六进制 */
+extern struct netif *net_get_netif_handle(u8_t lwip_netif);
+
+static char s_dhcp_hostname[8]; /* "JL_" + 4 hex + NUL */
+
+static void mini_apply_dhcp_hostname(void)
+{
+    u8 mac[6];
+    struct netif *nif;
+    const u8 *btmac;
+
+    memset(mac, 0, sizeof(mac));
+    if (wifi_get_mac(mac) != 0) {
+        btmac = bt_get_mac_addr();
+        if (btmac) {
+            memcpy(mac, btmac, 6);
+        }
+    }
+    sprintf(s_dhcp_hostname, "JL_%02X%02X", mac[4], mac[5]);
+
+    nif = net_get_netif_handle(WIFI_NETIF);
+    if (!nif) {
+        /* 回退: 按 MAC 匹配 netif_list */
+        for (nif = netif_list; nif; nif = nif->next) {
+            if (nif->hwaddr_len >= 6 &&
+                !memcmp(nif->hwaddr, mac, 6)) {
+                break;
+            }
+        }
+    }
+    if (!nif) {
+        nif = netif_default;
+    }
+    if (nif) {
+        netif_set_hostname(nif, s_dhcp_hostname);
+        printf("[wifi] DHCP hostname=%s\n", s_dhcp_hostname);
+    }
+}
+
 static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 {
     wifi_prov_notify(event);            /* 配网/升级模块状态位(AP_START/DHCP/超时/扫描完) */
@@ -400,6 +439,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
     case WIFI_EVENT_STA_START:
         wifi_vputs("|network_user_callback->WIFI_EVENT_STA_START\n");
+        mini_apply_dhcp_hostname();
         break;
     case WIFI_EVENT_MODULE_START_ERR:
         wifi_vputs("|network_user_callback->WIFI_EVENT_MODULE_START_ERR\n");
@@ -436,6 +476,8 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         break;
     case WIFI_EVENT_STA_CONNECT_SUCC:
         wifi_vlog("|network_user_callback->WIFI_STA_CONNECT_SUCC,CH=%d\r\n", wifi_get_channel());
+        /* DHCP 发起前写入主机名, 路由器客户端列表显示 JL_XXXX */
+        mini_apply_dhcp_hostname();
         /*wifi_rxfilter_cfg(3);    //过滤not_my_bssid,如果需要使用扫描空中SSID就不要过滤*/
 #ifdef CONFIG_STATIC_IPADDR_ENABLE
         if (0 == compare_dhcp_ipaddr()) {

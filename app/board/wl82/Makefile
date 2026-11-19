@@ -70,8 +70,9 @@ endif
 # (jl_math 源码在 LCD 条件块之后追加——必须在 c_SRC_FILES := 主赋值之后)
 AUDIO_LIB :=
 ifeq ($(strip $(MINI_AUDIO_SUPPORT)),1)
-# demo_edr 通话/A2DP + demo_audio 网络/DLNA 解码集
+# demo_edr 通话/A2DP + 网络下载解码(HUB 曲库); 已去掉 DLNA/ai_server
 # M4A/AAC: 用 lib_m4a_dec_seek(与 lib_m4a_dec 符号冲突, 不可双链)
+# libmpeg: network_download 的 TS demux 依赖, 保留
 AUDIO_LIB := \
 	../../../cpu/wl82/liba/audio_server.a \
 	../../../cpu/wl82/liba/media_app.a \
@@ -94,9 +95,7 @@ AUDIO_LIB := \
 	../../../cpu/wl82/liba/libdrc.a \
 	../../../cpu/wl82/liba/lib_crossover_coff.a \
 	../../../cpu/wl82/liba/network_download.a \
-	../../../cpu/wl82/liba/libmpeg.a \
-	../../../cpu/wl82/liba/libdlna.a \
-	../../../cpu/wl82/liba/ai_server.a
+	../../../cpu/wl82/liba/libmpeg.a
 endif
 
 ifeq ($(OS), Windows_NT)
@@ -298,7 +297,7 @@ c_SRC_FILES := \
 	../../../app/bt_profile_config.c \
 	../../../app/bt_music.c \
 	../../../app/bt_decode.c \
-	../../../app/net_music.c \
+	../../../app/hub_music.c \
 	../../../app/audio_config.c \
 	../../../app/audio_demo.c \
 	../../../app/periph_demo.c \
@@ -310,6 +309,7 @@ c_SRC_FILES := \
 	../../../app/net/wifi_conf.c \
 	../../../app/net/wifi_prov.c \
 	../../../app/net/wifi_log_mute.c \
+	../../../app/net/web_log.c \
 	../../../driver/config/log_config/lib_btctrler_config.c \
 	../../../driver/config/log_config/lib_btstack_config.c \
 	../../../app/board/wl82/board.c \

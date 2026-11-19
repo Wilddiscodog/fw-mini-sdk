@@ -44,6 +44,8 @@ void walkie_peer_select_ip(u32 ip);
 u32 walkie_peer_selected_ip(void);
 u8 walkie_peer_ip_alive(u32 ip);
 const char *walkie_peer_name_by_ip(u32 ip);
+/* LAN display / DataHub DEVID, e.g. WL-FA1302 */
+const char *walkie_self_name(void);
 
 /* UI 定时刷新用: 返回 1 表示 peer 表有变化 */
 u8 walkie_peers_dirty_take(void);
@@ -70,6 +72,10 @@ u8 walkie_msg_recording(void);
 u8 walkie_msg_sending(void);
 u8 walkie_msg_last_send_ok(void);
 
+/* hub 归档同步状态: 0空闲 1同步中 2待同步 3失败 */
+u8 walkie_hub_status(void);
+u8 walkie_hub_pending(void);
+
 int walkie_rec_count(void);
 int walkie_rec_info(int idx, char *line, int line_len);
 /* dir: 0=TX 1=RX; 返回 0 成功 */
@@ -78,6 +84,8 @@ int walkie_rec_play(int idx);
 
 /* 网页导出: 确保 REC 可用; 导出第 idx 段为 16kHz/mono/s16le WAV */
 int walkie_rec_ensure(void);
+/* 1=无 Flash REC, 会话仅存 SDRAM(重启丢失); 0=nor_fs REC 持久化 */
+u8 walkie_rec_is_ram(void);
 u32 walkie_rec_pcm_bytes(int idx);
 /* write_cb 返回 <0 中止; 成功返回 0 */
 int walkie_rec_export_wav(int idx,

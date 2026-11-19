@@ -7,6 +7,7 @@
 #include "app_config.h"
 #include "generic/typedef.h"
 #include "asm/cpu.h"
+#include "web_log.h"
 #include <string.h>
 
 #if defined(CONFIG_DEBUG_ENABLE)
@@ -16,6 +17,13 @@
 #endif
 
 extern void uart_putbyte(char c);
+
+/* 过滤后的行同时进串口 + 网页环 */
+static void web_and_uart_emit(char c)
+{
+    web_log_putc(c);
+    uart_putbyte(c);
+}
 
 #if MINI_WIFI_LOG_MUTE
 
@@ -277,7 +285,7 @@ void mini_log_filter_putbyte(char c, void (*emit)(char))
 
 void putbyte(char c)
 {
-    mini_log_filter_putbyte(c, uart_putbyte);
+    mini_log_filter_putbyte(c, web_and_uart_emit);
 }
 
 #endif
@@ -297,7 +305,7 @@ void mini_log_filter_putbyte(char c, void (*emit)(char))
 
 void putbyte(char c)
 {
-    uart_putbyte(c);
+    web_and_uart_emit(c);
 }
 
 #endif

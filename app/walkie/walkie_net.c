@@ -326,6 +326,25 @@ static void peers_touch(u32 ip, const char *name, const char *ver, const u8 *mac
             strncmp(s_peers[hit].name, name, WALKIE_PEER_NAME_LEN) != 0) {
             strncpy(s_peers[hit].name, name, WALKIE_PEER_NAME_LEN - 1);
             s_dirty = 1;
+            /* Defer contact VM rename until after unlock. */
+            if (mac_valid(s_peers[hit].mac)) {
+                u8 cmac[6];
+                int ci;
+                memcpy(cmac, s_peers[hit].mac, 6);
+                os_mutex_post(&s_peer_lock);
+                ci = contact_find_mac(cmac);
+                if (ci >= 0 &&
+                    strncmp(s_contacts.items[ci].name, name,
+                            WALKIE_PEER_NAME_LEN) != 0) {
+                    memset(s_contacts.items[ci].name, 0,
+                           sizeof(s_contacts.items[ci].name));
+                    strncpy(s_contacts.items[ci].name, name,
+                            WALKIE_PEER_NAME_LEN - 1);
+                    contact_persist();
+                    printf("[walkie] contact rename -> %s\n", name);
+                }
+                return;
+            }
         }
         if (ver && ver[0]) {
             strncpy(s_peers[hit].ver, ver, WALKIE_VER_LEN - 1);
@@ -530,7 +549,7 @@ static void walkie_net_task(void *p)
     u8 buf[600];
     struct sockaddr_in from;
     socklen_t flen;
-    int n;
+    int n, got;
     u32 last_disc = 0;
     int sock;
 
@@ -541,7 +560,7 @@ static void walkie_net_task(void *p)
             break;
         }
 
-        /* 先处理扫描/心跳广播, 再 recv — 防止 SO_RCVTIMEO 无效时永远堵死 */
+        /* 先广播再收: SO_RCVTIMEO 在本平台常失效, 禁止阻塞 recv */
         if (s_scan_burst) {
             s_scan_burst--;
             s_force_disc = 0;
@@ -554,11 +573,21 @@ static void walkie_net_task(void *p)
             last_disc = walkie_now_ms();
         }
 
-        flen = sizeof(from);
-        n = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *)&from, &flen);
-        if (n > 0) {
+        got = 0;
+        for (;;) {
+            flen = sizeof(from);
+            n = recvfrom(sock, buf, sizeof(buf), MSG_DONTWAIT,
+                         (struct sockaddr *)&from, &flen);
+            if (n <= 0) {
+                break;
+            }
+            got++;
             handle_pkt(from.sin_addr.s_addr, buf, n);
+            if (got >= 8) {
+                break;
+            }
         }
+        os_time_dly(1); /* ~10ms, 保证 DISC 周期不被堵死 */
     }
 }
 
@@ -606,10 +635,7 @@ int walkie_net_start(void)
     }
     setsockopt(s_sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
     setsockopt(s_sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-    {
-        struct timeval tv = { .tv_sec = 0, .tv_usec = 100 * 1000 };
-        setsockopt(s_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    }
+    /* 收包用 MSG_DONTWAIT, 不再依赖 SO_RCVTIMEO */
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(WALKIE_PORT);
@@ -833,4 +859,12 @@ const char *walkie_peer_name_by_ip(u32 ip)
     }
     os_mutex_post(&s_peer_lock);
     return name;
+}
+
+const char *walkie_self_name(void)
+{
+    if (s_self_name[0]) {
+        return s_self_name;
+    }
+    return "WL-????";
 }

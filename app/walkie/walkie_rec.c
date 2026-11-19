@@ -140,6 +140,12 @@ static void list_rebuild(void)
     struct walkie_rec_meta m;
     u32 got;
 
+    /* RAM 会话模式: 列表就在 s_list 里, 绝不能按 Flash 索引重建
+     * (网页 /api/walkie/recs → ensure → 旧逻辑会 memset 掉全部气泡) */
+    if (s_ram_mode) {
+        return;
+    }
+
     s_list_n = 0;
     memset(s_list, 0, sizeof(s_list));
     if (!s_ready || phone_recfs.total_file == 0) {
@@ -181,7 +187,10 @@ int walkie_rec_init(void)
     int cap;
 
     if (s_ready) {
-        list_rebuild();
+        /* Flash 模式可重建索引; RAM 模式保持现有会话消息 */
+        if (!s_ram_mode) {
+            list_rebuild();
+        }
         return 0;
     }
 
@@ -212,6 +221,11 @@ int walkie_rec_init(void)
 int walkie_rec_ensure(void)
 {
     return walkie_rec_init();
+}
+
+u8 walkie_rec_is_ram(void)
+{
+    return s_ram_mode;
 }
 
 int walkie_rec_clear_all(void)

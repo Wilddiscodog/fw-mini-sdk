@@ -31,11 +31,7 @@ static enum watch_app_id s_app_id = WATCH_APP_COUNT;
 
 static const struct watch_app_desc s_apps[WATCH_APP_COUNT] = {
     { "对讲",   "T", &watch_icon_walkie,   0xFF6D00, app_walkie_create },
-#ifdef CONFIG_NET_MUSIC_MODE_ENABLE
-    { "网络",   "N", &watch_icon_net,      0x7C4DFF, app_net_music_create },
-#else
-    { "网络",   "N", &watch_icon_net,      0x7C4DFF, NULL },
-#endif
+    { "音乐",   "M", &watch_icon_net,      0x7C4DFF, app_net_music_create },
     { "蓝牙",   "B", &watch_icon_bt,       0x2979FF, app_bt_music_create },
     { "平衡球", "P", &watch_icon_ball,     0xFFD600, app_ball_create },
     { "俄罗斯方块", "T", &watch_icon_tetris, 0xFF8FAB, app_tetris_create },
@@ -229,6 +225,8 @@ void watch_ui_close_app(void)
     }
     if (s_app_id == WATCH_APP_WALKIE) {
         walkie_on_exit();
+    } else if (s_app_id == WATCH_APP_NET_MUSIC) {
+        app_hub_music_exit();
     } else if (s_app_id == WATCH_APP_ASR_TEST) {
         app_asr_test_exit();
     } else if (s_app_id == WATCH_APP_PEDO) {

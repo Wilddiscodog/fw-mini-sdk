@@ -24,6 +24,8 @@ extern int get_app_music_volume(void);
 
 #include "bt_music.h"
 #include "walkie.h"
+#include "walkie_hub.h"
+#include "hub_music.h"
 
 static lv_obj_t *make_app_root(lv_obj_t *parent, const char *title)
 {
@@ -57,78 +59,426 @@ static void stub_btn_cb(lv_event_t *e)
     watch_ui_toast("功能开发中");
 }
 
-/* -------- 网络/DLNA -------- */
-static void net_vol_dec(lv_event_t *e)
+/* -------- HUB 网络音乐 (AR9331 曲库) --------
+ * 列表/状态只用 ASCII 序号, 避开不完整汉字字库。
+ * 布局(绝对定位, 禁止整页滚动):
+ *   顶栏同高居中 = 状态; 中间卡片 = 仅列表可滚; 底栏固定按键。
+ */
+static lv_obj_t *s_hm_list;
+static lv_obj_t *s_hm_status;
+static lv_obj_t *s_hm_pp_lab;
+static lv_obj_t *s_hm_vol_lab;
+static lv_timer_t *s_hm_tm;
+static volatile int s_hm_list_result;
+static volatile u8 s_hm_list_dirty;
+static u8 s_hm_alive;
+static int s_hm_hl = -1;
+
+static void hub_music_ui_rebuild_list(void);
+
+static void hub_music_fmt_size(u32 bytes, char *out, int outlen)
 {
-    (void)e;
-    u8 v = watch_volume_get();
-    if (v > WATCH_VOL_MIN + 5) {
-        watch_volume_set(v - 5);
+    if (bytes >= 1024u * 1024u) {
+        unsigned mb10 = (unsigned)((bytes * 10u) / (1024u * 1024u));
+        snprintf(out, outlen, "%u.%uM", mb10 / 10u, mb10 % 10u);
     } else {
-        watch_volume_set(WATCH_VOL_MIN);
+        snprintf(out, outlen, "%uK", (unsigned)((bytes + 1023u) / 1024u));
     }
-    watch_volume_persist();
-    watch_ui_toast("音量已调");
 }
 
-static void net_vol_inc(lv_event_t *e)
+static void hub_music_track_click(lv_event_t *e)
+{
+    int idx = (int)(uintptr_t)lv_event_get_user_data(e);
+    int rc;
+    char tip[24];
+
+    if (hub_music_list_busy()) {
+        watch_ui_toast("LOAD...");
+        return;
+    }
+    rc = hub_music_play_idx(idx);
+    if (rc) {
+        watch_ui_toast("PLAY FAIL");
+    } else {
+        snprintf(tip, sizeof(tip), "BUF #%02d", idx + 1);
+        watch_ui_toast(tip);
+        s_hm_hl = idx;
+        hub_music_ui_rebuild_list();
+    }
+}
+
+static void hub_music_list_ui_apply(void *p)
+{
+    char buf[32];
+    int n = s_hm_list_result;
+
+    (void)p;
+    if (!s_hm_alive || !s_hm_list) {
+        return;
+    }
+    s_hm_list_dirty = 0;
+    if (n < 0) {
+        watch_ui_toast("HUB FAIL");
+        if (s_hm_status) {
+            lv_label_set_text(s_hm_status, "HUB FAIL");
+        }
+    } else {
+        snprintf(buf, sizeof(buf), "N=%d", n);
+        watch_ui_toast(buf);
+        if (s_hm_status) {
+            lv_label_set_text(s_hm_status, buf);
+        }
+    }
+    s_hm_hl = hub_music_cur_idx();
+    hub_music_ui_rebuild_list();
+}
+
+static void hub_music_list_done(int result, void *priv)
+{
+    (void)priv;
+    s_hm_list_result = result;
+    s_hm_list_dirty = 1;
+    lv_async_call(hub_music_list_ui_apply, NULL);
+}
+
+static void hub_music_refresh_cb(lv_event_t *e)
 {
     (void)e;
-    u8 v = watch_volume_get();
-    if (v + 5 < WATCH_VOL_MAX) {
-        watch_volume_set(v + 5);
-    } else {
-        watch_volume_set(WATCH_VOL_MAX);
+    if (hub_music_list_busy()) {
+        watch_ui_toast("LOAD...");
+        return;
     }
-    watch_volume_persist();
-    watch_ui_toast("音量已调");
+    if (s_hm_status) {
+        lv_label_set_text(s_hm_status, "LOAD...");
+    }
+    watch_ui_toast("LOAD...");
+    if (hub_music_refresh_async(hub_music_list_done, NULL)) {
+        watch_ui_toast("LOAD FAIL");
+        if (s_hm_status) {
+            lv_label_set_text(s_hm_status, "LOAD FAIL");
+        }
+    }
+}
+
+static void hub_music_pp_cb(lv_event_t *e)
+{
+    (void)e;
+    if (hub_music_cur_idx() < 0 || hub_music_count() <= 0) {
+        watch_ui_toast("NO TRACK");
+        return;
+    }
+    if (!hub_music_is_playing() && !hub_music_is_busy()) {
+        hub_music_play_idx(hub_music_cur_idx() >= 0 ? hub_music_cur_idx() : 0);
+    } else {
+        hub_music_pause_resume();
+    }
+}
+
+static void hub_music_prev_cb(lv_event_t *e)
+{
+    (void)e;
+    if (hub_music_prev()) {
+        watch_ui_toast("PREV FAIL");
+    } else {
+        s_hm_hl = hub_music_cur_idx();
+        hub_music_ui_rebuild_list();
+    }
+}
+
+static void hub_music_next_cb(lv_event_t *e)
+{
+    (void)e;
+    if (hub_music_next()) {
+        watch_ui_toast("NEXT FAIL");
+    } else {
+        s_hm_hl = hub_music_cur_idx();
+        hub_music_ui_rebuild_list();
+    }
+}
+
+static void hub_music_vol_update_lab(void)
+{
+    char buf[16];
+
+    if (!s_hm_vol_lab) {
+        return;
+    }
+    snprintf(buf, sizeof(buf), "%d", hub_music_volume_get());
+    lv_label_set_text(s_hm_vol_lab, buf);
+}
+
+static void hub_music_vol_dec(lv_event_t *e)
+{
+    int v = hub_music_volume_get() - 5;
+    (void)e;
+    hub_music_volume_set(v);
+    watch_volume_set((u8)hub_music_volume_get());
+    hub_music_vol_update_lab();
+}
+
+static void hub_music_vol_inc(lv_event_t *e)
+{
+    int v = hub_music_volume_get() + 5;
+    (void)e;
+    hub_music_volume_set(v);
+    watch_volume_set((u8)hub_music_volume_get());
+    hub_music_vol_update_lab();
+}
+
+static void hub_music_ui_tick(lv_timer_t *t)
+{
+    char buf[40];
+    int idx;
+
+    (void)t;
+    if (!s_hm_alive || !s_hm_status) {
+        return;
+    }
+    if (s_hm_list_dirty) {
+        hub_music_list_ui_apply(NULL);
+    }
+    if (hub_music_list_busy()) {
+        lv_label_set_text(s_hm_status, "LOAD...");
+        return;
+    }
+    idx = hub_music_cur_idx();
+    if (idx != s_hm_hl) {
+        s_hm_hl = idx;
+        hub_music_ui_rebuild_list();
+    }
+    if (hub_music_is_busy() && idx >= 0) {
+        snprintf(buf, sizeof(buf), "BUF #%02d", idx + 1);
+    } else if (hub_music_is_playing() && idx >= 0) {
+        snprintf(buf, sizeof(buf), "PLAY #%02d", idx + 1);
+    } else if (idx >= 0) {
+        snprintf(buf, sizeof(buf), "PAUSE #%02d", idx + 1);
+    } else {
+        snprintf(buf, sizeof(buf), "N=%d  tap#", hub_music_count());
+    }
+    lv_label_set_text(s_hm_status, buf);
+    if (s_hm_pp_lab) {
+        lv_label_set_text(s_hm_pp_lab, hub_music_is_playing() ? "||" : ">");
+    }
+    hub_music_vol_update_lab();
+}
+
+static void hub_music_ui_rebuild_list(void)
+{
+    int i, n, cur;
+    const struct hub_music_track *t;
+
+    if (!s_hm_list) {
+        return;
+    }
+    lv_obj_clean(s_hm_list);
+    n = hub_music_count();
+    cur = hub_music_cur_idx();
+    if (n <= 0) {
+        lv_obj_t *lab = lv_label_create(s_hm_list);
+        lv_obj_set_style_text_font(lab, &lv_font_watch_16_cn, 0);
+        lv_obj_set_style_text_color(lab, lv_color_hex(WATCH_COL_TEXT_DIM), 0);
+        lv_label_set_text(lab, "EMPTY\npress Sync");
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        lv_obj_t *row, *lab;
+        char line[40], sz[12];
+        u32 bg;
+
+        t = hub_music_get(i);
+        if (!t) {
+            continue;
+        }
+        hub_music_fmt_size(t->bytes, sz, sizeof(sz));
+        /* 不显示中文曲名, 只用序号+格式+大小 */
+        snprintf(line, sizeof(line), "#%02d  %s  %s", i + 1,
+                 t->fmt[0] ? t->fmt : "?", sz);
+
+        row = lv_btn_create(s_hm_list);
+        lv_obj_set_width(row, lv_pct(100));
+        lv_obj_set_height(row, 34);
+        bg = (i == cur) ? WATCH_COL_ACCENT2 : WATCH_COL_CARD_HL;
+        lv_obj_set_style_bg_color(row, lv_color_hex(bg), 0);
+        lv_obj_set_style_radius(row, 6, 0);
+        lv_obj_set_style_shadow_width(row, 0, 0);
+        lv_obj_set_style_pad_hor(row, 8, 0);
+        lv_obj_set_style_pad_ver(row, 0, 0);
+        lv_obj_add_event_cb(row, hub_music_track_click, LV_EVENT_CLICKED,
+                            (void *)(uintptr_t)i);
+
+        lab = lv_label_create(row);
+        lv_obj_set_style_text_font(lab, &lv_font_watch_16_cn, 0);
+        lv_obj_set_style_text_color(lab, lv_color_hex(WATCH_COL_TEXT), 0);
+        lv_label_set_text(lab, line);
+        lv_obj_align(lab, LV_ALIGN_LEFT_MID, 0, 0);
+    }
+}
+
+static lv_obj_t *hub_music_mk_btn(lv_obj_t *parent, const char *txt,
+                                  void (*cb)(lv_event_t *),
+                                  lv_coord_t w, lv_coord_t h, u32 bg)
+{
+    lv_obj_t *btn = lv_btn_create(parent);
+    lv_obj_t *lab;
+
+    lv_obj_set_size(btn, w, h);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(bg), 0);
+    lv_obj_set_style_radius(btn, 6, 0);
+    lv_obj_set_style_shadow_width(btn, 0, 0);
+    lv_obj_set_style_pad_all(btn, 0, 0);
+    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
+    lab = lv_label_create(btn);
+    lv_obj_set_style_text_font(lab, &lv_font_watch_16_cn, 0);
+    lv_obj_set_style_text_color(lab, lv_color_hex(WATCH_COL_TEXT), 0);
+    lv_label_set_text(lab, txt);
+    lv_obj_center(lab);
+    return lab;
+}
+
+void app_hub_music_exit(void)
+{
+    s_hm_alive = 0;
+    if (s_hm_tm) {
+        lv_timer_del(s_hm_tm);
+        s_hm_tm = NULL;
+    }
+    s_hm_list = NULL;
+    s_hm_status = NULL;
+    s_hm_pp_lab = NULL;
+    s_hm_vol_lab = NULL;
+    hub_music_stop();
 }
 
 lv_obj_t *app_net_music_create(lv_obj_t *parent)
 {
-    lv_obj_t *root = make_app_root(parent, "网络播放");
-    lv_obj_t *body = make_body(root);
+    lv_obj_t *root, *body, *bar, *row1, *row2, *lab;
+    lv_coord_t bw, body_y, body_h;
+    const lv_coord_t chrome_y = WATCH_SAFE_Y;
+    const lv_coord_t chrome_h = 32;
+    const lv_coord_t bar_h = 66;
+    const lv_coord_t gap = 4;
 
-    lv_obj_t *lab = lv_label_create(body);
+    s_hm_list = NULL;
+    s_hm_status = NULL;
+    s_hm_pp_lab = NULL;
+    s_hm_vol_lab = NULL;
+    s_hm_list_dirty = 0;
+    s_hm_hl = -1;
+    s_hm_alive = 1;
+    if (s_hm_tm) {
+        lv_timer_del(s_hm_tm);
+        s_hm_tm = NULL;
+    }
+
+    root = make_app_root(parent, "音乐");
+
+    /* 状态: 与「返回」同高、水平居中(夹在返回与标题之间) */
+    s_hm_status = lv_label_create(root);
+    lv_obj_set_style_text_font(s_hm_status, &lv_font_watch_16_cn, 0);
+    lv_obj_set_style_text_color(s_hm_status, lv_color_hex(WATCH_COL_TEXT_DIM), 0);
+    lv_obj_set_width(s_hm_status, LCD_W - 56 - 56 - 20);
+    lv_obj_set_style_text_align(s_hm_status, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(s_hm_status, LV_LABEL_LONG_CLIP);
+    lv_label_set_text(s_hm_status, "LOAD...");
+    lv_obj_align(s_hm_status, LV_ALIGN_TOP_MID, 0, chrome_y + 6);
+    lv_obj_add_flag(s_hm_status, LV_OBJ_FLAG_FLOATING); /* 不参与父布局滚动 */
+
+    /* 中间卡片: 只装列表 */
+    body_y = chrome_y + chrome_h + gap;
+    body_h = LCD_H - body_y - bar_h - gap;
+    if (body_h < 80) {
+        body_h = 80;
+    }
+    body = lv_obj_create(root);
+    lv_obj_set_size(body, LCD_W - 16, body_h);
+    lv_obj_align(body, LV_ALIGN_TOP_MID, 0, body_y);
+    lv_obj_set_style_bg_color(body, lv_color_hex(WATCH_COL_CARD), 0);
+    lv_obj_set_style_border_color(body, lv_color_hex(WATCH_COL_ACCENT2), 0);
+    lv_obj_set_style_border_width(body, 2, 0);
+    lv_obj_set_style_radius(body, 18, 0);
+    lv_obj_set_style_pad_all(body, 6, 0);
+    lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE);
+
+    s_hm_list = lv_obj_create(body);
+    lv_obj_set_size(s_hm_list, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(s_hm_list, lv_color_hex(WATCH_COL_BG), 0);
+    lv_obj_set_style_border_width(s_hm_list, 0, 0);
+    lv_obj_set_style_radius(s_hm_list, 8, 0);
+    lv_obj_set_style_pad_all(s_hm_list, 4, 0);
+    lv_obj_set_style_pad_row(s_hm_list, 3, 0);
+    lv_obj_set_flex_flow(s_hm_list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_scroll_dir(s_hm_list, LV_DIR_VER);
+    lv_obj_add_flag(s_hm_list, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* 底栏: 挂在 root 上固定, 绝不进列表 */
+    bar = lv_obj_create(root);
+    lv_obj_set_size(bar, LCD_W - 12, bar_h);
+    lv_obj_align(bar, LV_ALIGN_BOTTOM_MID, 0, -2);
+    lv_obj_set_style_bg_color(bar, lv_color_hex(WATCH_COL_BG), 0);
+    lv_obj_set_style_border_width(bar, 0, 0);
+    lv_obj_set_style_pad_all(bar, 2, 0);
+    lv_obj_set_style_pad_row(bar, 4, 0);
+    lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(bar, LV_OBJ_FLAG_FLOATING);
+    lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(bar, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+
+    bw = (LCD_W - 24) / 4;
+    if (bw < 42) {
+        bw = 42;
+    }
+    if (bw > 58) {
+        bw = 58;
+    }
+
+    row1 = lv_obj_create(bar);
+    lv_obj_set_size(row1, lv_pct(100), 28);
+    lv_obj_set_style_bg_opa(row1, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row1, 0, 0);
+    lv_obj_set_style_pad_all(row1, 0, 0);
+    lv_obj_clear_flag(row1, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row1, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row1, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    hub_music_mk_btn(row1, "Sync", hub_music_refresh_cb, bw, 28, WATCH_COL_CARD_HL);
+    hub_music_mk_btn(row1, "<<", hub_music_prev_cb, bw, 28, WATCH_COL_CARD_HL);
+    s_hm_pp_lab = hub_music_mk_btn(row1, ">", hub_music_pp_cb, bw, 28,
+                                   WATCH_COL_ACCENT2);
+    hub_music_mk_btn(row1, ">>", hub_music_next_cb, bw, 28, WATCH_COL_CARD_HL);
+
+    row2 = lv_obj_create(bar);
+    lv_obj_set_size(row2, lv_pct(100), 28);
+    lv_obj_set_style_bg_opa(row2, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row2, 0, 0);
+    lv_obj_set_style_pad_all(row2, 0, 0);
+    lv_obj_clear_flag(row2, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row2, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row2, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    hub_music_mk_btn(row2, "-", hub_music_vol_dec, bw, 28, WATCH_COL_CARD_HL);
+    lab = lv_label_create(row2);
     lv_obj_set_style_text_font(lab, &lv_font_watch_16_cn, 0);
     lv_obj_set_style_text_color(lab, lv_color_hex(WATCH_COL_TEXT), 0);
-    lv_label_set_long_mode(lab, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(lab, LCD_W - 40);
+    lv_obj_set_width(lab, bw);
+    lv_obj_set_style_text_align(lab, LV_TEXT_ALIGN_CENTER, 0);
+    s_hm_vol_lab = lab;
+    hub_music_vol_update_lab();
+    hub_music_mk_btn(row2, "+", hub_music_vol_inc, bw, 28, WATCH_COL_CARD_HL);
 
-    char buf[160];
-#if (defined MINI_WIFI_SUPPORT) && MINI_WIFI_SUPPORT
-    int st = wifi_get_sta_connect_state();
-    snprintf(buf, sizeof(buf),
-             "DLNA 网络播放器\n等待手机推送音频\nWiFi:%s\n音量:%d",
-             (st == WIFI_STA_NETWORK_STACK_DHCP_SUCC) ? "已连接" : "未就绪",
-             watch_volume_get());
-#else
-    snprintf(buf, sizeof(buf), "DLNA 网络播放器\nWiFi未启用\n音量:%d", watch_volume_get());
-#endif
-    lv_label_set_text(lab, buf);
-    lv_obj_align(lab, LV_ALIGN_TOP_LEFT, 0, 0);
-
-    lv_obj_t *dec = lv_btn_create(body);
-    lv_obj_set_size(dec, 80, 32);
-    lv_obj_align(dec, LV_ALIGN_BOTTOM_LEFT, 8, -8);
-    lv_obj_set_style_bg_color(dec, lv_color_hex(WATCH_COL_CARD_HL), 0);
-    lv_obj_add_event_cb(dec, net_vol_dec, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *dl = lv_label_create(dec);
-    lv_obj_set_style_text_font(dl, &lv_font_watch_16_cn, 0);
-    lv_label_set_text(dl, "音量-");
-    lv_obj_center(dl);
-
-    lv_obj_t *inc = lv_btn_create(body);
-    lv_obj_set_size(inc, 80, 32);
-    lv_obj_align(inc, LV_ALIGN_BOTTOM_RIGHT, -8, -8);
-    lv_obj_set_style_bg_color(inc, lv_color_hex(WATCH_COL_CARD_HL), 0);
-    lv_obj_add_event_cb(inc, net_vol_inc, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *il = lv_label_create(inc);
-    lv_obj_set_style_text_font(il, &lv_font_watch_16_cn, 0);
-    lv_label_set_text(il, "音量+");
-    lv_obj_center(il);
+    s_hm_tm = lv_timer_create(hub_music_ui_tick, 500, NULL);
+    hub_music_ui_rebuild_list();
+    if (hub_music_count() > 0) {
+        char buf[24];
+        snprintf(buf, sizeof(buf), "N=%d", hub_music_count());
+        lv_label_set_text(s_hm_status, buf);
+        s_hm_hl = hub_music_cur_idx();
+    } else if (hub_music_refresh_async(hub_music_list_done, NULL)) {
+        lv_label_set_text(s_hm_status, "press Sync");
+    }
     return root;
 }
+
 
 /* -------- 蓝牙音乐 -------- */
 static void bt_play_cb(lv_event_t *e)
@@ -900,6 +1250,7 @@ static void walkie_tick(lv_timer_t *t)
     if (s_wk_in_chat && s_wk_chat_status) {
         const char *st;
         u32 col = WATCH_COL_TEXT_DIM;
+        u8 hub_st = walkie_hub_status();
         if (walkie_msg_recording() || walkie_ptt_is_on()) {
             st = "录音中(松键发送)";
             col = WATCH_COL_DANGER;
@@ -911,6 +1262,15 @@ static void walkie_tick(lv_timer_t *t)
             last_send_busy = 0;
             st = walkie_msg_last_send_ok() ? "已送达" : "发送失败";
             col = walkie_msg_last_send_ok() ? WATCH_COL_ACCENT : WATCH_COL_DANGER;
+        } else if (hub_st == WALKIE_HUB_ST_SYNCING) {
+            st = "同步中";
+            col = WATCH_COL_ACCENT;
+        } else if (hub_st == WALKIE_HUB_ST_PENDING) {
+            st = "待同步";
+            col = WATCH_COL_ACCENT;
+        } else if (hub_st == WALKIE_HUB_ST_FAIL) {
+            st = "同步失败";
+            col = WATCH_COL_DANGER;
         } else {
             st = "按侧键录音, 松开发送";
         }

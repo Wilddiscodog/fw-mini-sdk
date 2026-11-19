@@ -1,36 +1,58 @@
 #include "app_config.h"
 #include "system/includes.h"
+#include "os/os_api.h"
 #include "walkie_priv.h"
+#include "walkie.h"
 #include "walkie_hub.h"
 #include "net/http/http_cli.h"
 #include "lwip/sockets.h"
+#include "web_log.h"
 
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-/* ============ datahub 归档客户端 ============
- * 挂接: walkie_msg.c 的 walkie_msg_send_task() 中,
- *       msg_save_tx_local() 之后加一行:
- *           walkie_hub_put_voice(s_tx_buf, s_tx_len, msg_id,
- *                                walkie_peer_name_by_ip(dip));
- *
- * 协议: POST http://HUB_IP/cgi-bin/hub?cmd=put&... body=PCM裸流
- *       hub 侧按 fmt=pcm&rate=16000 记录, get 时自动包 44 字节 WAV 头
+/* ============ datahub 归档客户端 (AR9331 luci-app-datahub) ============
+ * A-law 压缩 + 限长 + 本地队列 + 常驻 worker + 失败重试
+ * put:  fmt=alaw&rate=16000; pull raw=1 后按 fmt 解码再落盘
  */
 
-struct hub_put_job {
-    u8   *buf;
-    u32   len;
-    char  url[288];
+enum {
+    HUB_JOB_PUT = 1,
+    HUB_JOB_PULL = 2,
 };
 
-static volatile u8 s_hub_busy;
+struct hub_job {
+    u8   used;
+    u8   kind;
+    u8   retries;
+    u16  msg_id;
+    char to[WALKIE_PEER_NAME_LEN];
+    char fmt[8];     /* 上传时填写; put 入队时为空=worker 内再压 alaw */
+    u8  *buf;        /* put: 裸 PCM s16le (在 worker 里编码), 非已压缩 */
+    u32  len;
+    u32  dur_ms;
+};
 
-/* ============ hub 自动发现 (UDP 广播, 零配置) ============
- * 广播 "DISCOVER" → 3722, hub 应答 "DATAHUB <ip> <key>"
- * 找不到时回退宏 WALKIE_HUB_IP/WALKIE_HUB_KEY
- */
+static OS_SEM   s_hub_sem;
+static OS_MUTEX s_hub_mtx;
+static volatile u8 s_hub_inited;
+static volatile u8 s_hub_worker;
+static volatile u8 s_hub_working;      /* put worker 忙 */
+static volatile u8 s_hub_pull_busy;    /* pull 独立线程忙 */
+static volatile u8 s_hub_pull_abort;   /* put 到来时打断 pull */
+static volatile u8 s_hub_work_kind;    /* HUB_JOB_* while put working */
+static volatile u8 s_hub_st = WALKIE_HUB_ST_IDLE;
+static volatile u8 s_hub_last_fail;    /* 仅 put 失败 */
+static volatile u32 s_hub_put_ok;
+static volatile u32 s_hub_put_fail;
+static volatile u32 s_hub_last_rc;     /* 最近 put 返回码 */
+static volatile u32 s_hub_pending_since_ms;
+static volatile u16 s_hub_last_msg_id;
+static struct hub_job s_q[WALKIE_HUB_Q_DEPTH];
+
+/* ============ hub 自动发现 (UDP 广播) ============ */
+
 static char s_hub_ip[16];
 static char s_hub_key[24];
 static u32 s_disc_ms;
@@ -42,56 +64,81 @@ static int hub_discover(void)
     char buf[64];
     int s, i, n, ok = -1;
     int bcast = 1;
-    struct timeval tv = { 0, 800000 };
+    u32 t0;
 
     s = socket(AF_INET, SOCK_DGRAM, 0);
     if (s < 0) {
         return -1;
     }
     setsockopt(s, SOL_SOCKET, SO_BROADCAST, &bcast, sizeof(bcast));
-    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     memset(&dst, 0, sizeof(dst));
     dst.sin_family = AF_INET;
     dst.sin_port = htons(3722);
     dst.sin_addr.s_addr = INADDR_BROADCAST;
-    for (i = 0; i < 3 && ok; i++) {
+    /* 不用 SO_RCVTIMEO: 本平台常失效会永久卡在 recvfrom */
+    for (i = 0; i < 2 && ok; i++) {
         if (sendto(s, "DISCOVER", 8, 0, (struct sockaddr *)&dst, sizeof(dst)) < 0) {
             break;
         }
-        flen = sizeof(from);
-        n = recvfrom(s, buf, sizeof(buf) - 1, 0, (struct sockaddr *)&from, &flen);
-        if (n > 8 && memcmp(buf, "DATAHUB ", 8) == 0) {
-            char *p1, *p2;
-            buf[n] = '\0';
-            p1 = buf + 8;
-            p2 = strchr(p1, ' ');
-            if (p2) {
-                *p2 = '\0';
-                p2++;
-                snprintf(s_hub_ip, sizeof(s_hub_ip), "%s", p1);
-                snprintf(s_hub_key, sizeof(s_hub_key), "%s", p2);
-                ok = 0;
+        t0 = timer_get_ms();
+        while ((u32)(timer_get_ms() - t0) < 300) {
+            flen = sizeof(from);
+            n = recvfrom(s, buf, sizeof(buf) - 1, MSG_DONTWAIT,
+                         (struct sockaddr *)&from, &flen);
+            if (n > 8 && memcmp(buf, "DATAHUB ", 8) == 0) {
+                char *p1, *p2;
+                buf[n] = '\0';
+                p1 = buf + 8;
+                p2 = strchr(p1, ' ');
+                if (p2) {
+                    *p2 = '\0';
+                    p2++;
+                    snprintf(s_hub_ip, sizeof(s_hub_ip), "%s", p1);
+                    snprintf(s_hub_key, sizeof(s_hub_key), "%s", p2);
+                    ok = 0;
+                    break;
+                }
             }
+            os_time_dly(1); /* ~10ms */
         }
     }
     close(s);
     return ok;
 }
 
+/* put/HTTP 热路径: 绝不阻塞在 DISCOVER 上; 无缓存则立刻用编译期兜底 IP */
 static const char *hub_ip(void)
 {
-    u32 now = timer_get_ms();
-
     if (s_hub_ip[0]) {
         return s_hub_ip;
     }
-    if ((u32)(now - s_disc_ms) > 60000) {   /* 节流: 至多每分钟尝试一次 */
-        s_disc_ms = now;
-        if (hub_discover() == 0) {
-            printf("[walkie] hub found by discovery: %s\n", s_hub_ip);
-        }
+    /* 写入缓存, 避免每次 put 都重新判断 / 误触发发现 */
+    snprintf(s_hub_ip, sizeof(s_hub_ip), "%s", WALKIE_HUB_IP);
+    printf("[walkie] hub use fallback ip %s\n", s_hub_ip);
+    web_log_printf("[hub] fallback ip %s", s_hub_ip);
+    return s_hub_ip;
+}
+
+/* 空闲时可选: 广播修正 IP/key (失败也不清掉已有兜底) */
+static void hub_discover_try(void)
+{
+    u32 now = timer_get_ms();
+    char old_ip[16];
+
+    if (s_disc_ms && (u32)(now - s_disc_ms) < 60000) {
+        return;
     }
-    return s_hub_ip[0] ? s_hub_ip : WALKIE_HUB_IP;
+    s_disc_ms = now ? now : 1;
+    snprintf(old_ip, sizeof(old_ip), "%s", s_hub_ip);
+    if (hub_discover() == 0) {
+        printf("[walkie] hub found by discovery: %s\n", s_hub_ip);
+        web_log_printf("[hub] discovered %s", s_hub_ip);
+    } else if (!old_ip[0]) {
+        /* 发现失败且原先无 IP: 落到兜底 */
+        (void)hub_ip();
+    } else {
+        snprintf(s_hub_ip, sizeof(s_hub_ip), "%s", old_ip);
+    }
 }
 
 static const char *hub_key(void)
@@ -99,13 +146,120 @@ static const char *hub_key(void)
     return s_hub_key[0] ? s_hub_key : WALKIE_HUB_KEY;
 }
 
-/* ============ HTTP GET 收集器: 整包 body 收进 RAM ============ */
+static const char *hub_devid(void)
+{
+    return walkie_self_name();
+}
+
+/* 失败时清缓存, 下次用兜底 IP; 不在 put 热路径里同步 DISCOVER */
+static void hub_forget(void)
+{
+    s_hub_ip[0] = '\0';
+    s_hub_key[0] = '\0';
+    s_disc_ms = 0;
+}
+
+/* ============ G.711 A-law (ITU) ============ */
+
+static const s16 s_alaw_seg_end[8] = {
+    0x1F, 0x3F, 0x7F, 0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF
+};
+
+static u8 linear_to_alaw(s16 pcm)
+{
+    int mask, seg, aval;
+    int pcm_val = pcm;
+
+    if (pcm_val >= 0) {
+        mask = 0xD5;
+    } else {
+        mask = 0x55;
+        pcm_val = -pcm_val - 1;
+        if (pcm_val < 0) {
+            pcm_val = 0;
+        }
+    }
+    if (pcm_val > 32635) {
+        pcm_val = 32635;
+    }
+    pcm_val >>= 3;
+    for (seg = 0; seg < 8; seg++) {
+        if (pcm_val <= s_alaw_seg_end[seg]) {
+            break;
+        }
+    }
+    if (seg >= 8) {
+        seg = 7;
+    }
+    if (seg < 2) {
+        aval = (seg << 4) | ((pcm_val >> 1) & 0x0F);
+    } else {
+        aval = (seg << 4) | ((pcm_val >> seg) & 0x0F);
+    }
+    return (u8)(aval ^ mask);
+}
+
+static s16 alaw_to_linear(u8 a_val)
+{
+    int t, seg;
+
+    a_val ^= 0x55;
+    t = (a_val & 0x0F) << 4;
+    seg = (a_val & 0x70) >> 4;
+    switch (seg) {
+    case 0:
+        t += 8;
+        break;
+    case 1:
+        t += 0x108;
+        break;
+    default:
+        t += 0x108;
+        t <<= (seg - 1);
+        break;
+    }
+    return (a_val & 0x80) ? (s16)t : (s16)(-t);
+}
+
+static u8 *hub_encode_alaw(const s16 *pcm, u32 samples, u32 *out_len)
+{
+    u8 *dst;
+    u32 i;
+
+    dst = malloc(samples);
+    if (!dst) {
+        return NULL;
+    }
+    for (i = 0; i < samples; i++) {
+        dst[i] = linear_to_alaw(pcm[i]);
+    }
+    *out_len = samples;
+    return dst;
+}
+
+static u8 *hub_decode_alaw(const u8 *src, u32 src_len, u32 *out_len)
+{
+    s16 *dst;
+    u32 i;
+
+    dst = (s16 *)malloc(src_len * 2);
+    if (!dst) {
+        return NULL;
+    }
+    for (i = 0; i < src_len; i++) {
+        dst[i] = alaw_to_linear(src[i]);
+    }
+    *out_len = src_len * 2;
+    return (u8 *)dst;
+}
+
+/* ============ HTTP GET ============ */
 
 struct hub_dl {
     u8  *buf;
     u32  cap;
     u32  len;
-    int  ok;      /* 1=完成 0=进行中 -1=失败 */
+    int  ok;
 };
 
 static int hub_dl_cb(void *cctx, void *buf, unsigned int size, void *priv, httpin_status st)
@@ -167,7 +321,7 @@ static int hub_get(const char *url, struct hub_dl *dl)
     return 0;
 }
 
-/* ============ 极简 JSON 取值(CGI 输出格式固定, 扁平对象) ============ */
+/* ============ 极简 JSON ============ */
 
 static const char *jfind(const char *p, const char *end, const char *key)
 {
@@ -186,7 +340,6 @@ static long jnum(const char *p, const char *end, const char *key, long def)
     return hit ? strtol(hit + strlen(key) + 3, NULL, 10) : def;
 }
 
-/* 取字符串值到 out(不处理转义; 值均为安全字符/UTF-8 原文) */
 static int jstr(const char *p, const char *end, const char *key, char *out, int outlen)
 {
     const char *hit = jfind(p, end, key);
@@ -215,8 +368,6 @@ static int jstr(const char *p, const char *end, const char *key, char *out, int 
     return 0;
 }
 
-/* ============ 名字 → peer ip(气泡/记录元数据用, 找不到返回 0) ============ */
-
 static u32 hub_name_to_ip(const char *name)
 {
     int i, n;
@@ -241,9 +392,6 @@ static u32 hub_name_to_ip(const char *name)
     return 0;
 }
 
-/* ============ 上传(归档) ============ */
-
-/* 把不安全字符编成 %XX (标识符只需 ASCII 安全集) */
 static void urlenc(char *dst, int dstlen, const char *src)
 {
     static const char *hex = "0123456789ABCDEF";
@@ -264,127 +412,434 @@ static void urlenc(char *dst, int dstlen, const char *src)
     *dst = '\0';
 }
 
-u8 walkie_hub_idle(void)
-{
-    return !s_hub_busy;
-}
+/* ============ 原始 TCP POST(无 Expect) ============ */
 
-static void hub_put_task(void *arg)
+/* 用官方 httpcli_post: 本平台 SO_RCVTIMEO 常失效, 自写 recv 会立刻得到空响应 → http=-1 */
+static int hub_put_raw(const char *url, const u8 *body, u32 body_len)
 {
-    struct hub_put_job *job = (struct hub_put_job *)arg;
     httpcli_ctx ctx;
+    struct hub_dl dl;
     httpin_error e;
+    char snip[96];
+    int n;
 
-    printf("[walkie] hub put %u bytes ...\n", (unsigned)job->len);
-
-    memset(&ctx, 0, sizeof(ctx));
-    ctx.url            = job->url;
-    ctx.post_data      = (const char *)job->buf;
-    ctx.data_len       = (int)job->len;
-    ctx.data_format    = "application/octet-stream";
-    ctx.timeout_millsec = WALKIE_HUB_TIMEOUT;
-    ctx.connection     = "close";
-
-    e = httpcli_post(&ctx);
-    /* 只看传输层结果; hub 业务错误会以 4xx 返回, 归档尽力而为不重试 */
-    printf("[walkie] hub put %s (e=%d)\n", e == HERROR_OK ? "ok" : "fail", (int)e);
-
-    free(job->buf);
-    free(job);
-    s_hub_busy = 0;
-    while (1) {
-        os_time_dly(1000);   /* 杰理线程不退出, 常驻空转 */
-    }
-}
-
-int walkie_hub_put_voice(const void *pcm, u32 len, u16 msg_id, const char *to_name)
-{
-    struct hub_put_job *job;
-    char enc_to[64];
-    u32 dur_ms;
-
-    if (!pcm || !len) {
+    if (!url || !body || !body_len) {
         return -1;
     }
-    if (!walkie_net_has_ip()) {
-        printf("[walkie] hub: no ip, skip archive\n");
-        return -2;
-    }
-    if (s_hub_busy) {
-        printf("[walkie] hub: busy, skip archive\n");
-        return -3;
+
+    memset(&dl, 0, sizeof(dl));
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.url             = url;
+    ctx.cb              = hub_dl_cb;
+    ctx.priv            = &dl;
+    ctx.timeout_millsec = WALKIE_HUB_TIMEOUT;
+    ctx.connection      = "close";
+    ctx.post_data       = (const char *)body;
+    ctx.data_len        = (int)body_len;
+    ctx.data_format     = "application/octet-stream";
+
+    e = httpcli_post(&ctx);
+
+    snip[0] = '\0';
+    if (dl.buf && dl.len) {
+        n = (int)dl.len;
+        if (n > (int)sizeof(snip) - 1) {
+            n = (int)sizeof(snip) - 1;
+        }
+        memcpy(snip, dl.buf, (size_t)n);
+        snip[n] = '\0';
     }
 
-    job = malloc(sizeof(*job));
-    if (!job) {
-        return -4;
-    }
-    job->buf = malloc(len);
-    if (!job->buf) {
-        free(job);
-        return -4;
-    }
-    memcpy(job->buf, pcm, len);
-    job->len = len;
+    printf("[walkie] hub put httpcli e=%d ok=%d body=[%s]\n",
+           (int)e, dl.ok, snip);
+    web_log_printf("[hub] httpcli e=%d ok=%d | %s", (int)e, dl.ok, snip);
 
-    urlenc(enc_to, sizeof(enc_to), to_name ? to_name : "");
-    dur_ms = len / (WALKIE_PCM_RATE * 2 * WALKIE_PCM_CH / 1000); /* s16 */
-
-    snprintf(job->url, sizeof(job->url),
-             "http://%s:%d/cgi-bin/hub"
-             "?cmd=put&key=%s"
-             "&dev=%s&ch=audio&dtype=file&fmt=pcm"
-             "&rate=%d&dur=%u&uid=%s-%u&txt=%s",
-             hub_ip(), WALKIE_HUB_PORT, hub_key(),
-             WALKIE_HUB_DEVID, WALKIE_PCM_RATE,
-             (unsigned)dur_ms,
-             WALKIE_HUB_DEVID, (unsigned)msg_id, enc_to);
-
-    s_hub_busy = 1;
-    if (thread_fork("wk_hub", 13, 3072, 0, 0, hub_put_task, job)) {
-        printf("[walkie] hub: task fork fail\n");
-        free(job->buf);
-        free(job);
-        s_hub_busy = 0;
-        return -5;
+    if (dl.buf) {
+        free(dl.buf);
+        dl.buf = NULL;
     }
+
+    if (e == HERROR_OK && dl.ok == 1) {
+        return 0;
+    }
+    if (strstr(snip, "\"ok\":1")) {
+        return 0;
+    }
+    return (e == HERROR_OK) ? -8 : (int)e;
+}
+
+/* ============ 队列 / 状态 / worker ============ */
+
+static u8 hub_q_count(void)
+{
+    int i;
+    u8 n = 0;
+
+    for (i = 0; i < WALKIE_HUB_Q_DEPTH; i++) {
+        if (s_q[i].used) {
+            n++;
+        }
+    }
+    return n;
+}
+
+/* 仅统计待上传; pull 不进状态栏, 避免接收端进聊天拉漏收时一直「同步中」 */
+static u8 hub_q_put_count(void)
+{
+    int i;
+    u8 n = 0;
+
+    for (i = 0; i < WALKIE_HUB_Q_DEPTH; i++) {
+        if (s_q[i].used && s_q[i].kind == HUB_JOB_PUT) {
+            n++;
+        }
+    }
+    return n;
+}
+
+static void hub_refresh_st(void)
+{
+    u8 nput = hub_q_put_count();
+    u8 putting = s_hub_working ? 1 : 0;
+    u32 now = timer_get_ms();
+
+    /* 状态栏只反映上传; pull 在独立线程, 不再造成「待同步」假死 */
+    if (putting) {
+        s_hub_st = WALKIE_HUB_ST_SYNCING;
+        s_hub_pending_since_ms = 0;
+    } else if (nput) {
+        if (s_hub_st != WALKIE_HUB_ST_PENDING) {
+            s_hub_pending_since_ms = now ? now : 1;
+        }
+        s_hub_st = WALKIE_HUB_ST_PENDING;
+    } else if (s_hub_last_fail) {
+        s_hub_st = WALKIE_HUB_ST_FAIL;
+        s_hub_pending_since_ms = 0;
+    } else {
+        s_hub_st = WALKIE_HUB_ST_IDLE;
+        s_hub_pending_since_ms = 0;
+    }
+}
+
+static void hub_job_free(struct hub_job *j)
+{
+    if (j->buf) {
+        free(j->buf);
+        j->buf = NULL;
+    }
+    memset(j, 0, sizeof(*j));
+}
+
+/* 待同步卡住: 踢醒 worker; 超过 45s 仍有 put 且不在上传 → 丢弃并标失败 */
+static void hub_watchdog(void)
+{
+    u32 now, age;
+    int i, dropped = 0;
+
+    if (s_hub_st != WALKIE_HUB_ST_PENDING || !s_hub_pending_since_ms) {
+        return;
+    }
+    now = timer_get_ms();
+    age = (u32)(now - s_hub_pending_since_ms);
+
+    /* >3s 仍排队: 可能丢了 sem, 每 2s 踢一次 */
+    if (age > 3000 && s_hub_inited && !s_hub_working) {
+        static u32 s_last_kick_ms;
+        if (!s_last_kick_ms || (u32)(now - s_last_kick_ms) > 2000) {
+            s_last_kick_ms = now;
+            os_sem_post(&s_hub_sem);
+            web_log_printf("[hub] kick worker age=%ums pending=%u",
+                           (unsigned)age, (unsigned)hub_q_put_count());
+        }
+    }
+    if (age < 45000) {
+        return;
+    }
+    if (s_hub_working) {
+        return; /* pull/put 进行中, 再等等 */
+    }
+
+    os_mutex_pend(&s_hub_mtx, 0);
+    for (i = 0; i < WALKIE_HUB_Q_DEPTH; i++) {
+        if (s_q[i].used && s_q[i].kind == HUB_JOB_PUT) {
+            printf("[walkie] hub watchdog drop put id=%u age=%ums\n",
+                   (unsigned)s_q[i].msg_id, (unsigned)age);
+            web_log_printf("[hub] watchdog drop put id=%u age=%ums",
+                           (unsigned)s_q[i].msg_id, (unsigned)age);
+            hub_job_free(&s_q[i]);
+            dropped++;
+        }
+    }
+    if (dropped) {
+        s_hub_last_fail = 1;
+        s_hub_put_fail += (u32)dropped;
+    }
+    hub_refresh_st();
+    os_mutex_post(&s_hub_mtx);
+}
+
+static int hub_q_push(struct hub_job *src)
+{
+    int i, slot = -1;
+
+    os_mutex_pend(&s_hub_mtx, 0);
+    for (i = 0; i < WALKIE_HUB_Q_DEPTH; i++) {
+        if (!s_q[i].used) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        /* 队列满: 丢掉最旧的 put, 给新消息让路 */
+        for (i = 0; i < WALKIE_HUB_Q_DEPTH; i++) {
+            if (s_q[i].used && s_q[i].kind == HUB_JOB_PUT) {
+                printf("[walkie] hub q full, drop oldest put id=%u\n",
+                       (unsigned)s_q[i].msg_id);
+                hub_job_free(&s_q[i]);
+                slot = i;
+                break;
+            }
+        }
+    }
+    if (slot < 0) {
+        os_mutex_post(&s_hub_mtx);
+        return -1;
+    }
+    s_q[slot] = *src;
+    s_q[slot].used = 1;
+    hub_refresh_st();
+    os_mutex_post(&s_hub_mtx);
+    os_sem_post(&s_hub_sem);
     return 0;
 }
 
-/* ============ 拉取漏收消息(中央历史 → 聊天气泡) ============ */
+/* put worker 只取上传任务; pull 已改独立线程 */
+static int hub_q_take_put(struct hub_job *out)
+{
+    int i, got = 0;
 
-#define HUB_PULL_LIMIT   8      /* 单轮最多处理条数 */
-#define HUB_PULL_MAX_B   (2 * 1024 * 1024)  /* 单条上限 2MB(≈64s PCM) */
+    os_mutex_pend(&s_hub_mtx, 0);
+    for (i = 0; i < WALKIE_HUB_Q_DEPTH; i++) {
+        if (s_q[i].used && s_q[i].kind == HUB_JOB_PUT) {
+            *out = s_q[i];
+            memset(&s_q[i], 0, sizeof(s_q[i]));
+            got = 1;
+            break;
+        }
+    }
+    hub_refresh_st();
+    os_mutex_post(&s_hub_mtx);
+    return got ? 0 : -1;
+}
+
+u8 walkie_hub_idle(void)
+{
+    return !s_hub_working && hub_q_count() == 0;
+}
+
+u8 walkie_hub_status(void)
+{
+    hub_watchdog();
+    return s_hub_st;
+}
+
+u8 walkie_hub_pending(void)
+{
+    hub_watchdog();
+    return hub_q_count() + (s_hub_working ? 1 : 0);
+}
+
+const char *walkie_hub_ip(void)
+{
+    return hub_ip();
+}
+
+const char *walkie_hub_key(void)
+{
+    return hub_key();
+}
+
+int walkie_hub_port(void)
+{
+    return WALKIE_HUB_PORT;
+}
+
+int walkie_hub_diag_json(char *buf, int buflen)
+{
+    static const char *st_name[] = { "idle", "syncing", "pending", "fail" };
+    u8 st;
+    u32 age = 0;
+
+    if (!buf || buflen < 64) {
+        return 0;
+    }
+    hub_watchdog();
+    st = s_hub_st;
+    if (st > WALKIE_HUB_ST_FAIL) {
+        st = WALKIE_HUB_ST_IDLE;
+    }
+    if (s_hub_pending_since_ms) {
+        age = (u32)(timer_get_ms() - s_hub_pending_since_ms);
+    }
+    return snprintf(buf, buflen,
+                    "{\"st\":%u,\"st_name\":\"%s\",\"pending\":%u,\"working\":%u,"
+                    "\"pull_busy\":%u,\"last_fail\":%u,\"put_ok\":%u,\"put_fail\":%u,"
+                    "\"last_rc\":%d,\"last_id\":%u,\"pending_age_ms\":%u,"
+                    "\"ip\":\"%s\",\"port\":%d,\"key\":\"%s\",\"devid\":\"%s\","
+                    "\"worker\":%u}",
+                    (unsigned)st, st_name[st],
+                    (unsigned)hub_q_put_count(),
+                    (unsigned)s_hub_working,
+                    (unsigned)s_hub_pull_busy,
+                    (unsigned)s_hub_last_fail,
+                    (unsigned)s_hub_put_ok,
+                    (unsigned)s_hub_put_fail,
+                    (int)s_hub_last_rc,
+                    (unsigned)s_hub_last_msg_id,
+                    (unsigned)age,
+                    hub_ip(), WALKIE_HUB_PORT, hub_key(), hub_devid(),
+                    (unsigned)s_hub_worker);
+}
+
+int walkie_hub_flush_pending(void)
+{
+    int i, n = 0;
+
+    if (!s_hub_inited) {
+        return 0;
+    }
+    os_mutex_pend(&s_hub_mtx, 0);
+    for (i = 0; i < WALKIE_HUB_Q_DEPTH; i++) {
+        if (s_q[i].used && s_q[i].kind == HUB_JOB_PUT) {
+            hub_job_free(&s_q[i]);
+            n++;
+        }
+    }
+    s_hub_last_fail = n ? 1 : s_hub_last_fail;
+    hub_refresh_st();
+    os_mutex_post(&s_hub_mtx);
+    if (n) {
+        printf("[walkie] hub flush %d pending put(s)\n", n);
+        web_log_printf("[hub] flush %d pending put(s)", n);
+    }
+    return n;
+}
+
+/* ============ put / pull 执行 ============ */
+
+#define HUB_PULL_LIMIT   8
+/* 兼容旧 pcm 归档; alaw 更小 */
+#define HUB_PULL_MAX_B   (WALKIE_HUB_MAX_SEC * WALKIE_PCM_RATE * 2 + 64)
+
+static int hub_do_put(struct hub_job *job)
+{
+    char url[384], enc_to[64];
+    const char *fmt = "pcm";
+    u8 *payload;
+    u32 plen;
+    u8 *enc = NULL;
+    u32 enc_len = 0;
+    int rc;
+
+    if (!job->buf || !job->len) {
+        return -1;
+    }
+
+    /* A-law 压缩; put 热路径禁止同步 DISCOVER(曾卡死「同步中」无日志) */
+    payload = job->buf;
+    plen = job->len;
+    printf("[walkie] hub put encode id=%u pcm=%u\n",
+           (unsigned)job->msg_id, (unsigned)job->len);
+    web_log_printf("[hub] put encode id=%u pcm=%u",
+                   (unsigned)job->msg_id, (unsigned)job->len);
+    if ((job->len & 1) == 0) {
+        enc = hub_encode_alaw((const s16 *)job->buf, job->len / 2, &enc_len);
+        if (enc && enc_len) {
+            payload = enc;
+            plen = enc_len;
+            fmt = "alaw";
+        }
+    }
+    snprintf(job->fmt, sizeof(job->fmt), "%s", fmt);
+
+    urlenc(enc_to, sizeof(enc_to), job->to);
+    /* 立刻用缓存/兜底 IP, 不在此处 hub_forget+discover */
+    snprintf(url, sizeof(url),
+             "http://%s:%d/cgi-bin/hub"
+             "?cmd=put&key=%s"
+             "&dev=%s&ch=audio&dtype=file&fmt=%s"
+             "&rate=%d&dur=%u&uid=%s-%u&txt=%s",
+             hub_ip(), WALKIE_HUB_PORT, hub_key(),
+             hub_devid(), fmt,
+             WALKIE_PCM_RATE, (unsigned)job->dur_ms,
+             hub_devid(), (unsigned)job->msg_id, enc_to);
+
+    printf("[walkie] hub put %uB fmt=%s id=%u -> %s ...\n",
+           (unsigned)plen, fmt, (unsigned)job->msg_id, hub_ip());
+    web_log_printf("[hub] put start id=%u %uB fmt=%s -> %s",
+                   (unsigned)job->msg_id, (unsigned)plen, fmt, hub_ip());
+    rc = hub_put_raw(url, payload, plen);
+    s_hub_last_rc = (u32)rc;
+    s_hub_last_msg_id = job->msg_id;
+    printf("[walkie] hub put %s (rc=%d)\n", rc == 0 ? "ok" : "fail", rc);
+    web_log_printf("[hub] put %s id=%u rc=%d",
+                   rc == 0 ? "ok" : "fail", (unsigned)job->msg_id, rc);
+    if (enc) {
+        free(enc);
+    }
+    if (rc != 0) {
+        hub_forget();
+    }
+    return rc;
+}
 
 static int hub_ack(u32 id)
 {
     char url[192];
     struct hub_dl dl;
+    int rc;
 
     snprintf(url, sizeof(url),
              "http://%s:%d/cgi-bin/hub?cmd=ack&key=%s"
              "&id=%u&ackdev=%s", hub_ip(), WALKIE_HUB_PORT, hub_key(),
-             (unsigned)id, WALKIE_HUB_DEVID);
-    return hub_get(url, &dl);   /* 应答内容无所谓, 成功即可 */
+             (unsigned)id, hub_devid());
+    rc = hub_get(url, &dl);
+    if (dl.buf) {
+        free(dl.buf);
+    }
+    return rc;
 }
 
-static void hub_pull_task(void *arg)
+static void hub_do_pull(void)
 {
     char url[224];
     struct hub_dl ldl, gdl;
     int got = 0;
+    int dl_fail = 0;
 
-    (void)arg;
-    os_time_dly(100);   /* 等 1s: 让 wifi/dhcp 完全就绪 */
+    printf("[walkie] hub pull begin\n");
+    web_log_printf("[hub] pull begin");
+    /* pull 热路径禁止 UDP DISCOVER: 有兜底 IP 即可; 发现放空闲时做 */
+    (void)hub_ip();
 
-    while (got < HUB_PULL_LIMIT) {
-        /* 我的未读列表(发送者不限; 定向给别人由 txt 过滤) */
+    while (got < HUB_PULL_LIMIT && !dl_fail) {
+        int mine = 0;
+        int skipped = 0;
+
+        if (s_hub_pull_abort) {
+            printf("[walkie] hub pull abort (put pending)\n");
+            web_log_printf("[hub] pull abort");
+            break;
+        }
+
         snprintf(url, sizeof(url),
                  "http://%s:%d/cgi-bin/hub?cmd=list&key=%s"
                  "&dev=%s&ch=audio&unread=1&since=0&limit=4",
-                 hub_ip(), WALKIE_HUB_PORT, hub_key(), WALKIE_HUB_DEVID);
+                 hub_ip(), WALKIE_HUB_PORT, hub_key(), hub_devid());
         if (hub_get(url, &ldl)) {
             printf("[walkie] hub pull: list fail\n");
+            web_log_printf("[hub] pull list fail");
+            hub_forget();
             break;
         }
         const char *p = strstr((const char *)ldl.buf, "\"rows\":[");
@@ -394,79 +849,270 @@ static void hub_pull_task(void *arg)
         }
 
         const char *obj = strstr(p + 8, "{\"id\":");
-        int handled = 0;
-        while (obj && got < HUB_PULL_LIMIT) {
+        while (obj && got < HUB_PULL_LIMIT && !dl_fail) {
             const char *objend = strchr(obj, '}');
+            char from[32], to[32], fmt[8];
+            long id, bytes;
+            u8 *pcm;
+            u32 pcm_len;
+
             if (!objend) {
                 break;
             }
-            long id = jnum(obj, objend, "id", 0);
-            long bytes = jnum(obj, objend, "bytes", 0);
-            char from[32], to[32];
+            id = jnum(obj, objend, "id", 0);
+            bytes = jnum(obj, objend, "bytes", 0);
             jstr(obj, objend, "devid", from, sizeof(from));
             jstr(obj, objend, "txt", to, sizeof(to));
+            jstr(obj, objend, "fmt", fmt, sizeof(fmt));
 
-            if (to[0] && strcmp(to, WALKIE_HUB_DEVID) != 0) {
-                /* 发给别人的定向消息: 不取不 ack, 留给收件人 */
+            if (to[0] && strcmp(to, hub_devid()) != 0) {
+                /* 发给别人的: 不取. 自己发出的则 ack, 避免占满 unread */
+                skipped++;
+                if (from[0] && strcmp(from, hub_devid()) == 0) {
+                    hub_ack((u32)id);
+                }
             } else if (bytes <= 0 || bytes > HUB_PULL_MAX_B) {
                 printf("[walkie] hub pull: id=%u bad size %ld, ack+skip\n",
                        (unsigned)id, bytes);
                 hub_ack((u32)id);
+                mine++;
             } else {
+                mine++;
                 snprintf(url, sizeof(url),
                          "http://%s:%d/cgi-bin/hub?cmd=get&key=%s"
                          "&id=%ld&raw=1", hub_ip(), WALKIE_HUB_PORT, hub_key(), id);
                 if (hub_get(url, &gdl) == 0 && gdl.len == (u32)bytes) {
-                    /* 整包到手 → 走 REC 落盘, 聊天气泡出现 */
-                    u32 off = 0;
-                    while (off < gdl.len) {
-                        u16 n = (gdl.len - off) > 512 ? 512 : (gdl.len - off);
-                        walkie_rec_rx_pcm(gdl.buf + off, n);
-                        off += n;
+                    pcm = NULL;
+                    pcm_len = 0;
+                    if (fmt[0] == '\0' || strcmp(fmt, "pcm") == 0) {
+                        pcm = gdl.buf;       /* 接管 */
+                        pcm_len = gdl.len;
+                        gdl.buf = NULL;
+                    } else if (strcmp(fmt, "alaw") == 0) {
+                        pcm = hub_decode_alaw(gdl.buf, gdl.len, &pcm_len);
+                    } else {
+                        printf("[walkie] hub pull: id=%u unknown fmt %s, ack\n",
+                               (unsigned)id, fmt);
+                        hub_ack((u32)id);
                     }
-                    walkie_rec_rx_end(hub_name_to_ip(from));
-                    hub_ack((u32)id);
-                    got++;
-                    printf("[walkie] hub pull: id=%u from %s ok (%uB)\n",
-                           (unsigned)id, from, (unsigned)bytes);
+                    if (pcm && pcm_len) {
+                        u32 off = 0;
+                        while (off < pcm_len) {
+                            u16 n = (pcm_len - off) > 512 ? 512 : (pcm_len - off);
+                            walkie_rec_rx_pcm(pcm + off, n);
+                            off += n;
+                        }
+                        walkie_rec_rx_end(hub_name_to_ip(from));
+                        hub_ack((u32)id);
+                        got++;
+                        printf("[walkie] hub pull: id=%u from %s ok (%uB %s)\n",
+                               (unsigned)id, from, (unsigned)bytes, fmt[0] ? fmt : "pcm");
+                        free(pcm);
+                    } else if (pcm) {
+                        free(pcm);
+                    }
                 } else {
-                    printf("[walkie] hub pull: id=%u download fail, retry next round\n",
+                    /* pull 失败不打上传态「同步失败」 */
+                    printf("[walkie] hub pull: id=%u download fail, stop\n",
                            (unsigned)id);
+                    dl_fail = 1;
+                    hub_forget();
                 }
                 if (gdl.buf) {
                     free(gdl.buf);
                     gdl.buf = NULL;
                 }
             }
-            handled++;
             obj = strstr(objend, "{\"id\":");
         }
 
         free(ldl.buf);
-        if (!handled || got >= HUB_PULL_LIMIT) {
+        if (!mine || got >= HUB_PULL_LIMIT || dl_fail) {
+            if (skipped && !mine) {
+                printf("[walkie] hub pull: %d directed-to-others, stop\n", skipped);
+            }
             break;
         }
     }
 
     printf("[walkie] hub pull done: %d msg(s)\n", got);
-    s_hub_busy = 0;
+    web_log_printf("[hub] pull done n=%d", got);
+}
+
+/* 常驻: 只处理 PUT, 不被 pull HTTP 堵住 */
+static void hub_put_worker(void *arg)
+{
+    struct hub_job job;
+
+    (void)arg;
+    printf("[walkie] hub put worker up\n");
+    web_log_printf("[hub] put worker up");
+    /* 先落兜底 IP; 再非阻塞尝试 DISCOVER 修正 */
+    (void)hub_ip();
+    hub_discover_try();
     while (1) {
-        os_time_dly(1000);
+        os_sem_pend(&s_hub_sem, 0);
+        while (hub_q_take_put(&job) == 0) {
+            int rc;
+
+            s_hub_working = 1;
+            s_hub_work_kind = HUB_JOB_PUT;
+            hub_refresh_st();
+            printf("[walkie] hub put worker take id=%u\n",
+                   (unsigned)job.msg_id);
+            web_log_printf("[hub] put worker take id=%u",
+                           (unsigned)job.msg_id);
+
+            rc = hub_do_put(&job);
+            if (rc != 0 && job.retries + 1 < WALKIE_HUB_PUT_RETRY) {
+                job.retries++;
+                job.used = 0;
+                printf("[walkie] hub put retry %u/%u\n",
+                       (unsigned)job.retries, WALKIE_HUB_PUT_RETRY);
+                web_log_printf("[hub] put retry %u/%u id=%u",
+                               (unsigned)job.retries, WALKIE_HUB_PUT_RETRY,
+                               (unsigned)job.msg_id);
+                os_time_dly(100); /* ~1s */
+                if (hub_q_push(&job) == 0) {
+                    job.buf = NULL;
+                } else {
+                    s_hub_last_fail = 1;
+                    s_hub_put_fail++;
+                }
+            } else if (rc != 0) {
+                s_hub_last_fail = 1;
+                s_hub_put_fail++;
+            } else {
+                s_hub_last_fail = 0;
+                s_hub_put_ok++;
+            }
+            hub_job_free(&job);
+
+            s_hub_working = 0;
+            s_hub_work_kind = 0;
+            hub_refresh_st();
+        }
     }
+}
+
+static void hub_pull_task(void *arg)
+{
+    (void)arg;
+    hub_do_pull();
+    s_hub_pull_busy = 0;
+    s_hub_pull_abort = 0;
+}
+
+static int hub_ensure_worker(void)
+{
+    if (!s_hub_inited) {
+        os_sem_create(&s_hub_sem, 0);
+        os_mutex_create(&s_hub_mtx);
+        memset(s_q, 0, sizeof(s_q));
+        s_hub_inited = 1;
+    }
+    if (!s_hub_worker) {
+        /* 24KB: A-law + httpcli_post */
+        if (thread_fork("wk_hub", 13, 24 * 1024, 0, 0, hub_put_worker, NULL)) {
+            printf("[walkie] hub: put worker fork fail\n");
+            web_log_printf("[hub] put worker fork fail");
+            return -1;
+        }
+        s_hub_worker = 1;
+    }
+    return 0;
+}
+
+/* ============ 对外 API ============ */
+
+int walkie_hub_put_voice(const void *pcm, u32 len, u16 msg_id, const char *to_name)
+{
+    struct hub_job job;
+    u32 max_bytes, use_len, samples, dur_ms;
+
+    if (!pcm || !len) {
+        return -1;
+    }
+    if (!walkie_net_has_ip()) {
+        printf("[walkie] hub: no ip, skip archive\n");
+        return -2;
+    }
+    if (hub_ensure_worker()) {
+        return -5;
+    }
+
+    max_bytes = (u32)WALKIE_HUB_MAX_SEC * WALKIE_PCM_RATE * 2 * WALKIE_PCM_CH;
+    use_len = len > max_bytes ? max_bytes : len;
+    use_len &= ~1u; /* s16 对齐 */
+    if (use_len < (WALKIE_PCM_RATE * 2 / 10)) {
+        return -1;
+    }
+    samples = use_len / 2;
+    dur_ms = samples * 1000 / WALKIE_PCM_RATE;
+
+    /* 仅拷贝 PCM 入队; 压缩放到 hub worker, 防止 wk_msg_tx(2KB栈) 溢出卡死队列 */
+    memset(&job, 0, sizeof(job));
+    job.kind = HUB_JOB_PUT;
+    job.msg_id = msg_id;
+    job.dur_ms = dur_ms;
+    snprintf(job.to, sizeof(job.to), "%s", to_name ? to_name : "");
+    job.buf = malloc(use_len);
+    if (!job.buf) {
+        return -4;
+    }
+    memcpy(job.buf, pcm, use_len);
+    job.len = use_len;
+
+    /* 有 pull 在跑时请求尽早退出, 但 put 已在独立线程, 不必等它 */
+    if (s_hub_pull_busy) {
+        s_hub_pull_abort = 1;
+    }
+
+    if (hub_q_push(&job)) {
+        free(job.buf);
+        s_hub_last_fail = 1;
+        hub_refresh_st();
+        return -3;
+    }
+    printf("[walkie] hub queued put id=%u %uB pcm ~%us\n",
+           (unsigned)msg_id, (unsigned)use_len, (unsigned)(dur_ms / 1000));
+    web_log_printf("[hub] queued put id=%u %uB ~%us to=%s",
+                   (unsigned)msg_id, (unsigned)use_len,
+                   (unsigned)(dur_ms / 1000), to_name ? to_name : "");
+    return 0;
 }
 
 int walkie_hub_pull(void)
 {
+    static u32 s_last_pull_ms;
+    u32 now;
+
     if (!walkie_net_has_ip()) {
         return -2;
     }
-    if (s_hub_busy) {
-        return -3;
-    }
-    s_hub_busy = 1;
-    if (thread_fork("wk_hub2", 13, 4096, 0, 0, hub_pull_task, NULL)) {
-        s_hub_busy = 0;
+    if (hub_ensure_worker()) {
         return -5;
     }
+    now = timer_get_ms();
+    if (s_last_pull_ms && (u32)(now - s_last_pull_ms) < 15000) {
+        return -6;
+    }
+    /* 有待上传时不拉, 给带宽/HTTP 给 put */
+    if (hub_q_put_count() || s_hub_working) {
+        return -7;
+    }
+    if (s_hub_pull_busy) {
+        return -3;
+    }
+
+    s_hub_pull_busy = 1;
+    s_hub_pull_abort = 0;
+    if (thread_fork("wk_hpull", 12, 10 * 1024, 0, 0, hub_pull_task, NULL)) {
+        s_hub_pull_busy = 0;
+        printf("[walkie] hub: pull task fork fail\n");
+        web_log_printf("[hub] pull fork fail");
+        return -5;
+    }
+    s_last_pull_ms = now;
     return 0;
 }

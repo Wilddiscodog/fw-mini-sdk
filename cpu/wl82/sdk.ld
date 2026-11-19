@@ -110,6 +110,7 @@ subdev_jlvad_enc
 
 subdev_dns_enc
 subdev_dns_dual_enc
+
 );
 
 
@@ -197,6 +198,8 @@ SECTIONS
         *(.aes_cmac_sample_const)
         crypto_end = .;
         crypto_size = . - crypto_begin;
+
+
         *(.jlsp_code)
         . = ALIGN(4);
         *(.jlsp_const)
@@ -274,6 +277,7 @@ SECTIONS
 
 
         *(.sbc_eng_code)
+
 
         . = ALIGN(4);
 
@@ -393,7 +397,8 @@ SECTIONS
         btctler_code_end = .;
 
   . = ALIGN(4);
- . = ALIGN(4);
+
+        . = ALIGN(4);
 
 
 
@@ -450,6 +455,7 @@ SECTIONS
 
         BTSTACK_CODE_TOTAL_SIZE = btstack_code_end - btstack_code_start;
 
+
         . = ALIGN(4);
 
         lcd_interface_begin = .;
@@ -487,6 +493,7 @@ SECTIONS
         battery_notify_begin = .;
         *(.battery_notify)
         battery_notify_end = .;
+
 
         *(*.rf.text.cache.L2.rf_trim)
 
@@ -656,7 +663,8 @@ SECTIONS
         *(.video_pkg)
     _video_pkg_end = .;
     PROVIDE(video_pkg_end = .);
- . = ALIGN(4);
+
+        . = ALIGN(4);
 
  _app_begin = .;
  PROVIDE(app_begin = .);
@@ -687,7 +695,8 @@ SECTIONS
     *(.clock_critical_txt)
  _clock_critical_handler_end = .;
  PROVIDE(clock_critical_handler_end = .);
- . = ALIGN(4);
+
+        . = ALIGN(4);
 
 
    _audio_decoder_begin = .;
@@ -757,7 +766,8 @@ SECTIONS
         *(.video_subdev.5)
     _video_subdev_end = .;
     PROVIDE(video_subdev_end = .);
- . = ALIGN(4);
+
+        . = ALIGN(4);
 
 
   _ctp_mapping_tab_begin = .;
@@ -790,6 +800,7 @@ SECTIONS
  _net_video_stream_sub_end = .;
  PROVIDE(net_video_stream_sub_end = .);
 
+
         . = ALIGN(4);
 
 
@@ -812,6 +823,7 @@ SECTIONS
 
 
         btstack_data_end = .;
+
 
 
         . = ALIGN(4);
@@ -854,6 +866,7 @@ SECTIONS
         BTSTACK_LE_HOST_MESH_BSS_SIZE = ABSOLUTE(. - BTSTACK_LE_HOST_MESH_BSS_START);
 
         btstack_bss_end = .;
+
 
 
         . = ALIGN(4);
@@ -920,6 +933,7 @@ SECTIONS
         *(*.text.cache.L1)
         *(*.text.cache.L2)
 
+
         . = ALIGN(4);
         _ram_text_rodata_end = .;
         PROVIDE(ram_text_rodata_end = .);
@@ -963,6 +977,7 @@ SECTIONS
         BTCTLER_CL_DATA_SIZE = ABSOLUTE(. - BTCTLER_CL_DATA_START);
 
         btctler_data_end = .;
+
 
 
         . = ALIGN(4);
@@ -1034,6 +1049,7 @@ SECTIONS
         btctler_bss_end = .;
 
 
+
         . = ALIGN(4);
         *(.the_debug_isr_stack_c0)
         *(.the_debug_isr_stack_c1)
@@ -1084,6 +1100,7 @@ PROVIDE(usb_data_begin = .);
 *(.cdc_var)
 _usb_data_end = .;
 PROVIDE(usb_data_end = .);
+
 
         . = ALIGN(4);
     } > ram0

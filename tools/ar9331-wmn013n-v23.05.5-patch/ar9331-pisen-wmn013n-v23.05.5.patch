@@ -1,0 +1,2054 @@
+diff --git a/files/etc/init.d/wifi-guard b/files/etc/init.d/wifi-guard
+new file mode 100755
+index 0000000000..48f37ffb4a
+--- /dev/null
++++ b/files/etc/init.d/wifi-guard
+@@ -0,0 +1,15 @@
++#!/bin/sh /etc/rc.common
++# wifi-guard — AP+STA 共存看门狗(防止 STA 连不上拖死管理AP)
++# 详见 /usr/bin/wifi-guard 头部注释
++
++START=99
++USE_PROCD=1
++
++start_service() {
++	procd_open_instance
++	procd_set_param command /usr/bin/wifi-guard
++	procd_set_param respawn 3600 5 0
++	procd_set_param stdout 1
++	procd_set_param stderr 1
++	procd_close_instance
++}
+diff --git a/files/etc/uci-defaults/99-default-wifi b/files/etc/uci-defaults/99-default-wifi
+new file mode 100755
+index 0000000000..4b017bd45a
+--- /dev/null
++++ b/files/etc/uci-defaults/99-default-wifi
+@@ -0,0 +1,81 @@
++#!/bin/sh
++# datahub 开机网络默认配置 (首次启动执行一次):
++#   1. 常驻管理AP "Hub-xxxx" (psk: hyundai415), 手机连上后 http://192.168.66.1 配网
++#   2. 配网后 STA(wwan) 上家庭主路由, 管理AP 仍保留作救援入口 (AP+STA 并存)
++#   3. umdns 让设备可被 hub-xxxx.local 解析; 时区/ntp 保证消息时间戳正确
++#   4. 防火墙: 家庭网段(192.168.0.0/16)可访问 22/80/445 + mDNS
++
++# 无线配置可能尚未生成
++[ -e /etc/config/wireless ] || /sbin/wifi config
++
++# 设备后缀: 取 wifi MAC 末4位 hex (5台设备各自唯一, 如 Hub-2b20)
++mac=$(cat /sys/class/ieee80211/phy0/macaddress 2>/dev/null | tr -d : | tail -c 5)
++[ -n "$mac" ] || mac=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d : | tail -c 5)
++[ -n "$mac" ] || mac=0000
++HOSTNAME="Hub-$mac"
++
++# ---- 系统主机名 / 时区 / NTP ----
++uci -q batch <<-EOF
++	set system.@system[0].hostname='$HOSTNAME'
++	set system.@system[0].timezone='CST-8'
++	set system.@system[0].zonename='Asia/Shanghai'
++	set system.@system[0].log_size='64'
++	commit system
++	set system.ntp='timeserver'
++	add_list system.ntp.server='ntp.aliyun.com'
++	add_list system.ntp.server='ntp1.aliyun.com'
++	set system.ntp.enable_server='0'
++	commit system
++EOF
++hostname "$HOSTNAME"
++
++# ---- 管理网段 192.168.66.1/24 ----
++uci set network.lan.ipaddr='192.168.66.1'
++uci set network.lan.netmask='255.255.255.0'
++# 预建 wwan (STA 上家庭网用, LuCI 配网 Join Network 时直接选中)
++uci -q get network.wwan >/dev/null || {
++	uci set network.wwan=interface
++	uci set network.wwan.proto='dhcp'
++}
++uci commit network
++
++# ---- 无线: radio0 = 常驻管理AP + (配网后追加) STA ----
++uci -q batch <<-EOF
++	set wireless.radio0.disabled='0'
++	set wireless.radio0.country='CN'
++	set wireless.radio0.channel='auto'
++	delete wireless.default_radio0
++	set wireless.ap_mgmt=wifi-iface
++	set wireless.ap_mgmt.device='radio0'
++	set wireless.ap_mgmt.mode='ap'
++	set wireless.ap_mgmt.ssid='$HOSTNAME'
++	set wireless.ap_mgmt.encryption='psk2'
++	set wireless.ap_mgmt.key='hyundai415'
++	set wireless.ap_mgmt.network='lan'
++	set wireless.ap_mgmt.hidden='0'
++	commit wireless
++EOF
++
++# ---- 防火墙: wwan 归 wan 区; 家庭网段可达 22/80/445; 放行 mDNS ----
++# 找到 wan zone (按 name), 追加 wwan
++wan_zone=$(uci -q show firewall | grep '=zone' | grep '\.name=.wan.' | cut -d. -f2 | head -1)
++[ -n "$wan_zone" ] && uci add_list firewall.$wan_zone.network='wwan'
++
++uci -q batch <<-EOF
++	set firewall.hub_mgmt=rule
++	set firewall.hub_mgmt.name='Allow-hub-mgmt-from-home'
++	set firewall.hub_mgmt.src='wan'
++	set firewall.hub_mgmt.src_ip='192.168.0.0/16'
++	set firewall.hub_mgmt.proto='tcp'
++	set firewall.hub_mgmt.dest_port='22 80 445'
++	set firewall.hub_mgmt.target='ACCEPT'
++	set firewall.hub_mdns=rule
++	set firewall.hub_mdns.name='Allow-mDNS'
++	set firewall.hub_mdns.src='wan'
++	set firewall.hub_mdns.proto='udp'
++	set firewall.hub_mdns.dest_port='5353'
++	set firewall.hub_mdns.target='ACCEPT'
++	commit firewall
++EOF
++
++exit 0
+diff --git a/files/usr/bin/wifi-guard b/files/usr/bin/wifi-guard
+new file mode 100755
+index 0000000000..53248d0ab5
+--- /dev/null
++++ b/files/usr/bin/wifi-guard
+@@ -0,0 +1,64 @@
++#!/bin/sh
++# wifi-guard — AP+STA 同射频共存看门狗
++#
++# 背景: OpenWrt mac80211 的已知行为 —— 同一 radio 上 AP+STA 并存时,
++#       STA 关联不成功(如换了环境搜不到原 SSID),hostapd 会一直等 STA
++#       锁信道,AP 也不发 beacon → 管理AP"消失", 无法配网。
++#
++# 策略: STA 启用后连续 ${GUARD_TIMEOUT} 秒未关联(含一直搜不到保存的
++#       SSID / 密码错 / 信号差) → 删除该 STA 段(保存的 SSID/密码一并清除)
++#       并 wifi reload, AP 立即恢复发信号; 手机连 Hub-xxxx 在 LuCI 无线页
++#       重新扫描 Join 即完成重新配网。
++#       选"删除"而非"禁用": 禁用会残留 disabled 的 STA 段, 之后 Join 新
++#       网络又建一段, 残段既碍人工判断, 也会让本脚本的挑段逻辑选错对象。
++#
++# 注意: 家里主路由重启一般 1~2 分钟内恢复, 180s 超时不会误删;
++#       若担心更长的断网窗口, 调大 GUARD_TIMEOUT 即可。
++
++GUARD_TIMEOUT=180   # 秒
++MARK=/tmp/.wifi_guard_ts
++LOG_TAG=wifi-guard
++
++sta_section() {  # 输出第一个处于启用状态的 sta 段名(如 wifinet1), 无则空
++	local s
++	for s in $(uci -q show wireless 2>/dev/null | grep "mode='sta'" | cut -d. -f2 | cut -d= -f1); do
++		[ "$(uci -q get wireless.$s.disabled)" = "1" ] || { echo "$s"; return; }
++	done
++}
++
++sta_associated() {  # 0=已关联 1=未关联/无vif
++	local vif
++	vif=$(iwinfo 2>/dev/null | awk '/phy0-sta/{print $1; exit}')
++	[ -n "$vif" ] || return 1
++	iwinfo "$vif" info 2>/dev/null | grep -q "Not-Associated" && return 1
++	return 0
++}
++
++logger -s -t $LOG_TAG "watchdog started (timeout=${GUARD_TIMEOUT}s)"
++rm -f "$MARK"
++
++while :; do
++	sleep 20
++	sec=$(sta_section)
++
++	# 无启用的 sta 段: 纯AP模式, 空转
++	[ -n "$sec" ] || { rm -f "$MARK"; continue; }
++
++	if sta_associated; then
++		rm -f "$MARK"
++		continue
++	fi
++
++	# 未关联: 开始/继续计时
++	now=$(date +%s)
++	[ -f "$MARK" ] || echo "$now" > "$MARK"
++	first=$(cat "$MARK" 2>/dev/null || echo "$now")
++
++	if [ $((now - first)) -ge "$GUARD_TIMEOUT" ]; then
++		logger -s -t $LOG_TAG "STA '$sec' ${GUARD_TIMEOUT}s 未关联, 清除其配置并恢复管理AP"
++		uci delete "wireless.$sec"
++		uci commit wireless
++		wifi reload
++		rm -f "$MARK"
++	fi
++done
+diff --git a/package/luci-app-datahub/Makefile b/package/luci-app-datahub/Makefile
+new file mode 100644
+index 0000000000..73157c2499
+--- /dev/null
++++ b/package/luci-app-datahub/Makefile
+@@ -0,0 +1,39 @@
++# SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++#
++# luci-app-datahub — 通用家庭设备数据中枢
++#   U盘(ext4) + SQLite 数据湖 + CGI API(/cgi-bin/hub) + SMB网络备份 + LuCI状态页
++#   对讲机/传感器/任意自制设备经 HTTP 接入: put/list/get/ack/stats/export
++
++include $(TOPDIR)/rules.mk
++
++LUCI_TITLE:=Device Data Hub (SQLite + CGI API + SMB backup + status page)
++LUCI_DEPENDS:=+sqlite3-cli +socat
++LUCI_PKGARCH:=all
++
++PKG_VERSION:=1.0
++PKG_RELEASE:=1
++PKG_MAINTAINER:=100ask <you@example.com>
++PKG_LICENSE:=GPL-2.0-or-later
++
++include $(TOPDIR)/feeds/luci/luci.mk
++
++# 显式安装脚本/CGI并带可执行位 (照 luci-app-usbswitch 的做法)
++define Package/luci-app-datahub/install
++	$(call Package/luci-app-datahub/install.default,$(1))
++	$(INSTALL_DIR) $(1)/usr/bin $(1)/usr/share/datahub \
++		$(1)/etc/init.d $(1)/etc/uci-defaults $(1)/www/cgi-bin
++	$(INSTALL_BIN) ./root/www/cgi-bin/hub $(1)/www/cgi-bin/hub
++	$(INSTALL_DATA) ./root/www/music.html $(1)/www/music.html
++	$(INSTALL_BIN) ./root/usr/bin/hub-init $(1)/usr/bin/hub-init
++	$(INSTALL_BIN) ./root/usr/bin/hub-maint $(1)/usr/bin/hub-maint
++	$(INSTALL_BIN) ./root/usr/bin/hub-scan-music $(1)/usr/bin/hub-scan-music
++	$(INSTALL_BIN) ./root/usr/bin/hub-announce $(1)/usr/bin/hub-announce
++	$(INSTALL_BIN) ./root/usr/bin/hub-announce-reply $(1)/usr/bin/hub-announce-reply
++	$(INSTALL_BIN) ./root/etc/init.d/datahub $(1)/etc/init.d/datahub
++	$(INSTALL_BIN) ./root/etc/init.d/hub-announce $(1)/etc/init.d/hub-announce
++	$(INSTALL_BIN) ./root/etc/uci-defaults/99-datahub-ksmbd $(1)/etc/uci-defaults/99-datahub-ksmbd
++	$(INSTALL_DATA) ./root/usr/share/datahub/schema.sql $(1)/usr/share/datahub/schema.sql
++	$(INSTALL_DATA) ./root/etc/config/datahub $(1)/etc/config/datahub
++endef
++
++# call BuildPackage — OpenWrt buildroot 发现包的签名(luci.mk 内部完成真正的 BuildPackage)
+diff --git a/package/luci-app-datahub/htdocs/luci-static/resources/view/datahub/main.js b/package/luci-app-datahub/htdocs/luci-static/resources/view/datahub/main.js
+new file mode 100644
+index 0000000000..e0f0e5931f
+--- /dev/null
++++ b/package/luci-app-datahub/htdocs/luci-static/resources/view/datahub/main.js
+@@ -0,0 +1,185 @@
++'use strict';
++'require view';
++'require request';
++'require poll';
++
++// datahub 状态页: 存储概览 / 设备表 / 通道统计 / 最新动态 / 接入信息与备份导出
++// 数据源: /cgi-bin/hub?cmd=stats (同源, 免key只读), 10秒自动刷新
++
++var API = '/cgi-bin/hub?cmd=stats';
++
++function fmtSize(n) {
++	if (n == null || isNaN(n)) return '-';
++	n = Number(n);
++	if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB';
++	if (n >= 1048576)    return (n / 1048576).toFixed(1) + ' MB';
++	if (n >= 1024)       return (n / 1024).toFixed(1) + ' KB';
++	return n + ' B';
++}
++
++function fmtTime(ts) {
++	if (!ts || ts <= 0) return '-';
++	var d = new Date(ts * 1000);
++	function p(x) { return (x < 10 ? '0' : '') + x; }
++	return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' +
++		p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
++}
++
++function ago(ts, now) {
++	if (!ts || ts <= 0) return '-';
++	var s = now - ts;
++	if (s < 60)    return s + ' 秒前';
++	if (s < 3600)  return Math.floor(s / 60) + ' 分钟前';
++	if (s < 86400) return Math.floor(s / 3600) + ' 小时前';
++	return Math.floor(s / 86400) + ' 天前';
++}
++
++function th(t) { return E('th', { 'class': 'th' }, t); }
++function td(t) { return E('td', { 'class': 'td' }, (t == null || t === '') ? '-' : '' + t); }
++
++function kvCard(title, entries) {
++	var tds = entries.map(function (e) {
++		return E('div', { 'class': 'td left', 'style': 'width:' + Math.floor(100 / entries.length) + '%' }, [
++			E('small', {}, e[0]), E('br'), E('strong', {}, e[1])
++		]);
++	});
++	return E('div', { 'class': 'cbi-section' }, [
++		E('h3', {}, title),
++		E('div', { 'class': 'table' }, [ E('div', { 'class': 'tr' }, tds) ])
++	]);
++}
++
++function buildBody(data) {
++	var now = data.now || Math.floor(Date.now() / 1000);
++	var diskUsed = (data.disk && data.disk.total) ? (data.disk.total - data.disk.free) : 0;
++	var chMap = {};
++	(data.channels || []).forEach(function (c) { chMap[c.channel] = c.records; });
++	var chStr = Object.keys(chMap).map(function (k) { return k + ': ' + chMap[k]; }).join('　') || '-';
++	var host = location.hostname;
++
++	var devRows = (data.devices || []).map(function (d) {
++		return E('tr', { 'class': 'tr' }, [
++			td(d.name || d.devid),
++			td(d.name ? d.devid : ''),
++			td(d.kind || 'generic'),
++			td(d.records),
++			td(ago(d.last_seen, now))
++		]);
++	});
++
++	var recRows = (data.recent || []).map(function (r) {
++		var content;
++		if (r.dtype === 'file') {
++			content = E('span', {}, [
++				(r.fmt || '?') + (r.dur_ms ? ' ' + Math.round(r.dur_ms / 1000) + 's ' : ' ') +
++					fmtSize(r.bytes) + '  ',
++				E('a', {
++					'href': '/cgi-bin/hub?cmd=get&key=' + encodeURIComponent(data.key || '') + '&id=' + r.id,
++					'target': '_blank'
++				}, [ '▶ ' + _('播放') ])
++			]);
++		} else {
++			content = E('span', {}, (r.val != null ? r.val : '') + ((r.val != null && r.txt) ? ' ' : '') + (r.txt || ''));
++		}
++		return E('tr', { 'class': 'tr' }, [
++			td(fmtTime(r.ts)), td(r.devid), td(r.channel),
++			E('td', { 'class': 'td' }, [ content ])
++		]);
++	});
++
++	return [
++		kvCard(_('存储'), [
++			[ _('U盘已用 / 总量'), fmtSize(diskUsed * 1024) + ' / ' + fmtSize((data.disk || {}).total * 1024) ],
++			[ _('数据库 / 快照'), fmtSize(data.db_bytes) + ' / ' + fmtSize(data.bak_bytes) ],
++			[ _('上次快照'), fmtTime(data.bak_ts) ]
++		]),
++		kvCard(_('数据'), [
++			[ _('记录总数'), data.records ],
++			[ _('最近24小时'), data.today ],
++			[ _('设备数'), (data.devices || []).length ],
++			[ _('通道分布'), chStr ]
++		]),
++		E('div', { 'class': 'cbi-section' }, [
++			E('h3', {}, _('设备')),
++			E('table', { 'class': 'table' }, [
++				E('tr', { 'class': 'tr table-titles' }, [
++					th(_('名称')), th(_('ID')), th(_('类型')), th(_('记录数')), th(_('最后在线'))
++				])
++			].concat(devRows.length ? devRows : [ E('tr', { 'class': 'tr' }, [
++				E('td', { 'class': 'td center', 'colspan': 5 }, _('暂无设备 — 让设备先 POST 一条数据即自动注册'))
++			]) ]))
++		]),
++		E('div', { 'class': 'cbi-section' }, [
++			E('h3', {}, _('最新动态')),
++			E('table', { 'class': 'table' }, [
++				E('tr', { 'class': 'tr table-titles' }, [
++					th(_('时间')), th(_('设备')), th(_('通道')), th(_('内容'))
++				])
++			].concat(recRows.length ? recRows : [ E('tr', { 'class': 'tr' }, [
++				E('td', { 'class': 'td center', 'colspan': 4 }, _('暂无记录'))
++			]) ]))
++		]),
++		E('div', { 'class': 'cbi-section' }, [
++			E('h3', {}, _('接入与备份')),
++			E('div', { 'class': 'cbi-section-node' }, [
++				E('p', {}, [
++					_('设备 API 密钥') + ': ', E('code', {}, data.key || '-'),
++					'　(IP: ' + host + ', mDNS: ' + 'Hub-xxxx.local)'
++				]),
++				E('p', {}, [
++					_('接口') + ': ', E('code', {}, 'http://' + host + '/cgi-bin/hub?cmd=put&key=' + (data.key || 'KEY') + '&dev=设备ID&ch=通道&val=数值'),
++					E('br'),
++					_('SMB 备份') + ': ', E('code', {}, '\\\\' + host + '\\hub') + ' (' + _('账号 hub') + ')'
++				]),
++				E('div', {}, [
++					E('button', {
++						'class': 'btn cbi-button cbi-button-action',
++						'click': function () { window.open('/cgi-bin/hub?cmd=export&days=7', '_blank'); }
++					}, _('导出备份 (DB快照 + 近7天附件)'))
++				])
++			])
++		])
++	];
++}
++
++return view.extend({
++	load: function () {
++		return request.get(API).then(function (res) {
++			try { return res.json(); } catch (e) { return { ok: 0, err: 'bad response' }; }
++		}).catch(function () { return { ok: 0, err: 'unreachable' }; });
++	},
++
++	render: function (data) {
++		var container = E('div', { 'class': 'cbi-map' }, [ E('h2', {}, _('Data Hub 数据中枢')) ]);
++		var body = E('div');
++
++		function refresh(d) {
++			body.innerHTML = '';
++			if (d && d.ok === 1) {
++				buildBody(d).forEach(function (el) { body.appendChild(el); });
++			} else {
++				body.appendChild(E('div', { 'class': 'alert-message warning' }, [
++					E('p', {}, _('服务未就绪') + ': ' + ((d && d.err) || '?')),
++					E('p', {}, _('排查: U盘是否插入且 USB 通道为 host? SSH 运行 hub-init 与 logread|grep datahub。'))
++				]));
++			}
++		}
++
++		refresh(data);
++		container.appendChild(body);
++
++		poll.add(function () {
++			return request.get(API).then(function (res) {
++				try { return res.json(); } catch (e) { return null; }
++			}).catch(function () { return null; }).then(function (d) {
++				if (d) refresh(d);
++			});
++		}, 10);
++
++		return container;
++	},
++
++	handleSaveApply: null,
++	handleSave: null,
++	handleReset: null
++});
+diff --git a/package/luci-app-datahub/root/etc/config/datahub b/package/luci-app-datahub/root/etc/config/datahub
+new file mode 100644
+index 0000000000..8fe7b308d5
+--- /dev/null
++++ b/package/luci-app-datahub/root/etc/config/datahub
+@@ -0,0 +1,4 @@
++config hub 'hub'
++	option mount '/mnt/sda1'   # U盘挂载点 (block-mount 自动挂载)
++	option retain '180'        # 记录保留天数 (每日维护时清理)
++	option key ''              # 设备API密钥 (首次开机自动生成, 见LuCI状态页)
+diff --git a/package/luci-app-datahub/root/etc/init.d/datahub b/package/luci-app-datahub/root/etc/init.d/datahub
+new file mode 100755
+index 0000000000..3157771ecc
+--- /dev/null
++++ b/package/luci-app-datahub/root/etc/init.d/datahub
+@@ -0,0 +1,20 @@
++#!/bin/sh /etc/rc.common
++# datahub — 通用设备数据中枢
++# 开机: 后台等U盘挂载 → 建目录/库表/生成key; 注册每日维护 cron。
++
++START=97
++
++start() {
++	( /usr/bin/hub-init wait 45 || logger -t datahub "U盘初始化未完成, CGI将以503提示" ) &
++
++	# 每日 04:00 维护 + 每10分钟音乐库扫描 (幂等注册)
++	mkdir -p /etc/crontabs
++	grep -q hub-maint /etc/crontabs/root 2>/dev/null || \
++		echo "0 4 * * * /usr/bin/hub-maint" >> /etc/crontabs/root
++	grep -q hub-scan-music /etc/crontabs/root 2>/dev/null || \
++		echo "*/10 * * * * /usr/bin/hub-scan-music" >> /etc/crontabs/root
++	/etc/init.d/cron enable 2>/dev/null
++	/etc/init.d/cron restart 2>/dev/null
++}
++
++restart() { start; }
+diff --git a/package/luci-app-datahub/root/etc/init.d/hub-announce b/package/luci-app-datahub/root/etc/init.d/hub-announce
+new file mode 100755
+index 0000000000..4208994ca3
+--- /dev/null
++++ b/package/luci-app-datahub/root/etc/init.d/hub-announce
+@@ -0,0 +1,15 @@
++#!/bin/sh /etc/rc.common
++# hub-announce — UDP 广播发现应答器(手表零配置找 hub)
++# 详见 /usr/bin/hub-announce 头部注释
++
++START=98
++USE_PROCD=1
++
++start_service() {
++	procd_open_instance
++	procd_set_param command /usr/bin/hub-announce
++	procd_set_param respawn 3600 5 0
++	procd_set_param stdout 1
++	procd_set_param stderr 1
++	procd_close_instance
++}
+diff --git a/package/luci-app-datahub/root/etc/uci-defaults/99-datahub-ksmbd b/package/luci-app-datahub/root/etc/uci-defaults/99-datahub-ksmbd
+new file mode 100755
+index 0000000000..38e5dec268
+--- /dev/null
++++ b/package/luci-app-datahub/root/etc/uci-defaults/99-datahub-ksmbd
+@@ -0,0 +1,28 @@
++#!/bin/sh
++# datahub: 配置 ksmbd (SMB网络备份共享 \\IP\hub, 账号 hub)
++# 共享整个 hub 目录(含 datahub.db.bak 快照), 绑定 lan+wwan, 仅家庭网段可达(见防火墙)。
++
++[ -f /etc/config/ksmbd ] || exit 0
++
++# 共享接口: 管理AP(lan) + 家庭网(wwan)
++uci -q set ksmbd.@globals[0].interface='lan wwan'
++
++# hub 共享 (幂等: 先删同名再建)
++uci -q delete ksmbd.hub
++uci set ksmbd.hub=share
++uci set ksmbd.hub.name='hub'
++uci set ksmbd.hub.path='/mnt/sda1/hub'
++uci set ksmbd.hub.read_only='no'
++uci set ksmbd.hub.force_root='1'
++uci set ksmbd.hub.users='hub'
++uci set ksmbd.hub.create_mask='0644'
++uci set ksmbd.hub.dir_mask='0755'
++uci commit ksmbd
++
++# SMB 账号: hub / hyundai415 (幂等)
++if ! grep -q '^hub:' /etc/ksmbd/ksmbdpwd 2>/dev/null; then
++	ksmbd.adduser -u hub -p hyundai415 2>/dev/null || \
++		logger -t datahub "ksmbd.adduser 失败, 请手动: ksmbd.adduser -u hub -p <密码>"
++fi
++
++exit 0
+diff --git a/package/luci-app-datahub/root/usr/bin/hub-announce b/package/luci-app-datahub/root/usr/bin/hub-announce
+new file mode 100755
+index 0000000000..f837e17c60
+--- /dev/null
++++ b/package/luci-app-datahub/root/usr/bin/hub-announce
+@@ -0,0 +1,16 @@
++#!/bin/sh
++# hub-announce — datahub UDP 广播发现应答器 (端口 3722, socat 实现)
++#
++# 局域网设备(手表/播放器)广播 "DISCOVER" → 本机应答 "DATAHUB <IP> <APIkey>"
++#   → 设备端零配置: 不用写死 hub IP/key
++# 协议刻意极简(不带请求方地址): socat 的 RECVFROM+fork 把应答自动回给发送方
++#
++# 为什么不用 mDNS: 家庭主路由的 IGMP snooping 常把组播拦在无线 STA 之间;
++# UDP 广播帧在 WiFi 上必达(与 ARP/DHCP 同级)。
++
++PORT=3722
++export DATAHUB_KEY=$(uci -q get datahub.hub.key)
++
++logger -t hub-announce "discovery responder on udp/$PORT"
++
++exec socat -T3 UDP-RECVFROM:$PORT,fork EXEC:/usr/bin/hub-announce-reply
+diff --git a/package/luci-app-datahub/root/usr/bin/hub-announce-reply b/package/luci-app-datahub/root/usr/bin/hub-announce-reply
+new file mode 100755
+index 0000000000..6727f00c92
+--- /dev/null
++++ b/package/luci-app-datahub/root/usr/bin/hub-announce-reply
+@@ -0,0 +1,16 @@
++#!/bin/sh
++# hub-announce-reply — socat 子进程: stdin=收到的包, stdout=应答(自动回给发送方)
++# 环境变量 DATAHUB_KEY 由 hub-announce 导入
++
++req=$(head -c 32)
++case "$req" in
++DISCOVER*)
++	ip=$(ip -4 addr show phy0-sta0 2>/dev/null | awk '/inet /{print $2}')
++	ip=${ip%%/*}
++	if [ -z "$ip" ]; then
++		ip=$(ip -4 addr show br-lan 2>/dev/null | awk '/inet /{print $2}')
++		ip=${ip%%/*}
++	fi
++	[ -n "$ip" ] && printf 'DATAHUB %s %s' "$ip" "$DATAHUB_KEY"
++	;;
++esac
+diff --git a/package/luci-app-datahub/root/usr/bin/hub-init b/package/luci-app-datahub/root/usr/bin/hub-init
+new file mode 100755
+index 0000000000..1d8eb4bea5
+--- /dev/null
++++ b/package/luci-app-datahub/root/usr/bin/hub-init
+@@ -0,0 +1,87 @@
++#!/bin/sh
++# hub-init — datahub U盘初始化 (幂等, 开机自动执行)
++#
++# 用法:
++#   hub-init           确保U盘已挂载 + 目录/库表/key 就绪
++#   hub-init format    ★显式★ 把整块U盘格成 ext4 (会清空U盘, 需二次确认)
++#   hub-init wait [秒] 等待U盘出现并挂载 (开机时 USB 枚举有延迟)
++#
++# 挂载策略: block-mount 自动挂 /mnt/sda1 (无 fstab 配置时 block detect 生成)。
++
++MOUNT=$(uci -q get datahub.hub.mount || echo /mnt/sda1)
++ROOT="$MOUNT/hub"
++
++mounted() { grep -q " $MOUNT " /proc/mounts; }
++
++ensure_fstab() {  # 无本挂载点条目时 block detect 重建; 确保 enabled=1 并触发挂载
++	local i n
++	uci -q show fstab 2>/dev/null | grep -q "target='$MOUNT'" || \
++		block detect > /etc/config/fstab 2>/dev/null
++	n=$(uci -q show fstab 2>/dev/null | grep -c "=mount")
++	i=0
++	while [ "$i" -lt "$n" ]; do
++		if [ "$(uci -q get fstab.@mount[$i].target)" = "$MOUNT" ]; then
++			uci -q set fstab.@mount[$i].enabled='1'
++			uci commit fstab
++		fi
++		i=$((i+1))
++	done
++	uci -q show fstab 2>/dev/null | grep -q "target='$MOUNT'" || return 0
++	grep -q " $MOUNT " /proc/mounts || block mount 2>/dev/null
++	return 0
++}
++
++ensure_dirs() {
++	mkdir -p "$ROOT/db" "$ROOT/tmp" "$ROOT/data" || return 1
++	chmod 777 "$ROOT/tmp"
++	return 0
++}
++
++ensure_schema() {
++	[ -f "$ROOT/db/datahub.db" ] && return 0
++	sqlite3 "$ROOT/db/datahub.db" < /usr/share/datahub/schema.sql
++}
++
++ensure_key() {  # 首次生成随机 key (之后固定, LuCI状态页可查)
++	k=$(uci -q get datahub.hub.key)
++	[ -n "$k" ] && return 0
++	k=$(head -c 8 /dev/urandom | md5sum | cut -c1-16)
++	uci set datahub.hub.key="$k"
++	uci commit datahub
++}
++
++case "$1" in
++format)
++	echo "!!! 将把 $MOUNT 所在整块U盘格式化为 ext4, 所有数据丢失 !!!"
++	printf "输入 YES 确认: "; read r
++	[ "$r" = "YES" ] || { echo "已取消"; exit 1; }
++	# 找到挂载点所在设备
++	dev=$(mount | awk -v m="$MOUNT" '$3==m{print $1}')
++	[ -n "$dev" ] || { echo "未找到设备 (U盘未挂载在 $MOUNT)"; exit 1; }
++	umount "$MOUNT" || exit 1
++	echo "mkfs.ext4 $dev ..."
++	mkfs.ext4 -F "$dev" || exit 1
++	mount "$dev" "$MOUNT" || block mount
++	echo "格式化完成, 重新初始化..."
++	shift; exec "$0"
++	;;
++wait)
++	t=${2:-30}; i=0
++	while [ $i -lt "$t" ]; do
++		mounted && ensure_fstab && mounted && exit 0
++		sleep 1; i=$((i+1))
++	done
++	exit 1
++	;;
++esac
++
++# 默认: 全套幂等初始化
++i=0
++while [ $i -lt 20 ]; do
++	mounted || { ensure_fstab; sleep 1; i=$((i+1)); continue; }
++	ensure_dirs && ensure_schema && ensure_key && exit 0
++	sleep 1; i=$((i+1))
++done
++
++logger -t datahub "hub-init: U盘未就绪 (等了${i}s), 稍后由CGI报503"
++exit 1
+diff --git a/package/luci-app-datahub/root/usr/bin/hub-maint b/package/luci-app-datahub/root/usr/bin/hub-maint
+new file mode 100755
+index 0000000000..64c7ad9757
+--- /dev/null
++++ b/package/luci-app-datahub/root/usr/bin/hub-maint
+@@ -0,0 +1,49 @@
++#!/bin/sh
++# hub-maint — datahub 每日维护 (cron 04:00 调用, 也可手动跑)
++#   1. 按保留期清理过期记录+附件  2. 快照备份 datahub.db.bak  3. PRAGMA optimize
++
++MOUNT=$(uci -q get datahub.hub.mount || echo /mnt/sda1)
++ROOT="$MOUNT/hub"
++DB="$ROOT/db/datahub.db"
++BAK="$ROOT/db/datahub.db.bak"
++RETAIN=$(uci -q get datahub.hub.retain || echo 180)
++
++grep -q " $MOUNT " /proc/mounts || { echo "U盘未挂载, 跳过"; exit 1; }
++[ -f "$DB" ] || { echo "数据库不存在"; exit 1; }
++case "$RETAIN" in ''|*[!0-9]*) RETAIN=180;; esac
++
++NOW=$(date +%s)
++
++# 1. 过期附件文件 (先取路径再删行)
++cutoff=$(sqlite3 -batch "$DB" "SELECT CAST(strftime('%s','now','-$RETAIN days') AS INTEGER);")
++[ -n "$cutoff" ] || { echo "计算cutoff失败"; exit 1; }
++
++sqlite3 -batch "$DB" "SELECT path FROM records WHERE ts<$cutoff AND path IS NOT NULL;" | \
++while read -r p; do
++	case "$p" in
++		data/*) rm -f "$ROOT/$p" ;;
++	esac
++done
++
++sqlite3 -batch "$DB" "PRAGMA busy_timeout=3000;
++	DELETE FROM records WHERE ts<$cutoff;
++	DELETE FROM acks   WHERE ts<$cutoff;
++	PRAGMA optimize;"
++
++# 清掉空日期目录
++find "$ROOT/data" -mindepth 4 -type d -empty -exec rmdir {} \; 2>/dev/null
++
++# 2. 在线一致性快照 (备份/导出的规范工件)
++sqlite3 "$DB" ".backup $BAK" || { echo "备份失败"; exit 1; }
++
++# 3. 清理超过一天的 CGI 中转残留
++find "$ROOT/tmp" -type f -mtime +1 -delete 2>/dev/null || \
++	find "$ROOT/tmp" -type f -mtime +1 -exec rm -f {} \; 2>/dev/null
++
++# 4. 音乐库扫描(SMB 拖拷进 music/ 的歌曲登记入库)
++[ -x /usr/bin/hub-scan-music ] && /usr/bin/hub-scan-music >/dev/null 2>&1
++
++n=$(sqlite3 -batch "$DB" "SELECT count(*) FROM records;")
++b=$(wc -c < "$BAK")
++logger -t datahub "maint: retain=${RETAIN}d cutoff=$cutoff records=$n bak=${b}B"
++echo "OK records=$n bak=${b}B"
+diff --git a/package/luci-app-datahub/root/usr/bin/hub-scan-music b/package/luci-app-datahub/root/usr/bin/hub-scan-music
+new file mode 100755
+index 0000000000..659a016557
+--- /dev/null
++++ b/package/luci-app-datahub/root/usr/bin/hub-scan-music
+@@ -0,0 +1,47 @@
++#!/bin/sh
++# hub-scan-music — 音乐库扫描入库
++#
++# 用途: 歌曲经 SMB(\\IP\hub\music\)拖拷进 U盘后, 本脚本把它们登记进
++#       records(channel=music), 局域网播放器即可 list/get 点播。
++#       也可对单个目录手动调用: hub-scan-music
++#
++# 约定: 目录 $ROOT/music/ 下任意子目录; 支持扩展名见 EXT
++#       记录 dev='library', uid='m-<md5(路径)>'(幂等), txt=文件名(去扩展名,即歌名)
++#       库里 path 指向的文件被删时, 对应记录同步删除
++
++MOUNT=$(uci -q get datahub.hub.mount || echo /mnt/sda1)
++ROOT="$MOUNT/hub"
++DB="$ROOT/db/datahub.db"
++MUSIC="$ROOT/music"
++EXT="mp3 wav flac m4a aac ogg opus amr ape wma"
++
++es() { printf "%s" "$1" | sed "s/'/''/g"; }  # SQL 字符串转义
++
++grep -q " $MOUNT " /proc/mounts || exit 1
++[ -f "$DB" ] || exit 1
++mkdir -p "$MUSIC"
++
++# 1. 入库: 目录里的每个音频文件
++find "$MUSIC" -type f | while read -r f; do
++	ext="${f##*.}"
++	case " $EXT " in *" $ext "*) ;; *) continue;; esac
++	rel="${f#$ROOT/}"
++	[ "${#rel}" -gt 2 ] || continue
++	uid="m-$(printf '%s' "$rel" | md5sum | cut -c1-12)"
++	title=$(basename "$f"); title="${title%.*}"
++	size=$(wc -c < "$f")
++	# 已在库中(按uid)则跳过
++	ex=$(sqlite3 -batch "$DB" "SELECT id FROM records WHERE uid='$uid';")
++	[ -n "$ex" ] && continue
++	sqlite3 -batch "$DB" "INSERT INTO records(uid,devid,channel,ts,dtype,txt,path,bytes,fmt,rate,dur_ms)
++		VALUES('$uid','library','music',$(date +%s),'file','$(es "$title")','$rel',$size,'$ext',0,0);"
++done
++
++# 2. 清理: 库内 music 记录指向的文件已不存在 → 删除记录
++sqlite3 -batch "$DB" "SELECT id,path FROM records WHERE channel='music' AND devid='library';" | \
++while IFS='|' read -r id path; do
++	[ -f "$ROOT/$path" ] || sqlite3 -batch "$DB" "DELETE FROM records WHERE id=$id;"
++done
++
++n=$(sqlite3 -batch "$DB" "SELECT count(*) FROM records WHERE channel='music';")
++echo "music library: $n tracks"
+diff --git a/package/luci-app-datahub/root/usr/share/datahub/schema.sql b/package/luci-app-datahub/root/usr/share/datahub/schema.sql
+new file mode 100644
+index 0000000000..ce41728e6d
+--- /dev/null
++++ b/package/luci-app-datahub/root/usr/share/datahub/schema.sql
+@@ -0,0 +1,46 @@
++-- datahub schema — 通用家庭设备数据中枢
++-- 执行: sqlite3 datahub.db < /usr/share/datahub/schema.sql  (幂等, 可重复执行)
++
++PRAGMA journal_mode=DELETE;
++PRAGMA synchronous=FULL;
++PRAGMA busy_timeout=3000;
++
++CREATE TABLE IF NOT EXISTS devices (
++  devid      TEXT PRIMARY KEY,        -- 设备唯一ID (自定义, 如 esp32s3-a1)
++  name       TEXT DEFAULT '',         -- 显示名 ("客厅对讲机")
++  kind       TEXT DEFAULT 'generic',  -- intercom / sensor / generic ...
++  apikey     TEXT DEFAULT '',         -- 预留: 按设备独立密钥
++  created_at INTEGER,
++  last_seen  INTEGER
++);
++
++-- 唯一数据表: 一切设备共用 (channel 区分业务)
++CREATE TABLE IF NOT EXISTS records (
++  id         INTEGER PRIMARY KEY AUTOINCREMENT,
++  uid        TEXT UNIQUE,             -- 客户端幂等ID (断网重发不重复)
++  devid      TEXT NOT NULL,
++  channel    TEXT NOT NULL,           -- audio / telemetry / events / 自定义
++  ts         INTEGER NOT NULL,        -- 服务器时间(epoch秒, 权威)
++  client_ts  INTEGER,                 -- 客户端采集时刻(留痕)
++  dtype      TEXT DEFAULT 'row',      -- row=结构化 / file=附件
++  val        REAL,                    -- row: 数值 (温度/电压/...)
++  txt        TEXT,                    -- row: 短文本 (事件描述)
++  data       TEXT,                    -- row: JSON 负载 (任意扩展)
++  path       TEXT,                    -- file: 相对 hub/ 根的路径
++  bytes      INTEGER,                 -- file: 字节数
++  fmt        TEXT,                    -- file: alaw/ulaw/pcm/...
++  dur_ms     INTEGER,                 -- file: 时长(毫秒)
++  rate       INTEGER,                 -- file: 采样率 (WAV头合成用)
++  state      INTEGER DEFAULT 0
++);
++
++CREATE INDEX IF NOT EXISTS idx_rec_dev_ch_ts ON records(devid, channel, ts);
++CREATE INDEX IF NOT EXISTS idx_rec_ts       ON records(ts);
++
++-- 已取走/已读: 哪台设备取走了哪条
++CREATE TABLE IF NOT EXISTS acks (
++  rec_id INTEGER NOT NULL,
++  devid  TEXT NOT NULL,
++  ts     INTEGER NOT NULL,
++  PRIMARY KEY (rec_id, devid)
++);
+diff --git a/package/luci-app-datahub/root/usr/share/luci/menu.d/luci-app-datahub.json b/package/luci-app-datahub/root/usr/share/luci/menu.d/luci-app-datahub.json
+new file mode 100644
+index 0000000000..895afba55d
+--- /dev/null
++++ b/package/luci-app-datahub/root/usr/share/luci/menu.d/luci-app-datahub.json
+@@ -0,0 +1,13 @@
++{
++	"admin/status/datahub": {
++		"title": "Data Hub",
++		"order": 20,
++		"action": {
++			"type": "view",
++			"path": "datahub/main"
++		},
++		"depends": {
++			"acl": [ "luci-app-datahub" ]
++		}
++	}
++}
+diff --git a/package/luci-app-datahub/root/usr/share/rpcd/acl.d/luci-app-datahub.json b/package/luci-app-datahub/root/usr/share/rpcd/acl.d/luci-app-datahub.json
+new file mode 100644
+index 0000000000..ffd4def7e0
+--- /dev/null
++++ b/package/luci-app-datahub/root/usr/share/rpcd/acl.d/luci-app-datahub.json
+@@ -0,0 +1,17 @@
++{
++	"luci-app-datahub": {
++		"description": "Grant access to the device data hub status page",
++		"read": {
++			"file": {
++				"/usr/bin/hub-init": [ "exec" ],
++				"/usr/bin/hub-maint": [ "exec" ]
++			}
++		},
++		"write": {
++			"file": {
++				"/usr/bin/hub-init": [ "exec" ],
++				"/usr/bin/hub-maint": [ "exec" ]
++			}
++		}
++	}
++}
+diff --git a/package/luci-app-datahub/root/www/cgi-bin/hub b/package/luci-app-datahub/root/www/cgi-bin/hub
+new file mode 100755
+index 0000000000..96507a6821
+--- /dev/null
++++ b/package/luci-app-datahub/root/www/cgi-bin/hub
+@@ -0,0 +1,332 @@
++#!/bin/sh
++# hub — datahub CGI API (uhttpd: /cgi-bin/hub)
++#
++# 通用家庭设备数据中枢:
++#   put    POST 上传: dtype=row 结构化 / dtype=file 附件(body=裸流)
++#   list   GET  增量拉取记录 (id 游标, 可选 unread 过滤)
++#   get    GET  取单条: row→JSON / file→音频流(自动包WAV头, &raw=1拿裸流)
++#   ack    GET  标记某设备已取走(已读)
++#   reg    POST 注册/更新设备信息(name/kind)
++#   stats  GET  总览统计(免key, 给LuCI/调试)
++#   export GET  打包导出(.db快照+近期附件, gzip tar, 免key)
++#
++# 鉴权: 除 stats/export 外需 key=uci(datahub.hub.key)
++# 写操作经唯一uid幂等; 并发由SQLite busy_timeout串行化; 附件先写tmp再mv。
++
++HUB_MOUNT=$(uci -q get datahub.hub.mount || echo /mnt/sda1)
++ROOT="$HUB_MOUNT/hub"
++DB="$ROOT/db/datahub.db"
++BAK="$ROOT/db/datahub.db.bak"
++KEY=$(uci -q get datahub.hub.key)
++CL=${CONTENT_LENGTH:-0}
++NOW=$(date +%s)
++
++# ---------- 小工具 ----------
++
++urldec() {  # %XX / '+' → 原始字节 (纯shell, 与busybox ash/bash/gawk行为一致)
++	local s="$1" out="" c hh n rest
++	while [ -n "$s" ]; do
++		c=${s%${s#?}}
++		case "$c" in
++			"%")
++				if [ ${#s} -ge 3 ]; then
++					rest=${s#%}; hh=${rest%"${rest#??}"}; rest=${rest#??}
++					case "$hh" in
++						*[!0-9A-Fa-f]*)
++							out="$out$c" ;;
++						*)
++							n=$((0x$hh))
++							# 0/NUL/换行无法安全穿过命令替换, 跳过
++							[ "$n" -gt 0 ] && [ "$n" -ne 10 ] && \
++								out="$out$(printf "\\$(printf '%03o' "$n")")" ;;
++					esac
++					s=$rest
++				else
++					out="$out$c"; s=${s#?}
++				fi ;;
++			"+")
++				out="$out "; s=${s#?} ;;
++			*)
++				out="$out$c"; s=${s#?} ;;
++		esac
++	done
++	printf '%s' "$out"
++}
++
++ok_id() {  # 标识符: [A-Za-z0-9_.-] 长度1..48
++	case "$1" in ''|*[!A-Za-z0-9_.-]*) return 1;; esac
++	[ ${#1} -le 48 ] || return 1
++	return 0
++}
++ok_num() {  # 非负整数
++	case "$1" in ''|*[!0-9]*) return 1;; esac
++	return 0
++}
++es() { printf "%s" "$1" | sed "s/'/''/g"; }  # SQL 字符串转义
++
++sq()  { sqlite3 -batch "$DB" "$1"; }
++sqj() {  # 查询→JSON数组(空结果补 [])
++	o=$(sqlite3 -batch -json "$DB" "$1")
++	[ -n "$o" ] || o='[]'
++	printf "%s" "$o"
++}
++
++jerr() { printf 'Status: %s\r\nContent-Type: application/json\r\n\r\n{"ok":0,"err":"%s"}\n' "$1" "$2"; exit 0; }
++jok()  { printf 'Status: 200 OK\r\nContent-Type: application/json\r\n\r\n{"ok":1%s}\n' "$1"; exit 0; }
++
++mounted() { grep -q " $HUB_MOUNT " /proc/mounts; }
++
++# ---------- 解析 QUERY_STRING ----------
++
++cmd= key= dev= ch= uid= dtype= val= txt= name= kind= fmt= dur= rate= client_ts=
++since= limit= id= ackdev= days=7 raw=0 unread=0 from=
++
++OIFS=$IFS; IFS='&'
++for p in $QUERY_STRING; do
++	k=${p%%=*}; v=${p#*=}
++	case "$k" in
++		cmd)       cmd=$(urldec "$v");;
++		key)       key=$v;;
++		dev)       dev=$(urldec "$v");;
++		ch)        ch=$(urldec "$v");;
++		uid)       uid=$(urldec "$v");;
++		dtype)     dtype=$(urldec "$v");;
++		val)       val=$(urldec "$v");;
++		txt)       txt=$(urldec "$v");;
++		name)      name=$(urldec "$v");;
++		kind)      kind=$(urldec "$v");;
++		fmt)       fmt=$(urldec "$v");;
++		dur)       dur=$v;;
++		rate)      rate=$v;;
++		client_ts) client_ts=$v;;
++		from)      from=$(urldec "$v");;
++		since)     since=$v;;
++		limit)     limit=$v;;
++		id)        id=$v;;
++		ackdev)    ackdev=$(urldec "$v");;
++		days)      days=$v;;
++		raw)       raw=1;;
++		unread)    unread=1;;
++	esac
++done
++IFS=$OIFS
++
++case "$cmd" in
++	put|list|get|ack|reg|stats|export) ;;
++	*) jerr 400 "bad cmd";;
++esac
++
++# 免key的只读/导出命令; 其余验key
++case "$cmd" in
++	stats|export) ;;
++	*) [ -n "$KEY" ] && [ "$key" = "$KEY" ] || jerr 403 "bad key";;
++esac
++
++mounted || jerr 503 "usb storage not mounted"
++[ -f "$DB" ] || jerr 503 "db not initialized (run hub-init)"
++
++# ---------- 命令实现 ----------
++
++cts_sql() {  # client_ts → 合法整数或 NULL
++	ok_num "$client_ts" && printf "%s" "$client_ts" || echo NULL
++}
++
++upsert_dev() {  # $1=devid $2=name $3=kind (name 仅在非空时更新)
++	local n k extra
++	n=$(es "$2"); k=$(es "$3"); extra=""
++	[ -n "$2" ] && extra=",name='$n'"
++	sq "INSERT INTO devices(devid,name,kind,apikey,created_at,last_seen)
++	    VALUES('$1','$n','$k','',$NOW,$NOW)
++	    ON CONFLICT(devid) DO UPDATE SET last_seen=$NOW$extra;"
++}
++
++do_put() {
++	ok_id "$dev" || jerr 400 "bad dev"
++	ok_id "$ch"  || jerr 400 "bad ch"
++	[ -n "$dtype" ] || dtype=row
++	case "$dtype" in row|file) ;; *) jerr 400 "bad dtype";; esac
++	upsert_dev "$dev" "$name" "$kind"
++
++	# 幂等: uid 已存在直接返回旧id
++	if [ -n "$uid" ]; then
++		ok_id "$uid" || jerr 400 "bad uid"
++		e=$(sq "SELECT id FROM records WHERE uid='$(es "$uid")';")
++		[ -n "$e" ] && jok ",\"id\":$e,\"dup\":1"
++	fi
++
++	if [ "$dtype" = "file" ]; then
++		ok_num "$CL" && [ "$CL" -gt 0 ] || jerr 400 "empty body"
++		[ "$CL" -le 52428800 ] || jerr 413 "too large"
++		[ -z "$dur" ] || { ok_num "$dur" || jerr 400 "bad dur"; }
++		[ -z "$rate" ] || { ok_num "$rate" || jerr 400 "bad rate"; }
++		[ -n "$fmt" ] || fmt=bin
++		ok_id "$fmt" || jerr 400 "bad fmt"
++
++		tmp="$ROOT/tmp/up.$$"
++		mkdir -p "$ROOT/tmp"
++		head -c "$CL" > "$tmp" || { rm -f "$tmp"; jerr 500 "read body failed"; }
++		# BusyBox wc -c 可能带前导空格, 必须 trim 再比
++		got=$(wc -c < "$tmp" | tr -d ' \t\r\n')
++		[ "$got" = "$CL" ] || { rm -f "$tmp"; jerr 400 "short body"; }
++
++		day=$(date +%Y%m%d); stamp=$(date +%H%M%S)
++		if [ -n "$uid" ]; then base="$stamp-$uid"; else base="$stamp-$$"; fi
++		dir="$ROOT/data/$dev/$ch/$day"
++		mkdir -p "$dir" || { rm -f "$tmp"; jerr 500 "mkdir failed"; }
++		rel="data/$dev/$ch/$day/$base.bin"
++		mv "$tmp" "$ROOT/$rel" || jerr 500 "store failed"
++		size=$(wc -c < "$ROOT/$rel")
++
++		id=$(sq "INSERT INTO records(uid,devid,channel,ts,client_ts,dtype,txt,path,bytes,fmt,dur_ms,rate)
++		    VALUES($( [ -n "$uid" ] && printf "'%s'" "$(es "$uid")" || echo NULL),'$dev','$ch',$NOW,
++		    $(cts_sql),'file','$(es "$txt")','$rel',$size,'$fmt',${dur:-0},${rate:-0});
++		    SELECT last_insert_rowid();")
++		jok ",\"id\":$id,\"bytes\":$size,\"path\":\"$rel\""
++	else
++		# 行数据: val(数字)/txt(短文本) 走query; JSON负载走body(<=64KB存data列)
++		vdat=""
++		if ok_num "$CL" && [ "$CL" -gt 0 ] && [ "$CL" -le 65536 ]; then
++			vdat=$(head -c "$CL" | sed "s/'/''/g")
++		fi
++		v=NULL
++		printf "%s" "$val" | grep -qE '^-?[0-9]+(\.[0-9]+)?$' && v="$val"
++		id=$(sq "INSERT INTO records(uid,devid,channel,ts,client_ts,dtype,val,txt,data)
++		    VALUES($( [ -n "$uid" ] && printf "'%s'" "$(es "$uid")" || echo NULL),'$dev','$ch',$NOW,
++		    $(cts_sql),'row',$v,'$(es "$txt")','$vdat');
++		    SELECT last_insert_rowid();")
++		jok ",\"id\":$id"
++	fi
++}
++
++do_list() {
++	ok_num "$since" || since=0
++	ok_num "$limit" || limit=20
++	[ "$limit" -ge 1 ] && [ "$limit" -le 200 ] || limit=20
++	w="id>$since"
++	# from = 发送者过滤; dev = "我的视角"(unread 过滤掉本机已 ack 的)
++	[ -n "$from" ] && { ok_id "$from" || jerr 400 "bad from"; w="$w AND devid='$from'"; }
++	[ -n "$ch" ]  && { ok_id "$ch"  || jerr 400 "bad ch";  w="$w AND channel='$ch'"; }
++	[ "$unread" = 1 ] && [ -n "$dev" ] && \
++		w="$w AND NOT EXISTS(SELECT 1 FROM acks a WHERE a.rec_id=records.id AND a.devid='$dev')"
++	rows=$(sqj "SELECT id,devid,channel,ts,dtype,val,txt,data,fmt,dur_ms,bytes FROM records WHERE $w ORDER BY id DESC LIMIT $limit;")
++	printf 'Status: 200 OK\r\nContent-Type: application/json\r\n\r\n{"ok":1,"rows":%s}\n' "$rows"
++}
++
++le16() { local n=$1 i=0 b; while [ $i -lt 2 ]; do b=$((n%256)); printf '\\%03o' $b; n=$((n/256)); i=$((i+1)); done; }
++le32() { local n=$1 i=0 b; while [ $i -lt 4 ]; do b=$((n%256)); printf '\\%03o' $b; n=$((n/256)); i=$((i+1)); done; }
++
++wav_hdr() {  # $1=数据字节 $2=采样率 $3=tag(1=pcm16 6=alaw 7=ulak) → 44字节头(八进制转义格式串)
++	local len=$1 rate=$2 tag=$3 bits bra
++	case "$tag" in
++		1) bits=16; bra=$((rate*2));;
++		*) bits=8;  bra=$rate;;
++	esac
++	# RIFF|len|WAVE|fmt |16|tag|ch=1|rate|byterate|align|bits|data|len
++	printf 'RIFF%sWAVEfmt %s%s%s%s%s%s%sdata%s' \
++		"$(le32 $((36+len)))" '\020\000\000\000' \
++		"$(le16 $tag)" '\001\000' "$(le32 $rate)" "$(le32 $bra)" \
++		"$(le16 $((bits/8)))" "$(le16 $bits)" "$(le32 $len)"
++}
++
++do_get() {
++	ok_num "$id" || jerr 400 "bad id"
++	row=$(sq "SELECT dtype,path,fmt,bytes,rate FROM records WHERE id=$id;")
++	[ -n "$row" ] || jerr 404 "no such record"
++	dtyp=${row%%|*}; rest=${row#*|}
++	path=${rest%%|*}; rest=${rest#*|}
++	fmt=${rest%%|*}; rest=${rest#*|}
++	bytes=${rest%%|*}; rate=${rest#*|}
++
++	if [ "$dtyp" != "file" ]; then
++		o=$(sqlite3 -batch -json "$DB" "SELECT id,devid,channel,ts,client_ts,dtype,val,txt,data FROM records WHERE id=$id;")
++		[ -n "$o" ] || o='[]'
++		printf 'Status: 200 OK\r\nContent-Type: application/json\r\n\r\n{"ok":1,"row":%s}\n' "$o"
++		return
++	fi
++
++	f="$ROOT/$path"
++	[ -f "$f" ] || jerr 404 "file missing"
++	[ -n "$rate" ] || rate=8000
++
++	tag=0
++	[ "$raw" != 1 ] && case "$fmt" in
++		alaw) tag=6;;
++		ulaw) tag=7;;
++		pcm)  tag=1;;
++	esac
++
++	if [ "$tag" != 0 ]; then
++		hdr=$(wav_hdr "$bytes" "$rate" "$tag")
++		printf 'Status: 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: %s\r\nContent-Disposition: inline; filename="%s.wav"\r\n\r\n' \
++			"$((bytes+44))" "$id"
++		printf "$hdr"
++	else
++		# 按扩展名给 Content-Type: 浏览器<audio>/手机播放器可直接流播
++		ct="application/octet-stream"
++		case "$fmt" in
++			mp3)  ct="audio/mpeg";;
++			m4a)  ct="audio/mp4";;
++			aac)  ct="audio/aac";;
++			flac) ct="audio/flac";;
++			ogg)  ct="audio/ogg";;
++			opus) ct="audio/ogg";;
++			wav)  ct="audio/wav";;
++			amr)  ct="audio/amr";;
++			ape)  ct="audio/x-ape";;
++			wma)  ct="audio/x-ms-wma";;
++		esac
++		# 磁盘上可能是 .bin, 下载名用真实 fmt 扩展名
++		ext=$fmt; [ -n "$ext" ] || ext=bin
++		printf 'Status: 200 OK\r\nContent-Type: %s\r\nContent-Length: %s\r\nContent-Disposition: attachment; filename="%s.%s"\r\n\r\n' \
++			"$ct" "$bytes" "$id" "$ext"
++	fi
++	cat "$f"
++}
++
++do_ack() {
++	ok_num "$id" || jerr 400 "bad id"
++	ok_id "$ackdev" || jerr 400 "bad dev"
++	sq "INSERT OR REPLACE INTO acks(rec_id,devid,ts) VALUES($id,'$ackdev',$NOW);"
++	jok ""
++}
++
++do_reg() {
++	ok_id "$dev" || jerr 400 "bad dev"
++	[ ${#name} -le 64 ] || jerr 400 "name too long"
++	if [ -n "$kind" ]; then ok_id "$kind" || jerr 400 "bad kind"; else kind=generic; fi
++	sq "INSERT INTO devices(devid,name,kind,apikey,created_at,last_seen)
++	    VALUES('$(es "$dev")','$(es "$name")','$kind','',$NOW,$NOW)
++	    ON CONFLICT(devid) DO UPDATE SET name=excluded.name,kind=excluded.kind,last_seen=$NOW;"
++	jok ""
++}
++
++do_stats() {
++	db_b=$(wc -c < "$DB" 2>/dev/null || echo 0)
++	bak_b=0; bak_ts=0
++	if [ -f "$BAK" ]; then bak_b=$(wc -c < "$BAK"); bak_ts=$(date -r "$BAK" +%s); fi
++	dsk=$(df -k "$HUB_MOUNT" 2>/dev/null | tail -1 | awk '{print $2" "$4}')
++	d_tot=${dsk%% *}; d_free=${dsk#* }
++	total=$(sq "SELECT count(*) FROM records;")
++	today=$(sq "SELECT count(*) FROM records WHERE ts>strftime('%s','now','-1 day');")
++	devs=$(sqj "SELECT d.devid AS devid,d.name AS name,d.kind AS kind,d.last_seen AS last_seen,
++	    count(r.id) AS records FROM devices d LEFT JOIN records r ON r.devid=d.devid
++	    GROUP BY d.devid ORDER BY d.last_seen DESC;")
++	chs=$(sqj "SELECT channel,count(*) AS records FROM records GROUP BY channel ORDER BY records DESC;")
++	rec=$(sqj "SELECT id,devid,channel,ts,dtype,val,txt,fmt,dur_ms,bytes FROM records ORDER BY id DESC LIMIT 20;")
++	printf 'Status: 200 OK\r\nContent-Type: application/json\r\n\r\n{"ok":1,"now":%s,"key":"%s","disk":{"total":%s,"free":%s},"db_bytes":%s,"bak_bytes":%s,"bak_ts":%s,"records":%s,"today":%s,"devices":%s,"channels":%s,"recent":%s}\n' \
++		"$NOW" "$KEY" "${d_tot:-0}" "${d_free:-0}" "$db_b" "$bak_b" "$bak_ts" "$total" "$today" "$devs" "$chs" "$rec"
++}
++
++do_export() {
++	ok_num "$days" || days=7
++	[ "$days" -ge 1 ] && [ "$days" -le 90 ] || days=7
++	mkdir -p "$ROOT/db"
++	sqlite3 "$DB" ".backup $BAK" || jerr 500 "backup failed"
++	files=$(cd "$ROOT" && find data -type f -mtime -"$days" 2>/dev/null)
++	nm="datahub-$(date +%Y%m%d).tar.gz"
++	printf 'Status: 200 OK\r\nContent-Type: application/gzip\r\nContent-Disposition: attachment; filename="%s"\r\n\r\n' "$nm"
++	tar cf - -C "$ROOT" db/datahub.db.bak $files | gzip
++}
++
++case "$cmd" in
++	put)    do_put;;
++	list)   do_list;;
++	get)    do_get;;
++	ack)    do_ack;;
++	reg)    do_reg;;
++	stats)  do_stats;;
++	export) do_export;;
++esac
+diff --git a/package/luci-app-datahub/root/www/music.html b/package/luci-app-datahub/root/www/music.html
+new file mode 100644
+index 0000000000..64b8e00d0f
+--- /dev/null
++++ b/package/luci-app-datahub/root/www/music.html
+@@ -0,0 +1,150 @@
++<!DOCTYPE html>
++<html lang="zh">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
++<title>Hub 点歌台</title>
++<style>
++	body { font-family: -apple-system, sans-serif; background: #111; color: #eee;
++	       max-width: 640px; margin: 0 auto; padding: 12px; }
++	h1 { font-size: 1.15em; color: #6cf; }
++	#player { position: sticky; top: 0; background: #111; padding: 8px 0; z-index: 9; }
++	audio { width: 100%; }
++	#now { font-size: .9em; color: #9f9; margin: 4px 0; min-height: 1.2em; }
++	ol { list-style: none; padding: 0; }
++	li { display: flex; align-items: center; gap: 8px; padding: 10px 8px;
++	     border-bottom: 1px solid #222; cursor: pointer; }
++	li.active { background: #1c2b3a; }
++	li .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++	li .s { color: #888; font-size: .8em; }
++	.num { color: #678; font-size: .85em; width: 1.6em; text-align: right; }
++	#msg { color: #f96; padding: 20px; text-align: center; }
++	button { background: none; border: none; color: #6cf; font-size: 1em; }
++</style>
++</head>
++<body>
++<h1>🎵 Hub 点歌台 <span id="cnt" style="color:#888;font-size:.75em"></span></h1>
++<div id="upbar" style="display:flex;gap:8px;align-items:center;padding:6px 0">
++	<label class="btn" style="background:#1c3a5c;border-radius:6px;padding:8px 14px;cursor:pointer">
++		⬆ 上传歌曲<input id="fi" type="file" accept=".mp3,.wav,.flac,.m4a,.aac,.ogg,.opus,.amr,.ape,.wma" multiple style="display:none">
++	</label>
++	<span id="upinfo" style="color:#888;font-size:.85em">也可以把文件直接拖进本页面</span>
++</div>
++<div id="player">
++	<audio id="au" controls preload="none"></audio>
++	<div id="now"></div>
++</div>
++<div id="msg">加载中…</div>
++<ol id="list"></ol>
++
++<script>
++'use strict';
++var API = '/cgi-bin/hub', key = '', rows = [], cur = -1;
++
++function fmtSize(n) {
++	if (n >= 1048576) return (n / 1048576).toFixed(1) + 'M';
++	if (n >= 1024) return (n / 1024).toFixed(0) + 'K';
++	return n + 'B';
++}
++
++function play(i) {
++	var au = document.getElementById('au');
++	cur = i;
++	au.src = API + '?cmd=get&key=' + encodeURIComponent(key) + '&id=' + rows[i].id;
++	au.play();
++	document.getElementById('now').textContent = '▶ ' + (rows[i].txt || rows[i].id) + ' — ' + fmtSize(rows[i].bytes);
++	var lis = document.querySelectorAll('li');
++	for (var k = 0; k < lis.length; k++) lis[k].className = (k === i) ? 'active' : '';
++}
++
++function render() {
++	var ol = document.getElementById('list');
++	ol.innerHTML = '';
++	rows.forEach(function (r, i) {
++		var li = document.createElement('li');
++		li.innerHTML = '<span class="num">' + (i + 1) + '</span>' +
++			'<span class="t"></span><span class="s">' + (r.fmt || '') + ' ' + fmtSize(r.bytes || 0) + '</span>';
++		li.querySelector('.t').textContent = r.txt || ('#' + r.id);
++		li.onclick = function () { play(i); };
++		ol.appendChild(li);
++	});
++	var au = document.getElementById('au');
++	au.onended = function () { if (cur >= 0 && cur < rows.length - 1) play(cur + 1); };  // 自动连播
++	document.getElementById('cnt').textContent = '(' + rows.length + ' 首)';
++	document.getElementById('msg').style.display = 'none';
++}
++
++fetch(API + '?cmd=stats').then(function (r) { return r.json(); }).then(function (s) {
++	key = s.key;
++	loadList();
++}).catch(function (e) {
++	document.getElementById('msg').textContent = '服务不可用: ' + e;
++});
++
++function loadList() {
++	fetch(API + '?cmd=list&key=' + encodeURIComponent(key) + '&ch=music&since=0&limit=500')
++		.then(function (r) { return r.json(); }).then(function (j) {
++			if (!j.ok) throw new Error('list fail');
++			rows = (j.rows || []).reverse();   // 按上传先后正序显示
++			if (!rows.length) {
++				document.getElementById('msg').style.display = '';
++				document.getElementById('msg').textContent = '曲库为空: 点"上传歌曲"或把文件拖进本页, 也可 SMB 拖拷 \\\\HubIP\\hub\\music\\';
++				return;
++			}
++			render();
++		}).catch(function (e) {
++			document.getElementById('msg').textContent = '取列表失败: ' + e;
++		});
++}
++
++/* ============ 上传(浏览器选文件 / 拖拽), XHR 带进度 ============ */
++function uploadOne(file, ondone) {
++	var name = file.name.replace(/\.[^.]*$/, '');
++	var ext = (file.name.split('.').pop() || 'bin').toLowerCase();
++	var url = API + '?cmd=put&key=' + encodeURIComponent(key) +
++		'&dev=library&ch=music&dtype=file&fmt=' + encodeURIComponent(ext) +
++		'&uid=mu-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) +
++		'&txt=' + encodeURIComponent(name);
++	var x = new XMLHttpRequest();
++	x.open('POST', url);
++	x.setRequestHeader('Content-Type', 'application/octet-stream');
++	x.upload.onprogress = function (e) {
++		if (e.lengthComputable)
++			setUpInfo('上传 "' + file.name + '" … ' + Math.round(e.loaded / e.total * 100) + '%');
++	};
++	x.onload = function () {
++		var ok = (x.status === 200 && x.responseText.indexOf('"ok":1') >= 0);
++		setUpInfo(ok ? '✓ 已入库: ' + name : '✗ 失败: ' + name);
++		ondone(ok);
++	};
++	x.onerror = function () { setUpInfo('✗ 网络错误: ' + file.name); ondone(false); };
++	x.send(file);
++}
++
++function setUpInfo(t) { document.getElementById('upinfo').textContent = t; }
++
++function uploadFiles(files) {
++	var arr = [].slice.call(files).filter(function (f) { return f.size > 0 && f.size < 52428800; });
++	if (!arr.length) return;
++	var i = 0;
++	(function next() {
++		if (i >= arr.length) { loadList(); return; }
++		uploadOne(arr[i++], next);
++	})();
++}
++
++document.getElementById('fi').onchange = function () {
++	uploadFiles(this.files);
++	this.value = '';
++};
++
++document.ondragover = function (e) { e.preventDefault(); return false; };
++document.ondrop = function (e) {
++	e.preventDefault();
++	if (!key) return;
++	uploadFiles(e.dataTransfer.files);
++	return false;
++};
++</script>
++</body>
++</html>
+diff --git a/package/luci-app-gpiotest/Makefile b/package/luci-app-gpiotest/Makefile
+new file mode 100644
+index 0000000000..8ec2a4eca4
+--- /dev/null
++++ b/package/luci-app-gpiotest/Makefile
+@@ -0,0 +1,27 @@
++# SPDX-License-Identifier: GPL-2.0-or-later
++#
++# luci-app-gpiotest — 网页试切任意 GPIO, 用来猜各 GPIO 的功能
++# 放到 OpenWrt SDK/源码的 package/luci-app-gpiotest/ 下
++
++include $(TOPDIR)/rules.mk
++
++LUCI_TITLE:=LuCI app to probe/toggle arbitrary GPIO lines
++# gpiod-tools 提供 gpioinfo(显示 consumer), 强烈建议一起装
++LUCI_DEPENDS:=+gpiod-tools
++LUCI_PKGARCH:=all
++
++PKG_VERSION:=1.0
++PKG_RELEASE:=1
++PKG_MAINTAINER:=you <you@example.com>
++PKG_LICENSE:=GPL-2.0-or-later
++
++include $(TOPDIR)/feeds/luci/luci.mk
++
++# 显式再装一次后端脚本并带上可执行位(防从 Windows 拷贝丢 +x)
++define Package/luci-app-gpiotest/install
++	$(call Package/luci-app-gpiotest/install/default,$(1))
++	$(INSTALL_DIR) $(1)/usr/bin
++	$(INSTALL_BIN) ./root/usr/bin/gpiotest $(1)/usr/bin/gpiotest
++endef
++
++# call BuildPackage - OpenWrt buildroot signature to enable feed for compile
+diff --git a/package/luci-app-gpiotest/htdocs/luci-static/resources/view/gpiotest/main.js b/package/luci-app-gpiotest/htdocs/luci-static/resources/view/gpiotest/main.js
+new file mode 100644
+index 0000000000..11a6279faf
+--- /dev/null
++++ b/package/luci-app-gpiotest/htdocs/luci-static/resources/view/gpiotest/main.js
+@@ -0,0 +1,106 @@
++'use strict';
++'require view';
++'require fs';
++'require ui';
++'require poll';
++
++var BIN = '/usr/bin/gpiotest';
++
++function run(args) {
++	return fs.exec(BIN, args).then(function (r) {
++		return (r && typeof r.stdout === 'string') ? r.stdout : '';
++	}).catch(function (e) { return _('error: ') + e; });
++}
++
++return view.extend({
++	load: function () {
++		return Promise.all([ run(['info']), run(['list']) ]);
++	},
++
++	render: function (data) {
++		var infoEl = E('pre', { 'style': 'max-height:16em;overflow:auto;margin:0' }, data[0] || '');
++		var listEl = E('pre', { 'style': 'max-height:16em;overflow:auto;margin:0' }, data[1] || '');
++		var outEl  = E('pre', { 'style': 'margin:0' }, '');
++
++		function refresh() {
++			return Promise.all([ run(['info']), run(['list']) ]).then(function (d) {
++				infoEl.textContent = d[0] || '';
++				listEl.textContent = d[1] || '';
++			});
++		}
++
++		var lineIn = E('input', {
++			'type': 'text', 'placeholder': 'line #', 'style': 'width:6em',
++			'class': 'cbi-input-text'
++		});
++
++		function lineNo() {
++			var v = (lineIn.value || '').trim();
++			if (!/^[0-9]+$/.test(v)) { ui.addNotification(null, E('p', {}, _('Enter a numeric line number first')), 'warning'); return null; }
++			return v;
++		}
++
++		function act(cmd, extra, label) {
++			var l = lineNo(); if (l === null) return;
++			var args = [cmd, l]; if (extra !== undefined) args.push(extra);
++			return run(args).then(function (o) {
++				outEl.textContent = '$ gpiotest ' + args.join(' ') + '\n' + o;
++				ui.addNotification(null, E('p', {}, (label || cmd) + ' → line ' + l), 'info');
++				return refresh();
++			});
++		}
++
++		poll.add(refresh, 5);
++
++		var btn = function (cls, txt, fn) {
++			return E('button', { 'class': 'btn cbi-button ' + cls, 'click': fn }, txt);
++		};
++
++		return E('div', { 'class': 'cbi-map' }, [
++			E('h2', {}, _('GPIO Test / Probe')),
++			E('div', { 'class': 'cbi-map-descr' }, _('Toggle arbitrary GPIO lines to figure out what each one does. Line number = chip-relative index (same as gpioinfo / DTS <&gpio N>).')),
++
++			E('div', { 'class': 'alert-message warning' }, [
++				E('strong', {}, _('Warning: ')),
++				_('Blindly driving unknown GPIOs can hang the board or corrupt flash (reset lines, SPI chip-select, power enables). Lines already claimed by the kernel will refuse to export — that is expected protection. Prefer lines shown as "unused" in gpioinfo below.')
++			]),
++
++			E('div', { 'class': 'cbi-section' }, [
++				E('h3', {}, _('gpioinfo (direction + consumer of every line)')),
++				E('div', { 'class': 'cbi-section-descr' }, _('Lines with a named consumer are already used — no need to guess. "unused" lines are your probe candidates.')),
++				infoEl
++			]),
++
++			E('div', { 'class': 'cbi-section' }, [
++				E('h3', {}, _('Probe a line')),
++				E('div', { 'class': 'cbi-section-node' }, [
++					E('p', {}, [ _('Line number: '), lineIn ]),
++					E('div', {}, [
++						btn('cbi-button-action', _('Read'),        function () { act('get'); }),
++						' ',
++						btn('cbi-button-action', _('Set 1 (high)'),function () { act('set', '1', _('set 1')); }),
++						' ',
++						btn('cbi-button-action', _('Set 0 (low)'), function () { act('set', '0', _('set 0')); }),
++						' ',
++						btn('', _('Toggle'),      function () { act('toggle'); }),
++						' ',
++						btn('', _('As input'),    function () { act('in', undefined, _('input')); }),
++						' ',
++						btn('cbi-button-remove', _('Free (unexport)'), function () { act('free'); })
++					]),
++					E('h4', { 'style': 'margin-top:1em' }, _('Last command output')),
++					outEl
++				])
++			]),
++
++			E('div', { 'class': 'cbi-section' }, [
++				E('h3', {}, _('sysfs list (exported lines: direction / value)')),
++				listEl
++			])
++		]);
++	},
++
++	handleSave: null,
++	handleSaveApply: null,
++	handleReset: null
++});
+diff --git a/package/luci-app-gpiotest/root/usr/bin/gpiotest b/package/luci-app-gpiotest/root/usr/bin/gpiotest
+new file mode 100755
+index 0000000000..2713ca7c47
+--- /dev/null
++++ b/package/luci-app-gpiotest/root/usr/bin/gpiotest
+@@ -0,0 +1,75 @@
++#!/bin/sh
++# gpiotest — 探测/试切任意 GPIO, 用来猜设备上各 GPIO 的功能
++# 用法:
++#   gpiotest info             gpioinfo: 每条线的 方向/consumer(已占用一目了然, 首选)
++#   gpiotest list             sysfs: base/ngpio 及各线 方向/电平
++#   gpiotest get    <line>    读某线当前值(不改方向)
++#   gpiotest in     <line>    设为输入并读回(用来找"按键/检测脚")
++#   gpiotest set    <line> 0|1  设为输出并置值(持久)
++#   gpiotest toggle <line>    翻转输出
++#   gpiotest free   <line>    unexport 释放该线
++#
++# line = gpiochip 内相对编号(和 gpioinfo/DTS 的 <&gpio N> 一致)。
++# 注意: 已被内核占用的线 export 会失败(自动保护); 乱切复位/flash 片选等可能死机,
++#       建议先看 info 里标 unused 的线再试。
++
++GC=$(ls -d /sys/class/gpio/gpiochip* 2>/dev/null | head -1)
++BASE=$(cat "$GC/base" 2>/dev/null)
++NG=$(cat "$GC/ngpio" 2>/dev/null)
++
++die(){ echo "$1" >&2; exit 1; }
++isnum(){ case "$1" in ''|*[!0-9]*) return 1;; *) return 0;; esac; }
++_nap(){ usleep 20000 2>/dev/null || sleep 1; }
++
++# 相对 line -> sysfs 目录, 确保 export
++_dir(){
++	isnum "$1" || die "line 必须是数字"
++	[ -n "$BASE" ] || die "no gpiochip (需内核 CONFIG_GPIO_SYSFS=y)"
++	[ "$1" -lt "${NG:-0}" ] 2>/dev/null || die "line 超范围(0..$((NG-1)))"
++	g=$((BASE + $1)); d=/sys/class/gpio/gpio$g
++	if [ ! -d "$d" ]; then
++		echo "$g" > /sys/class/gpio/export 2>/dev/null || \
++			die "line $1 (sys$g) 无法 export: 多半已被内核占用, 用 'info' 看 consumer"
++		_i=0; while [ ! -e "$d/direction" ] && [ $_i -lt 20 ]; do _i=$((_i+1)); _nap; done
++	fi
++	echo "$d"
++}
++
++# $1=sysfs目录  $2=in|out  (带回读校验+重试)
++_setdir(){
++	_i=0
++	while [ "$(cat "$1/direction" 2>/dev/null)" != "$2" ] && [ $_i -lt 20 ]; do
++		echo "$2" > "$1/direction" 2>/dev/null; _i=$((_i+1))
++		[ "$(cat "$1/direction" 2>/dev/null)" = "$2" ] && break
++		_nap
++	done
++	[ "$(cat "$1/direction" 2>/dev/null)" = "$2" ] || die "line 无法设为 $2 方向"
++}
++
++case "$1" in
++	info)
++		if command -v gpioinfo >/dev/null 2>&1; then gpioinfo
++		else echo "未安装 gpiod-tools(gpioinfo); 请 opkg install gpiod-tools" >&2; exit 1; fi ;;
++	list)
++		echo "gpiochip: ${GC:-?}  base=${BASE:-?}  ngpio=${NG:-?}"
++		n=0
++		while [ "$n" -lt "${NG:-0}" ]; do
++			g=$((BASE+n)); d=/sys/class/gpio/gpio$g
++			if [ -d "$d" ]; then
++				printf "line %2d (sys %d): dir=%-3s val=%s\n" "$n" "$g" \
++					"$(cat "$d/direction" 2>/dev/null)" "$(cat "$d/value" 2>/dev/null)"
++			else
++				printf "line %2d (sys %d): (未 export)\n" "$n" "$g"
++			fi
++			n=$((n+1))
++		done ;;
++	get)    d=$(_dir "$2") || exit 1; cat "$d/value" ;;
++	in)     d=$(_dir "$2") || exit 1; _setdir "$d" in;  cat "$d/value" ;;
++	set)    case "$3" in 0|1) :;; *) die "值只能 0 或 1";; esac
++	        d=$(_dir "$2") || exit 1; _setdir "$d" out; echo "$3" > "$d/value"; cat "$d/value" ;;
++	toggle) d=$(_dir "$2") || exit 1; _setdir "$d" out
++	        v=$(cat "$d/value"); echo $((1 - v)) > "$d/value"; cat "$d/value" ;;
++	free)   isnum "$2" || die "line 必须是数字"
++	        echo $((BASE + $2)) > /sys/class/gpio/unexport 2>/dev/null; echo freed ;;
++	*)      echo "usage: $0 info|list|get <l>|in <l>|set <l> 0|1|toggle <l>|free <l>" >&2; exit 2 ;;
++esac
+diff --git a/package/luci-app-gpiotest/root/usr/share/luci/menu.d/luci-app-gpiotest.json b/package/luci-app-gpiotest/root/usr/share/luci/menu.d/luci-app-gpiotest.json
+new file mode 100644
+index 0000000000..777c39acef
+--- /dev/null
++++ b/package/luci-app-gpiotest/root/usr/share/luci/menu.d/luci-app-gpiotest.json
+@@ -0,0 +1,13 @@
++{
++	"admin/system/gpiotest": {
++		"title": "GPIO Test",
++		"order": 61,
++		"action": {
++			"type": "view",
++			"path": "gpiotest/main"
++		},
++		"depends": {
++			"acl": [ "luci-app-gpiotest" ]
++		}
++	}
++}
+diff --git a/package/luci-app-gpiotest/root/usr/share/rpcd/acl.d/luci-app-gpiotest.json b/package/luci-app-gpiotest/root/usr/share/rpcd/acl.d/luci-app-gpiotest.json
+new file mode 100644
+index 0000000000..cc9bd0ac4c
+--- /dev/null
++++ b/package/luci-app-gpiotest/root/usr/share/rpcd/acl.d/luci-app-gpiotest.json
+@@ -0,0 +1,15 @@
++{
++	"luci-app-gpiotest": {
++		"description": "Grant access to the GPIO test/probe tool",
++		"read": {
++			"file": {
++				"/usr/bin/gpiotest": [ "exec" ]
++			}
++		},
++		"write": {
++			"file": {
++				"/usr/bin/gpiotest": [ "exec" ]
++			}
++		}
++	}
++}
+diff --git a/package/luci-app-usbswitch/Makefile b/package/luci-app-usbswitch/Makefile
+new file mode 100644
+index 0000000000..8c6b8b410b
+--- /dev/null
++++ b/package/luci-app-usbswitch/Makefile
+@@ -0,0 +1,28 @@
++# SPDX-License-Identifier: GPL-2.0-or-later
++#
++# luci-app-usbswitch — 网页按钮切换 USB 通道 (SGM7227, GPIO26)
++# 放到 OpenWrt SDK/源码的 package/luci-app-usbswitch/ 下
++
++include $(TOPDIR)/rules.mk
++
++LUCI_TITLE:=LuCI support for switching USB channel (SGM7227 GPIO26)
++LUCI_DEPENDS:=
++LUCI_PKGARCH:=all
++
++PKG_VERSION:=1.0
++PKG_RELEASE:=2
++PKG_MAINTAINER:=you <you@example.com>
++PKG_LICENSE:=GPL-2.0-or-later
++
++include $(TOPDIR)/feeds/luci/luci.mk
++
++# 显式安装脚本/服务并带可执行位（避免拷贝丢失 +x）
++define Package/luci-app-usbswitch/install
++	$(call Package/luci-app-usbswitch/install/default,$(1))
++	$(INSTALL_DIR) $(1)/usr/bin $(1)/etc/init.d $(1)/etc/uci-defaults
++	$(INSTALL_BIN) ./root/usr/bin/usbsw $(1)/usr/bin/usbsw
++	$(INSTALL_BIN) ./root/etc/init.d/usbdefault $(1)/etc/init.d/usbdefault
++	$(INSTALL_BIN) ./root/etc/uci-defaults/99-luci-app-usbswitch $(1)/etc/uci-defaults/99-luci-app-usbswitch
++endef
++
++# call BuildPackage - OpenWrt buildroot signature to enable feed for compile
+diff --git a/package/luci-app-usbswitch/htdocs/luci-static/resources/view/usbswitch/main.js b/package/luci-app-usbswitch/htdocs/luci-static/resources/view/usbswitch/main.js
+new file mode 100644
+index 0000000000..70e18601cc
+--- /dev/null
++++ b/package/luci-app-usbswitch/htdocs/luci-static/resources/view/usbswitch/main.js
+@@ -0,0 +1,87 @@
++'use strict';
++'require view';
++'require fs';
++'require ui';
++'require poll';
++
++var BIN = '/usr/bin/usbsw';
++
++function readVal(action) {
++	return fs.exec(BIN, [action]).then(function (r) {
++		return (r && r.stdout ? r.stdout.trim() : '?');
++	}).catch(function () { return '?'; });
++}
++
++return view.extend({
++	load: function () {
++		return Promise.all([ readVal('oe-get'), readVal('get') ]);
++	},
++
++	render: function (vals) {
++		var oeEl  = E('strong', {}, vals[0]);   // GPIO23 (OE)
++		var selEl = E('strong', {}, vals[1]);    // GPIO26 (SEL)
++
++		function refresh() {
++			return Promise.all([ readVal('oe-get'), readVal('get') ]).then(function (v) {
++				oeEl.textContent  = v[0];
++				selEl.textContent = v[1];
++			});
++		}
++
++		function run(action, label) {
++			return fs.exec(BIN, [action]).then(function () {
++				ui.addNotification(null, E('p', {}, (label || action)), 'info');
++				return refresh();
++			}).catch(function (e) {
++				ui.addNotification(null, E('p', {}, _('Failed: ') + e), 'danger');
++			});
++		}
++
++		poll.add(refresh, 5);
++
++		var btn = function (cls, txt, act, label) {
++			return E('button', { 'class': 'btn cbi-button ' + cls, 'click': function () { run(act, label); } }, txt);
++		};
++
++		return E('div', { 'class': 'cbi-map' }, [
++			E('h2', {}, _('USB Channel Switch (SGM7227)')),
++			E('div', { 'class': 'cbi-map-descr' }, _('GPIO23 = SGM7227 enable (OE), GPIO26 = channel select (host=router / pc=computer). Note: GPIO8 (5V power) is now driven automatically by the kernel USB regulator (always-on) and is no longer controlled here.')),
++
++			E('div', { 'class': 'cbi-section' }, [
++				E('h3', {}, _('Current state')),
++				E('p', {}, [ _('OE(gpio23)='), oeEl, '  ', _('SEL(gpio26)='), selEl ]),
++				E('div', { 'class': 'cbi-section-node' }, [
++					btn('cbi-button-action', _('USB ON (enable + host)'), 'usb-on', _('usb-on')),
++					' ',
++					btn('cbi-button-remove', _('USB OFF (disable)'), 'usb-off', _('usb-off'))
++				])
++			]),
++
++			E('div', { 'class': 'cbi-section' }, [
++				E('h3', {}, _('Enable — GPIO23 (SGM7227 OE)')),
++				E('div', { 'class': 'cbi-section-node' }, [
++					btn('cbi-button-action', _('Enable ON'),  'oe-on',  _('OE=1')),
++					' ',
++					btn('', _('Enable OFF'), 'oe-off', _('OE=0')),
++					' ',
++					btn('', _('Toggle'),     'oe-toggle', _('OE toggled'))
++				])
++			]),
++
++			E('div', { 'class': 'cbi-section' }, [
++				E('h3', {}, _('Channel — GPIO26 (SGM7227 SEL)')),
++				E('div', { 'class': 'cbi-section-node' }, [
++					btn('cbi-button-action', _('To device (host)'), 'host', _('SEL=host')),
++					' ',
++					btn('cbi-button-action', _('To PC (pass-through)'), 'pc', _('SEL=pc')),
++					' ',
++					btn('', _('Toggle'), 'toggle', _('SEL toggled'))
++				])
++			])
++		]);
++	},
++
++	handleSave: null,
++	handleSaveApply: null,
++	handleReset: null
++});
+diff --git a/package/luci-app-usbswitch/root/etc/init.d/usbdefault b/package/luci-app-usbswitch/root/etc/init.d/usbdefault
+new file mode 100755
+index 0000000000..2241ae8da2
+--- /dev/null
++++ b/package/luci-app-usbswitch/root/etc/init.d/usbdefault
+@@ -0,0 +1,12 @@
++#!/bin/sh /etc/rc.common
++# 开机默认把 USB(存储)通道切给 AR9331 本机 (datahub 需要 U盘):
++#   GPIO23(OE)=1 使能 SGM7227 通路, GPIO26(SEL)=1 选到 host(AR9331) 侧。
++# START=11: 尽量赶在 USB 存储驱动扫描前把通道摆好。
++# 之后仍可用网页 luci-app-usbswitch 手动切到 pc(电脑) 排查/导数据。
++START=11
++
++start() {
++	/usr/bin/usbsw oe-on   # 使能通路 (GPIO23=1)
++	/usr/bin/usbsw host    # 切到本机通道 (GPIO26=1)
++	logger -t usbdefault "USB channel defaulted to HOST (SEL=1) on boot"
++}
+diff --git a/package/luci-app-usbswitch/root/etc/uci-defaults/99-luci-app-usbswitch b/package/luci-app-usbswitch/root/etc/uci-defaults/99-luci-app-usbswitch
+new file mode 100755
+index 0000000000..117f15fed6
+--- /dev/null
++++ b/package/luci-app-usbswitch/root/etc/uci-defaults/99-luci-app-usbswitch
+@@ -0,0 +1,4 @@
++#!/bin/sh
++# 首次启动: 让"开机默认切 PC 通道"服务自启。
++/etc/init.d/usbdefault enable 2>/dev/null
++exit 0
+diff --git a/package/luci-app-usbswitch/root/usr/bin/usbsw b/package/luci-app-usbswitch/root/usr/bin/usbsw
+new file mode 100755
+index 0000000000..411a524781
+--- /dev/null
++++ b/package/luci-app-usbswitch/root/usr/bin/usbsw
+@@ -0,0 +1,66 @@
++#!/bin/sh
++# usbsw — SGM7227 USB 通道排查 (GPIO23 使能 + GPIO26 通道选择)
++#   注意: GPIO8(VBUS 供电) 现由 DTS 的 vbus-supply(regulator-always-on) 自动常供,
++#         不再手动控制(chipidea host 需要 regulator 管理 gpio8)。本脚本只管 23/26。
++#
++# 用法:
++#   通道 SEL(26):  usbsw host | pc | toggle | get
++#   使能 OE(23):   usbsw oe-on | oe-off | oe-toggle | oe-get
++#   组合:          usbsw status | usb-on(使能+切host) | usb-off
++#
++# 实测(2026-07): gpio26=1 => 切给 AR9331(路由器读U盘); gpio26=0 => 切给电脑
++HOST_VAL=1
++PC_VAL=0
++
++OE_LINE=23      # SGM7227 使能(OE)
++SEL_LINE=26     # SGM7227 通道选择(S)
++
++_nap() { usleep 20000 2>/dev/null || sleep 1; }
++
++# 相对 line -> sysfs 目录, 确保 export 且方向=output; 失败返回非 0
++_gpio_path() {
++	_gc=$(ls -d /sys/class/gpio/gpiochip* 2>/dev/null | head -1)
++	[ -n "$_gc" ] || { echo "no gpiochip (需内核 CONFIG_GPIO_SYSFS=y)" >&2; return 1; }
++	_base=$(cat "$_gc/base")
++	_g=$((_base + $1))
++	_d=/sys/class/gpio/gpio$_g
++
++	if [ ! -d "$_d" ]; then
++		echo "$_g" > /sys/class/gpio/export 2>/dev/null
++		_i=0
++		while [ ! -e "$_d/direction" ] && [ "$_i" -lt 20 ]; do _i=$((_i+1)); _nap; done
++	fi
++	_i=0
++	while [ "$(cat "$_d/direction" 2>/dev/null)" != "out" ] && [ "$_i" -lt 20 ]; do
++		echo out > "$_d/direction" 2>/dev/null
++		_i=$((_i+1)); [ "$(cat "$_d/direction" 2>/dev/null)" = "out" ] && break
++		_nap
++	done
++	[ "$(cat "$_d/direction" 2>/dev/null)" = "out" ] || { echo "gpio$_g: 无法设为 output" >&2; return 1; }
++	echo "$_d"
++}
++
++SEL_DIR=$(_gpio_path "$SEL_LINE") || exit 1
++OE_DIR=$(_gpio_path "$OE_LINE")   || OE_DIR=""
++
++_need() { [ -n "$1" ] || { echo "$2 未初始化(GPIO 被占用? 看 /sys/kernel/debug/gpio)" >&2; exit 1; } }
++_val()  { cat "$1/value" 2>/dev/null; }
++_set()  { echo "$2" > "$1/value"; }
++
++case "$1" in
++	host)   _set "$SEL_DIR" "$HOST_VAL" ;;
++	pc)     _set "$SEL_DIR" "$PC_VAL" ;;
++	toggle) v=$(_val "$SEL_DIR"); _set "$SEL_DIR" $((1 - v)) ;;
++	get)    _val "$SEL_DIR" ;;
++
++	oe-on|oe1)   _need "$OE_DIR" OE; _set "$OE_DIR" 1 ;;
++	oe-off|oe0)  _need "$OE_DIR" OE; _set "$OE_DIR" 0 ;;
++	oe-toggle)   _need "$OE_DIR" OE; v=$(_val "$OE_DIR"); _set "$OE_DIR" $((1 - v)); _val "$OE_DIR" ;;
++	oe-get)      _need "$OE_DIR" OE; _val "$OE_DIR" ;;
++
++	status)  echo "OE(gpio$OE_LINE)=$( [ -n "$OE_DIR" ] && _val "$OE_DIR" || echo NA )  SEL(gpio$SEL_LINE)=$(_val "$SEL_DIR")" ;;
++	usb-on)  _need "$OE_DIR" OE; _set "$OE_DIR" 1; _set "$SEL_DIR" "$HOST_VAL"; echo "usb-on: OE=1 SEL=host($HOST_VAL)" ;;
++	usb-off) _need "$OE_DIR" OE; _set "$OE_DIR" 0; echo "usb-off: OE=0" ;;
++
++	*)  echo "usage: $0 host|pc|toggle|get | oe-on|oe-off|oe-toggle|oe-get | status|usb-on|usb-off" >&2; exit 2 ;;
++esac
+diff --git a/package/luci-app-usbswitch/root/usr/share/luci/menu.d/luci-app-usbswitch.json b/package/luci-app-usbswitch/root/usr/share/luci/menu.d/luci-app-usbswitch.json
+new file mode 100644
+index 0000000000..07899431c8
+--- /dev/null
++++ b/package/luci-app-usbswitch/root/usr/share/luci/menu.d/luci-app-usbswitch.json
+@@ -0,0 +1,13 @@
++{
++	"admin/system/usbswitch": {
++		"title": "USB Channel",
++		"order": 60,
++		"action": {
++			"type": "view",
++			"path": "usbswitch/main"
++		},
++		"depends": {
++			"acl": [ "luci-app-usbswitch" ]
++		}
++	}
++}
+diff --git a/package/luci-app-usbswitch/root/usr/share/rpcd/acl.d/luci-app-usbswitch.json b/package/luci-app-usbswitch/root/usr/share/rpcd/acl.d/luci-app-usbswitch.json
+new file mode 100644
+index 0000000000..efcd680735
+--- /dev/null
++++ b/package/luci-app-usbswitch/root/usr/share/rpcd/acl.d/luci-app-usbswitch.json
+@@ -0,0 +1,15 @@
++{
++	"luci-app-usbswitch": {
++		"description": "Grant access to the USB channel switch control",
++		"read": {
++			"file": {
++				"/usr/bin/usbsw": [ "exec" ]
++			}
++		},
++		"write": {
++			"file": {
++				"/usr/bin/usbsw": [ "exec" ]
++			}
++		}
++	}
++}
+diff --git a/target/linux/ath79/dts/ar9331_pisen_wmn013n.dts b/target/linux/ath79/dts/ar9331_pisen_wmn013n.dts
+new file mode 100644
+index 0000000000..952c2621aa
+--- /dev/null
++++ b/target/linux/ath79/dts/ar9331_pisen_wmn013n.dts
+@@ -0,0 +1,145 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "ar9331.dtsi"
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++#include <dt-bindings/leds/common.h>
++
++/ {
++	model = "Pisen WMN013N";
++	compatible = "pisen,wmn013n", "qca,ar9331";
++
++	aliases {
++		led-boot = &led_system;
++		led-failsafe = &led_system;
++		led-running = &led_system;
++		led-upgrade = &led_system;
++		label-mac-device = &eth0;
++	};
++
++	leds {
++		compatible = "gpio-leds";
++		led_system: led-0 {
++			function = LED_FUNCTION_STATUS;
++			color = <LED_COLOR_ID_BLUE>;
++			gpios = <&gpio 27 GPIO_ACTIVE_LOW>;   /* 你的板: 系统灯在 GPIO27 */
++			default-state = "on";
++		};
++	};
++
++	keys {
++		compatible = "gpio-keys";
++		reset {
++			label = "reset";
++			linux,code = <KEY_RESTART>;
++			gpios = <&gpio 11 GPIO_ACTIVE_LOW>;   /* 你的板: reset 在 GPIO11 */
++			debounce-interval = <60>;
++		};
++	};
++
++	/*
++	 * GPIO8 = USB VBUS 供电使能. USB 改用 generic-ehci 后不走 vbus-supply,
++	 * 改用 gpio-hog(见文件末尾 &gpio)开机直接钉高, U盘常供电.
++	 */
++};
++
++&spi {
++	status = "okay";
++
++	flash@0 {
++		compatible = "jedec,spi-nor";
++		reg = <0>;
++		spi-max-frequency = <25000000>;
++
++		partitions {
++			compatible = "fixed-partitions";
++			#address-cells = <1>;
++			#size-cells = <1>;
++
++			partition@0 {
++				label = "u-boot";
++				reg = <0x000000 0x020000>;
++				read-only;
++				compatible = "nvmem-cells";
++				#address-cells = <1>;
++				#size-cells = <1>;
++
++				macaddr_uboot_1fc00: macaddr@1fc00 {
++					reg = <0x1fc00 0x6>;         /* 你的网口 MAC 3c:40:4f:04:28:20 */
++				};
++			};
++
++			partition@20000 {
++				compatible = "tplink,firmware";
++				label = "firmware";
++				reg = <0x020000 0xfd0000>;        /* 16M: 0x20000..0xff0000 */
++			};
++
++			art: partition@ff0000 {
++				label = "art";
++				reg = <0xff0000 0x010000>;        /* ART 移到 16M 末尾(那份拷贝就在这) */
++				read-only;
++				compatible = "nvmem-cells";
++				#address-cells = <1>;
++				#size-cells = <1>;
++
++				cal_art_1000: calibration@1000 {
++					reg = <0x1000 0x440>;
++				};
++			};
++		};
++	};
++};
++
++&eth0 {
++	status = "okay";
++
++	nvmem-cells = <&macaddr_uboot_1fc00>;
++	nvmem-cell-names = "mac-address";
++
++	gmac-config {
++		device = <&gmac>;
++
++		switch-phy-addr-swap = <0>;
++		switch-phy-swap = <0>;
++	};
++};
++
++&eth1 {
++	status = "okay";
++	compatible = "syscon", "simple-mfd";
++};
++
++&wmac {
++	status = "okay";
++	nvmem-cells = <&cal_art_1000>, <&macaddr_uboot_1fc00>;
++	nvmem-cell-names = "calibration", "mac-address";
++};
++
++&usb {
++	/*
++	 * AR9331 这颗是 Synopsys EHCI 核: 用 generic-ehci(与原厂 ar71xx 及 qca953x 一致),
++	 * 不用 ar9330.dtsi 默认的 chipidea —— chipidea 的 generic glue 不解除 usb-host
++	 * reset/时钟, 导致 DCCPARAMS 读 0 "doesn't support host". ehci-platform 会 deassert
++	 * reset + 使能时钟, 控制器才能起 host. caps-offset=0x100 处理 Synopsys HC 偏移.
++	 */
++	compatible = "generic-ehci";
++	reg = <0x1b000000 0x1000>;
++	caps-offset = <0x100>;
++	has-transaction-translator;
++	dr_mode = "host";
++	status = "okay";
++};
++
++&gpio {
++	usb_power {
++		gpio-hog;
++		gpios = <8 GPIO_ACTIVE_HIGH>;
++		output-high;
++		line-name = "usb-power";
++	};
++};
++
++&usb_phy {
++	status = "okay";
++};
+\ No newline at end of file
+diff --git a/target/linux/ath79/image/generic.mk b/target/linux/ath79/image/generic.mk
+index f264c14314..e50a17b393 100644
+--- a/target/linux/ath79/image/generic.mk
++++ b/target/linux/ath79/image/generic.mk
+@@ -2392,6 +2392,19 @@ define Device/pisen_wmm003n
+ endef
+ TARGET_DEVICES += pisen_wmm003n
+ 
++define Device/pisen_wmn013n
++  $(Device/tplink-16mlzma)
++  SOC := ar9331
++  DEVICE_VENDOR := PISEN
++  DEVICE_MODEL := WMN013N (16M)
++  DEVICE_PACKAGES := kmod-usb2 kmod-usb-storage kmod-fs-vfat block-mount \
++	kmod-fs-ext4 e2fsprogs kmod-fs-ksmbd ksmbd-server umdns \
++	luci-app-datahub luci-app-usbswitch
++  TPLINK_HWID := 0x07030101
++  IMAGE_SIZE := 16192k
++endef
++TARGET_DEVICES += pisen_wmn013n
++
+ define Device/plasmacloud_pa300-common
+   SOC := qca9533
+   DEVICE_VENDOR := Plasma Cloud

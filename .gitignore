@@ -40,3 +40,13 @@ _undef_*.txt
 **/sdk_used_list.used~*
 **/download.bat~*
 **/section.txt~*
+
+# Hub Browser 本地缓存 / PyInstaller 中间产物(保留 HubBrowser.exe 与源码)
+tools/hub_browser/build/
+tools/hub_browser/dist/
+tools/hub_browser/cache/
+tools/hub_browser/**/__pycache__/
+tools/hub_browser/**/*.pyc
+cpu/wl82/tools/*.log
+app/board/wl82/settings_win.ini
+
