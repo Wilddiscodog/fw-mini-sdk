@@ -469,6 +469,29 @@ index 0000000000..4208994ca3
 +	procd_set_param stderr 1
 +	procd_close_instance
 +}
+diff --git a/package/luci-app-datahub/root/etc/uci-defaults/98-datahub-uhttpd b/package/luci-app-datahub/root/etc/uci-defaults/98-datahub-uhttpd
+new file mode 100755
+index 0000000000..a1b2c3d4e5
+--- /dev/null
++++ b/package/luci-app-datahub/root/etc/uci-defaults/98-datahub-uhttpd
+@@ -0,0 +1,17 @@
++#!/bin/sh
++# datahub: 拉长 CGI 超时 + /www/hubfs → U盘 hub (软链)
++# 大音乐文件(ape/flac)由 get 302 到 /hubfs/..., 避免 script_timeout 掐流
++# 注: uhttpd -y alias 在此机上对目录映射不可靠, 改用 docroot 下软链
++
++[ -f /etc/config/uhttpd ] || exit 0
++
++uci set uhttpd.main.script_timeout='900'
++uci set uhttpd.main.network_timeout='900'
++uci -q delete uhttpd.main.prefix
++uci -q delete uhttpd.main.alias
++uci commit uhttpd
++
++MOUNT=$(uci -q get datahub.hub.mount); MOUNT=${MOUNT:-/mnt/sda1}
++ln -sfn "$MOUNT/hub" /www/hubfs
++
++exit 0
 diff --git a/package/luci-app-datahub/root/etc/uci-defaults/99-datahub-ksmbd b/package/luci-app-datahub/root/etc/uci-defaults/99-datahub-ksmbd
 new file mode 100755
 index 0000000000..38e5dec268
@@ -847,7 +870,7 @@ new file mode 100755
 index 0000000000..96507a6821
 --- /dev/null
 +++ b/package/luci-app-datahub/root/www/cgi-bin/hub
-@@ -0,0 +1,332 @@
+@@ -0,0 +1,351 @@
 +#!/bin/sh
 +# hub — datahub CGI API (uhttpd: /cgi-bin/hub)
 +#
@@ -1110,26 +1133,38 @@ index 0000000000..96507a6821
 +		printf 'Status: 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: %s\r\nContent-Disposition: inline; filename="%s.wav"\r\n\r\n' \
 +			"$((bytes+44))" "$id"
 +		printf "$hdr"
-+	else
-+		# 按扩展名给 Content-Type: 浏览器<audio>/手机播放器可直接流播
-+		ct="application/octet-stream"
-+		case "$fmt" in
-+			mp3)  ct="audio/mpeg";;
-+			m4a)  ct="audio/mp4";;
-+			aac)  ct="audio/aac";;
-+			flac) ct="audio/flac";;
-+			ogg)  ct="audio/ogg";;
-+			opus) ct="audio/ogg";;
-+			wav)  ct="audio/wav";;
-+			amr)  ct="audio/amr";;
-+			ape)  ct="audio/x-ape";;
-+			wma)  ct="audio/x-ms-wma";;
-+		esac
-+		# 磁盘上可能是 .bin, 下载名用真实 fmt 扩展名
-+		ext=$fmt; [ -n "$ext" ] || ext=bin
-+		printf 'Status: 200 OK\r\nContent-Type: %s\r\nContent-Length: %s\r\nContent-Disposition: attachment; filename="%s.%s"\r\n\r\n' \
-+			"$ct" "$bytes" "$id" "$ext"
++		cat "$f"
++		return
 +	fi
++
++	# 大附件(音乐 ape/flac 等)走 /www/hubfs 静态, 避开 CGI script_timeout
++	# Location 须绝对 URL: 手表 httpcli 无法解析相对路径 /hubfs/...
++	if [ "$bytes" -gt 262144 ] 2>/dev/null; then
++		host=${HTTP_HOST:-$SERVER_ADDR}
++		host=${host%%:*}
++		[ -n "$host" ] || host=192.168.5.28
++		printf 'Status: 302 Found\r\nLocation: http://%s/hubfs/%s\r\nCache-Control: public, max-age=3600\r\n\r\n' "$host" "$path"
++		return
++	fi
++
++	# 按扩展名给 Content-Type: 浏览器<audio>/手机播放器可直接流播
++	ct="application/octet-stream"
++	case "$fmt" in
++		mp3)  ct="audio/mpeg";;
++		m4a)  ct="audio/mp4";;
++		aac)  ct="audio/aac";;
++		flac) ct="audio/flac";;
++		ogg)  ct="audio/ogg";;
++		opus) ct="audio/ogg";;
++		wav)  ct="audio/wav";;
++		amr)  ct="audio/amr";;
++		ape)  ct="audio/x-ape";;
++		wma)  ct="audio/x-ms-wma";;
++	esac
++	# 磁盘上可能是 .bin, 下载名用真实 fmt 扩展名
++	ext=$fmt; [ -n "$ext" ] || ext=bin
++	printf 'Status: 200 OK\r\nContent-Type: %s\r\nContent-Length: %s\r\nContent-Disposition: attachment; filename="%s.%s"\r\n\r\n' \
++		"$ct" "$bytes" "$id" "$ext"
 +	cat "$f"
 +}
 +

@@ -6,6 +6,7 @@
 #include "watch_backlight.h"
 #include "watch_ui.h"
 #include "lcd_drive.h"
+#include "lv_port_indev.h"
 
 extern void disp_enable_update(void);
 extern void disp_disable_update(void);
@@ -32,6 +33,7 @@ void watch_power_boot_anim(void)
     s_asleep = 0;
     s_boot_ms = timer_get_ms();
     s_sleep_tog = 0; /* 丢掉开机松手可能积压的短按 */
+    lv_port_indev_block(0);
 }
 
 static void watch_power_sleep(void)
@@ -45,6 +47,7 @@ static void watch_power_sleep(void)
     s_asleep = 1;
     s_on = 0;
     watch_ui_close_dropdown();
+    lv_port_indev_block(1); /* 息屏后屏蔽触摸, 仅电源键可亮屏 */
     disp_disable_update();
     watch_backlight_off();
     user_lcd_enter_sleep();
@@ -60,6 +63,7 @@ static void watch_power_wake(void)
     disp_enable_update();
     s_asleep = 0;
     s_on = 1;
+    lv_port_indev_block(0);
     /* 强制整屏刷新一次 */
     if (lv_scr_act()) {
         lv_obj_invalidate(lv_scr_act());
@@ -76,6 +80,7 @@ void watch_power_off(void)
     s_asleep = 0;
     watch_ui_close_dropdown();
     watch_ui_close_app();
+    lv_port_indev_block(1);
     disp_disable_update();
     watch_backlight_set(0);
     /* 只置位: soft_poweroff 在 lcd_test 离开 lv_task_handler 后执行 */

@@ -22,7 +22,7 @@
 extern void bt_music_audio_takeover(void);
 extern int lwip_canceladdrinfo(void);
 
-#define HUB_MUSIC_VOL_MIN  5
+#define HUB_MUSIC_VOL_MIN  0
 #define HUB_MUSIC_VOL_MAX  100
 
 struct hub_music_hdl {
@@ -30,6 +30,7 @@ struct hub_music_hdl {
     int n;
     int cur; /* -1=未选 */
     char volume;
+    u8 vol_inited; /* 与 volume==0(静音)区分未加载 */
     u8 playing;
     u16 wait_dl;
     int dl_ready;
@@ -40,6 +41,7 @@ struct hub_music_hdl {
     volatile u8 list_busy;
     hub_music_list_cb list_cb;
     void *list_priv;
+    u32 play_t0; /* 开播时刻, 用于识别 HUB 掐流导致的假 END */
 };
 
 static struct hub_music_hdl s_hm = { .cur = -1 };
@@ -213,6 +215,30 @@ static int hm_dl_ready(void *p)
     return __this->dl_ready ? 1 : 0;
 }
 
+static int hm_play_looks_truncated(void)
+{
+    u32 played_ms;
+    u32 expect_bytes = 0;
+    int flen = 0;
+
+    if (__this->cur < 0 || __this->cur >= __this->n) {
+        return 0;
+    }
+    expect_bytes = __this->tracks[__this->cur].bytes;
+    played_ms = timer_get_ms() - __this->play_t0;
+    if (__this->net_file) {
+        flen = net_download_get_file_len(__this->net_file);
+    }
+    /* HUB CGI 默认 ~60s 掐断: 大文件播不到 2 分钟就 EOF */
+    if (expect_bytes > (2u * 1024u * 1024u) && played_ms < 120000u) {
+        printf("[hub-music] truncated? play=%ums expect_bytes=%u flen=%d\n",
+               (unsigned)played_ms, (unsigned)expect_bytes, flen);
+        return 1;
+    }
+    (void)flen;
+    return 0;
+}
+
 static void hm_dec_event(void *priv, int argc, int *argv)
 {
     (void)priv;
@@ -220,6 +246,11 @@ static void hm_dec_event(void *priv, int argc, int *argv)
     switch (argv[0]) {
     case AUDIO_SERVER_EVENT_ERR:
     case AUDIO_SERVER_EVENT_END:
+        if (hm_play_looks_truncated()) {
+            printf("[hub-music] incomplete stream, skip auto-next\n");
+            hm_dec_stop();
+            break;
+        }
         printf("[hub-music] track end\n");
         hm_dec_stop();
         /* 自动下一首 */
@@ -282,6 +313,7 @@ static int hm_start_dec(void *file)
     server_request(__this->dec, AUDIO_REQ_DEC, &req);
     net_download_set_pp(file, 0);
     __this->playing = 1;
+    __this->play_t0 = timer_get_ms();
     printf("[hub-music] playing type=%s\n", dtype);
     return 0;
 
@@ -428,23 +460,31 @@ int hub_music_play_idx(int idx)
     hm_dec_stop();
     __this->cur = idx;
     snprintf(__this->dec_type, sizeof(__this->dec_type), "%s", dtype);
+    /* 切歌用缓存 IP, 避免每首 DISCOVER(~2s); 列表 refresh 已 ensure */
     snprintf(__this->url, sizeof(__this->url),
              "http://%s:%d/cgi-bin/hub?cmd=get&key=%s&id=%u",
-             walkie_hub_ip(), walkie_hub_port(), walkie_hub_key(),
+             walkie_hub_ip_cached(), walkie_hub_port(), walkie_hub_key(),
              (unsigned)t->id);
 
-    if (!__this->volume) {
+    if (!__this->vol_inited) {
         char v = 50;
         if (syscfg_read(CFG_MUSIC_VOL, &v, 1) == 1) {
+            if (v < HUB_MUSIC_VOL_MIN) {
+                v = HUB_MUSIC_VOL_MIN;
+            } else if (v > HUB_MUSIC_VOL_MAX) {
+                v = HUB_MUSIC_VOL_MAX;
+            }
             __this->volume = v;
         } else {
             __this->volume = 50;
         }
+        __this->vol_inited = 1;
     }
 
     parm.url = __this->url;
     parm.cbuf_size = 500 * 1024;
-    parm.timeout_millsec = 15000;
+    parm.timeout_millsec = 30000;
+    parm.max_reconnect_cnt = 3;
     parm.seek_threshold = 1024 * 200;
     /* 大文件(ape)多缓冲一点再开播 */
     parm.start_play_threshold = 64 * 1024;
@@ -517,7 +557,21 @@ int hub_music_cur_idx(void)
 
 int hub_music_volume_get(void)
 {
-    return __this->volume ? __this->volume : 50;
+    if (!__this->vol_inited) {
+        char v = 50;
+        if (syscfg_read(CFG_MUSIC_VOL, &v, 1) == 1) {
+            if (v < HUB_MUSIC_VOL_MIN) {
+                v = HUB_MUSIC_VOL_MIN;
+            } else if (v > HUB_MUSIC_VOL_MAX) {
+                v = HUB_MUSIC_VOL_MAX;
+            }
+            __this->volume = v;
+        } else {
+            __this->volume = 50;
+        }
+        __this->vol_inited = 1;
+    }
+    return (int)(u8)__this->volume;
 }
 
 int hub_music_volume_set(int vol)
@@ -530,6 +584,7 @@ int hub_music_volume_set(int vol)
         vol = HUB_MUSIC_VOL_MAX;
     }
     __this->volume = (char)vol;
+    __this->vol_inited = 1;
     syscfg_write(CFG_MUSIC_VOL, &__this->volume, sizeof(__this->volume));
     if (__this->dec) {
         req.dec.cmd = AUDIO_DEC_SET_VOLUME;

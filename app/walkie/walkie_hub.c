@@ -6,6 +6,8 @@
 #include "walkie_hub.h"
 #include "net/http/http_cli.h"
 #include "lwip/sockets.h"
+#include "lwip.h"
+#include "wifi/wifi_connect.h"
 #include "web_log.h"
 
 #include <string.h>
@@ -51,93 +53,175 @@ static volatile u32 s_hub_pending_since_ms;
 static volatile u16 s_hub_last_msg_id;
 static struct hub_job s_q[WALKIE_HUB_Q_DEPTH];
 
-/* ============ hub 自动发现 (UDP 广播) ============ */
+/* ============ hub 自动发现 (UDP 广播) ============
+ * 手表广播 DISCOVER → AR9331 hub-announce 应答 DATAHUB <ip> <key>
+ * 先发现、后兜底; 热路径可跳过已缓存地址
+ */
 
 static char s_hub_ip[16];
 static char s_hub_key[24];
 static u32 s_disc_ms;
+static u8  s_hub_from_disc; /* 1=来自 DISCOVER */
+
+static u32 hub_local_ip(void)
+{
+    char ip[16];
+
+    Get_IPAddress(WIFI_NETIF, ip);
+    return inet_addr(ip);
+}
+
+static int hub_parse_announce(char *buf, int n)
+{
+    char *p1, *p2;
+
+    if (n <= 8 || memcmp(buf, "DATAHUB ", 8) != 0) {
+        return -1;
+    }
+    buf[n] = '\0';
+    p1 = buf + 8;
+    p2 = strchr(p1, ' ');
+    if (!p2 || p2 == p1) {
+        return -1;
+    }
+    *p2 = '\0';
+    p2++;
+    if (!p1[0] || !p2[0]) {
+        return -1;
+    }
+    snprintf(s_hub_ip, sizeof(s_hub_ip), "%s", p1);
+    snprintf(s_hub_key, sizeof(s_hub_key), "%s", p2);
+    s_hub_from_disc = 1;
+    return 0;
+}
 
 static int hub_discover(void)
 {
-    struct sockaddr_in dst, from;
+    struct sockaddr_in dst, from, bind_addr;
     socklen_t flen;
-    char buf[64];
+    char buf[96];
     int s, i, n, ok = -1;
     int bcast = 1;
-    u32 t0;
+    u32 t0, lip, subnet_bc;
+    u32 targets[2];
+    int nt = 0;
+
+    lip = hub_local_ip();
+    if (!lip || lip == 0xFFFFFFFFu) {
+        printf("[walkie] hub discover: no local IP yet\n");
+        web_log_printf("[hub] discover skip: no IP");
+        return -1;
+    }
 
     s = socket(AF_INET, SOCK_DGRAM, 0);
     if (s < 0) {
+        printf("[walkie] hub discover: socket fail\n");
         return -1;
     }
     setsockopt(s, SOL_SOCKET, SO_BROADCAST, &bcast, sizeof(bcast));
-    memset(&dst, 0, sizeof(dst));
-    dst.sin_family = AF_INET;
-    dst.sin_port = htons(3722);
-    dst.sin_addr.s_addr = INADDR_BROADCAST;
-    /* 不用 SO_RCVTIMEO: 本平台常失效会永久卡在 recvfrom */
-    for (i = 0; i < 2 && ok; i++) {
-        if (sendto(s, "DISCOVER", 8, 0, (struct sockaddr *)&dst, sizeof(dst)) < 0) {
-            break;
+    memset(&bind_addr, 0, sizeof(bind_addr));
+    bind_addr.sin_family = AF_INET;
+    bind_addr.sin_port = htons(0);
+    bind_addr.sin_addr.s_addr = INADDR_ANY;
+    (void)bind(s, (struct sockaddr *)&bind_addr, sizeof(bind_addr));
+
+    /* 255.255.255.255 + 同网段广播, 提高跨 AP 命中率 */
+    targets[nt++] = INADDR_BROADCAST;
+    subnet_bc = (lip & 0x00FFFFFFu) | 0xFF000000u;
+    if (subnet_bc != INADDR_BROADCAST) {
+        targets[nt++] = subnet_bc;
+    }
+
+    printf("[walkie] hub discover: probing udp/3722 …\n");
+    web_log_printf("[hub] discover probing 3722");
+
+    /* MSG_DONTWAIT 轮询; 多轮给 hub-announce/socat 启动留时间 */
+    for (i = 0; i < 4 && ok; i++) {
+        int t;
+        for (t = 0; t < nt; t++) {
+            memset(&dst, 0, sizeof(dst));
+            dst.sin_family = AF_INET;
+            dst.sin_port = htons(3722);
+            dst.sin_addr.s_addr = targets[t];
+            (void)sendto(s, "DISCOVER", 8, 0,
+                         (struct sockaddr *)&dst, sizeof(dst));
         }
         t0 = timer_get_ms();
-        while ((u32)(timer_get_ms() - t0) < 300) {
+        while ((u32)(timer_get_ms() - t0) < 500) {
             flen = sizeof(from);
             n = recvfrom(s, buf, sizeof(buf) - 1, MSG_DONTWAIT,
                          (struct sockaddr *)&from, &flen);
-            if (n > 8 && memcmp(buf, "DATAHUB ", 8) == 0) {
-                char *p1, *p2;
-                buf[n] = '\0';
-                p1 = buf + 8;
-                p2 = strchr(p1, ' ');
-                if (p2) {
-                    *p2 = '\0';
-                    p2++;
-                    snprintf(s_hub_ip, sizeof(s_hub_ip), "%s", p1);
-                    snprintf(s_hub_key, sizeof(s_hub_key), "%s", p2);
-                    ok = 0;
-                    break;
-                }
+            if (n > 0 && hub_parse_announce(buf, n) == 0) {
+                ok = 0;
+                break;
             }
-            os_time_dly(1); /* ~10ms */
+            os_time_dly(1);
         }
     }
     close(s);
+    if (ok) {
+        printf("[walkie] hub discover: no reply\n");
+        web_log_printf("[hub] discover miss");
+    }
     return ok;
 }
 
-/* put/HTTP 热路径: 绝不阻塞在 DISCOVER 上; 无缓存则立刻用编译期兜底 IP */
+/* 仅读缓存; 空则写入编译期兜底 (不发起 DISCOVER) */
 static const char *hub_ip(void)
 {
     if (s_hub_ip[0]) {
         return s_hub_ip;
     }
-    /* 写入缓存, 避免每次 put 都重新判断 / 误触发发现 */
     snprintf(s_hub_ip, sizeof(s_hub_ip), "%s", WALKIE_HUB_IP);
+    s_hub_from_disc = 0;
     printf("[walkie] hub use fallback ip %s\n", s_hub_ip);
     web_log_printf("[hub] fallback ip %s", s_hub_ip);
     return s_hub_ip;
 }
 
-/* 空闲时可选: 广播修正 IP/key (失败也不清掉已有兜底) */
-static void hub_discover_try(void)
+/* 广播发现; force=1 忽略节流. 失败保留旧 IP, 若无旧 IP 则兜底 */
+static void hub_discover_try(int force)
 {
     u32 now = timer_get_ms();
     char old_ip[16];
+    char old_key[24];
+    u8 old_disc;
 
-    if (s_disc_ms && (u32)(now - s_disc_ms) < 60000) {
+    if (!force && s_disc_ms && (u32)(now - s_disc_ms) < 15000) {
         return;
     }
     s_disc_ms = now ? now : 1;
+
     snprintf(old_ip, sizeof(old_ip), "%s", s_hub_ip);
+    snprintf(old_key, sizeof(old_key), "%s", s_hub_key);
+    old_disc = s_hub_from_disc;
+
     if (hub_discover() == 0) {
-        printf("[walkie] hub found by discovery: %s\n", s_hub_ip);
+        printf("[walkie] hub found by discovery: %s key=%s\n",
+               s_hub_ip, s_hub_key[0] ? s_hub_key : "(empty)");
         web_log_printf("[hub] discovered %s", s_hub_ip);
-    } else if (!old_ip[0]) {
-        /* 发现失败且原先无 IP: 落到兜底 */
-        (void)hub_ip();
-    } else {
+        return;
+    }
+
+    if (old_ip[0]) {
         snprintf(s_hub_ip, sizeof(s_hub_ip), "%s", old_ip);
+        snprintf(s_hub_key, sizeof(s_hub_key), "%s", old_key);
+        s_hub_from_disc = old_disc;
+        printf("[walkie] hub discover miss, keep %s\n", s_hub_ip);
+        web_log_printf("[hub] discover miss keep %s", s_hub_ip);
+    } else {
+        (void)hub_ip();
+    }
+}
+
+/* 需要通信前调用: 优先 DISCOVER, 再兜底 */
+static void hub_ensure_addr(int force_disc)
+{
+    if (force_disc || !s_hub_ip[0] || !s_hub_from_disc) {
+        hub_discover_try(force_disc || !s_hub_ip[0]);
+    }
+    if (!s_hub_ip[0]) {
+        (void)hub_ip();
     }
 }
 
@@ -151,11 +235,16 @@ static const char *hub_devid(void)
     return walkie_self_name();
 }
 
-/* 失败时清缓存, 下次用兜底 IP; 不在 put 热路径里同步 DISCOVER */
+/* 失败后清缓存, 下次强制再 DISCOVER */
 static void hub_forget(void)
 {
+    printf("[walkie] hub forget %s (was %s)\n",
+           s_hub_ip[0] ? s_hub_ip : "-",
+           s_hub_from_disc ? "discovered" : "fallback");
+    web_log_printf("[hub] forget %s", s_hub_ip[0] ? s_hub_ip : "-");
     s_hub_ip[0] = '\0';
     s_hub_key[0] = '\0';
+    s_hub_from_disc = 0;
     s_disc_ms = 0;
 }
 
@@ -651,6 +740,12 @@ u8 walkie_hub_pending(void)
 
 const char *walkie_hub_ip(void)
 {
+    hub_ensure_addr(0);
+    return hub_ip();
+}
+
+const char *walkie_hub_ip_cached(void)
+{
     return hub_ip();
 }
 
@@ -686,7 +781,7 @@ int walkie_hub_diag_json(char *buf, int buflen)
                     "\"pull_busy\":%u,\"last_fail\":%u,\"put_ok\":%u,\"put_fail\":%u,"
                     "\"last_rc\":%d,\"last_id\":%u,\"pending_age_ms\":%u,"
                     "\"ip\":\"%s\",\"port\":%d,\"key\":\"%s\",\"devid\":\"%s\","
-                    "\"worker\":%u}",
+                    "\"discovered\":%u,\"worker\":%u}",
                     (unsigned)st, st_name[st],
                     (unsigned)hub_q_put_count(),
                     (unsigned)s_hub_working,
@@ -698,6 +793,7 @@ int walkie_hub_diag_json(char *buf, int buflen)
                     (unsigned)s_hub_last_msg_id,
                     (unsigned)age,
                     hub_ip(), WALKIE_HUB_PORT, hub_key(), hub_devid(),
+                    (unsigned)s_hub_from_disc,
                     (unsigned)s_hub_worker);
 }
 
@@ -745,7 +841,9 @@ static int hub_do_put(struct hub_job *job)
         return -1;
     }
 
-    /* A-law 压缩; put 热路径禁止同步 DISCOVER(曾卡死「同步中」无日志) */
+    /* 无已发现地址时再 DISCOVER; 已发现则直接用缓存 */
+    hub_ensure_addr(0);
+
     payload = job->buf;
     plen = job->len;
     printf("[walkie] hub put encode id=%u pcm=%u\n",
@@ -763,7 +861,6 @@ static int hub_do_put(struct hub_job *job)
     snprintf(job->fmt, sizeof(job->fmt), "%s", fmt);
 
     urlenc(enc_to, sizeof(enc_to), job->to);
-    /* 立刻用缓存/兜底 IP, 不在此处 hub_forget+discover */
     snprintf(url, sizeof(url),
              "http://%s:%d/cgi-bin/hub"
              "?cmd=put&key=%s"
@@ -819,8 +916,8 @@ static void hub_do_pull(void)
 
     printf("[walkie] hub pull begin\n");
     web_log_printf("[hub] pull begin");
-    /* pull 热路径禁止 UDP DISCOVER: 有兜底 IP 即可; 发现放空闲时做 */
-    (void)hub_ip();
+    /* pull 前强制 DISCOVER, 适应 HUB IP 变更 */
+    hub_ensure_addr(1);
 
     while (got < HUB_PULL_LIMIT && !dl_fail) {
         int mine = 0;
@@ -947,9 +1044,8 @@ static void hub_put_worker(void *arg)
     (void)arg;
     printf("[walkie] hub put worker up\n");
     web_log_printf("[hub] put worker up");
-    /* 先落兜底 IP; 再非阻塞尝试 DISCOVER 修正 */
-    (void)hub_ip();
-    hub_discover_try();
+    /* 开机联网后优先 DISCOVER, 失败才用兜底 IP */
+    hub_ensure_addr(1);
     while (1) {
         os_sem_pend(&s_hub_sem, 0);
         while (hub_q_take_put(&job) == 0) {

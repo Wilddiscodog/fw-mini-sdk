@@ -53,3 +53,16 @@ patch 内容 (33 个文件, 1843 行新增)
   patch 方式应用不受 ignore 影响。若手工拷贝, 需 git add -f files。
 - 新增脚本均带可执行位 (patch 中 new file mode 100755)。
 - 敏感信息: patch 内含管理 AP/ksmbd 密码 (hyundai415), 对外分享前请自行替换。
+
+音乐大文件被掐断 (约 60s 切歌)
+--------------------------------
+根因: uhttpd CGI script_timeout 默认约 60s, `cmd=get` 用 `cat` 推 ape/flac
+时 body 被掐 → 手表 EOF → 自动下一首。
+
+本 patch 已含:
+  - uci-defaults/98-datahub-uhttpd: script/network_timeout=900 + /www/hubfs 软链
+  - cgi do_get: 附件 >256KB 时 302 → /hubfs/<path> (不经 CGI)
+
+已刷旧固件、暂不重编时, 在路由上执行热修:
+  sh hub-fix-music-stream.sh
+(见同目录; scp 到路由器后 root 运行, 立刻生效)

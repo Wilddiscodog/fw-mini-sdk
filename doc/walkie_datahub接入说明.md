@@ -27,7 +27,7 @@
 ## 配置 — `app/walkie/walkie_hub.h`
 
 ```c
-#define WALKIE_HUB_IP       "192.168.5.11"       /* 家庭网 STA 兜底 IP */
+#define WALKIE_HUB_IP       "192.168.5.28"       /* 家庭网 STA 兜底 IP */
 #define WALKIE_HUB_KEY      "495f66430e261791"   /* LuCI 数据中枢 key */
 #define WALKIE_HUB_PORT     80
 #define WALKIE_HUB_TIMEOUT  8000                 /* ms */
@@ -37,7 +37,10 @@
 ```
 
 - **DEVID** = `walkie_self_name()`（如 `WL-FA1302`）
-- UDP `DISCOVER` → `:3722` → `DATAHUB <ip> <key>`（非阻塞轮询；失败保留兜底）
+- **自动发现（优先）**: WiFi 就绪 / pull / put worker 启动时 UDP 广播 `DISCOVER` → `:3722`  
+  期望应答 `DATAHUB <ip> <key>`（AR9331 `hub-announce`）。日志：`hub found by discovery`
+- 双目标广播：`255.255.255.255` + 同网段广播；约 4×500ms 轮询（不依赖 `SO_RCVTIMEO`）
+- 发现失败才用 `WALKIE_HUB_IP` 兜底；HTTP 失败会 `hub forget` 并在下次强制再发现
 - 联系人名字必须填**对方对讲名**（上传 `txt=` 收件人）
 
 ## 语音归档格式
@@ -89,7 +92,7 @@ tools/hub_browser/HubBrowser.exe
 |-----|------|------|
 | `put` | POST | 上传；`dtype=file` 时 body=裸流 |
 | `list` | GET | `since`/`limit`（≤200）增量列表；可加 `ch=` / `unread` / `dev=` |
-| `get` | GET | 取单条；file 默认 WAV（alaw/pcm/ulaw）；`raw=1` 裸流 |
+| `get` | GET | 取单条；file 默认 WAV（alaw/pcm/ulaw）；`raw=1` 裸流；**大附件(>256KB) 302→`/hubfs/...` 静态**（避开 CGI 60s 超时） |
 | `ack` | GET | 标记已读 |
 | `stats` | GET | 总览（免 key，响应含 key） |
 | `export` | GET | `.db` 快照 + 近 N 天附件 tar.gz（免 key，`days`≤90） |

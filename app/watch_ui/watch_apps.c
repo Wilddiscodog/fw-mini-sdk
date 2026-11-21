@@ -209,8 +209,10 @@ static void hub_music_vol_update_lab(void)
 
 static void hub_music_vol_dec(lv_event_t *e)
 {
-    int v = hub_music_volume_get() - 5;
+    int v = hub_music_volume_get();
     (void)e;
+    /* >5 仍步进 5; 已到 5 及以下改为步进 1, 可到静音 0 */
+    v = (v > 5) ? (v - 5) : (v - 1);
     hub_music_volume_set(v);
     watch_volume_set((u8)hub_music_volume_get());
     hub_music_vol_update_lab();

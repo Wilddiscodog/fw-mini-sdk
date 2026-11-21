@@ -59,7 +59,7 @@ clean.bat
 ## datahub / 对讲归档
 
 - 手表上传：`fmt=alaw` · `rate=16000` · `ch=audio`（约 PCM 一半体积）
-- 兜底 HUB：`WALKIE_HUB_IP` / `WALKIE_HUB_KEY`（见 `app/walkie/walkie_hub.h`）
+- 自动发现：UDP `DISCOVER` → `:3722`；失败才用兜底 `WALKIE_HUB_IP`（现为 `192.168.5.28`）
 - PC 工具：双击 `tools/hub_browser/HubBrowser.exe`  
   - 全量同步元数据与附件  
   - A-law 自动转 PCM 再播  

@@ -9,7 +9,7 @@
 #include "generic/typedef.h"
 
 /* ===== 兜底配置: UDP DISCOVER 失败时使用 ===== */
-#define WALKIE_HUB_IP       "192.168.5.11"        /* 家庭网 AR9331 STA IP */
+#define WALKIE_HUB_IP       "192.168.5.28"        /* 家庭网 AR9331 STA 兜底 IP */
 #define WALKIE_HUB_KEY      "495f66430e261791"    /* LuCI 数据中枢 key; DISCOVER 优先 */
 #define WALKIE_HUB_PORT     80                   /* AR9331 uhttpd */
 #define WALKIE_HUB_TIMEOUT  8000                 /* HTTP 超时 ms */
@@ -38,6 +38,8 @@ u8 walkie_hub_pending(void);   /* 队列中未完成条数 */
 
 /* 供曲库等复用: DISCOVER 优先, 否则宏兜底 */
 const char *walkie_hub_ip(void);
+/* 仅读缓存/兜底, 不触发 DISCOVER (切歌热路径) */
+const char *walkie_hub_ip_cached(void);
 const char *walkie_hub_key(void);
 int walkie_hub_port(void);
 
